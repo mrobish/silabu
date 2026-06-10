@@ -66,7 +66,7 @@ function AuthShell({ title, subtitle, backTarget, go, children }: {
       <div className="auth-container">
         <BackBtn go={go} target={backTarget} />
         <section className="auth-card">
-          <div className="brand-logo"><Building2 size={28} /></div>
+          <img src="/logo.png" alt="SILABU DIGI" className="brand-logo" />
           <h1>{title}</h1>
           <p className="auth-sub">{subtitle}</p>
           {children}
@@ -97,8 +97,7 @@ function Navbar({ go, loggedIn }: { go: (p: Page) => void; loggedIn?: boolean })
     <nav className="nav">
       <div className="nav-inner">
         <div className="nav-brand" onClick={() => go('home')}>
-          <div className="nav-logo-icon"><Building2 size={20} /></div>
-          <span>SILABU DIGI</span>
+          <img src="/logo.png" alt="SILABU DIGI" className="nav-logo" />
         </div>
         <div className={`nav-links ${open ? 'open' : ''}`}>
           {loggedIn ? (
@@ -167,7 +166,7 @@ function Home({ go }: { go: (p: Page) => void }) {
       </section>
 
       <footer className="home-footer">
-        <div className="nav-logo-icon"><Building2 size={16} /></div>
+        <img src="/logo.png" alt="SILABU DIGI" className="footer-logo" />
         <span>© 2026 SILABU DIGI — Sistem Laporan BUM Desa Digital</span>
       </footer>
     </main>
