@@ -8,11 +8,10 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -25,34 +24,40 @@ export default function Login() {
       localStorage.setItem('user', JSON.stringify(data.user));
       navigate(data.user.role === 'super_admin' ? '/super-admin' : '/app');
     } catch { setError('Terjadi kesalahan'); } finally { setLoading(false); }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
+    <div className="min-h-dvh bg-gradient-to-b from-slate-50 to-white flex items-center justify-center p-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
         <div className="text-center mb-6">
-          <img src="/logo.png" alt="SILABU DIGI" className="h-16 mx-auto mb-4" />
+          <Link to="/" className="inline-block mb-4">
+            <img src="/logo.png" alt="SILABU DIGI" className="mx-auto h-14 w-auto" />
+          </Link>
           <h1 className="text-2xl font-bold text-slate-900">Masuk</h1>
+          <p className="text-sm text-slate-500 mt-1">Masuk ke akun BUM Desa Anda</p>
         </div>
 
-        {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{error}</div>}
+        {error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
-            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent" placeholder="nama@contoh.com" required />
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition" placeholder="nama@contoh.com" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
-            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent" placeholder="Password Anda" required />
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Password</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition" placeholder="Password Anda" />
           </div>
-          <button type="submit" disabled={loading} className="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-xl font-semibold hover:shadow-lg transition disabled:opacity-50">
+          <button type="submit" disabled={loading}
+            className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 py-3 text-sm font-semibold text-white shadow-sm hover:shadow-md hover:translate-y-[-1px] transition-all disabled:opacity-50 disabled:translate-y-0">
             {loading ? 'Masuk...' : 'Masuk'}
           </button>
         </form>
 
-        <p className="text-center text-sm text-slate-600 mt-6">
-          Belum punya akun? <Link to="/register" className="text-cyan-600 font-semibold hover:underline">Daftar Gratis</Link>
+        <p className="mt-6 text-center text-sm text-slate-500">
+          Belum punya akun? <Link to="/register" className="font-semibold text-cyan-600 hover:underline">Daftar Gratis</Link>
         </p>
       </div>
     </div>
