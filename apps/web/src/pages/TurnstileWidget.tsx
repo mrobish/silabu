@@ -47,6 +47,7 @@ export function TurnstileWidget({ onVerify, onExpire, className }: TurnstileProp
 
   useEffect(() => {
     let cancelled = false;
+    let currentWidget: string | null = null;
     (async () => {
       try {
         const res = await fetch('/api/auth/captcha-config');
@@ -56,14 +57,16 @@ export function TurnstileWidget({ onVerify, onExpire, className }: TurnstileProp
         await loadScript(data.siteKey);
         if (cancelled) return;
         const render = () => {
-          if (!containerRef.current || widgetId.current) return;
+          if (!containerRef.current) return;
+          // Remove existing widget if any (from previous key cycle)
+          if (currentWidget) { try { (window as any).turnstile?.remove(currentWidget); } catch {} }
           const id = (window as any).turnstile.render(containerRef.current, {
             sitekey: data.siteKey,
             callback: (token: string) => onVerify(token),
             'expired-callback': () => { onExpire?.(); onVerify(''); },
             'error-callback': () => setError('CAPTCHA error, refresh halaman'),
           });
-          widgetId.current = id;
+          currentWidget = id;
           setLoading(false);
         };
         if ((window as any).turnstile) { render(); }

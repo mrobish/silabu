@@ -12,6 +12,7 @@ export default function LoginEmail() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaKey, setCaptchaKey] = useState(0); // reset CAPTCHA via key change
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,7 +26,12 @@ export default function LoginEmail() {
         body: JSON.stringify({ email, password, captchaToken }),
       });
       const data = await res.json();
-      if (data.error) { setError(data.error); return; }
+      if (data.error) {
+        setError(data.error);
+        setCaptchaToken('');       // clear old token
+        setCaptchaKey(k => k + 1); // force re-render Turnstile widget
+        return;
+      }
       const store = rememberMe ? localStorage : sessionStorage;
       store.setItem('accessToken', data.accessToken);
       store.setItem('user', JSON.stringify(data.user));
@@ -80,7 +86,7 @@ export default function LoginEmail() {
               <Link to="/forgot-password" className="text-sm font-medium text-cyan-600 hover:underline">Lupa password?</Link>
             </div>
 
-            <TurnstileWidget onVerify={t => setCaptchaToken(t)} className="flex justify-center" />
+            <TurnstileWidget key={captchaKey} onVerify={t => setCaptchaToken(t)} className="flex justify-center" />
 
             <button type="submit" disabled={loading}
               className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 py-3 text-sm font-semibold text-white shadow-sm hover:shadow-md hover:translate-y-[-1px] transition-all disabled:opacity-50 disabled:translate-y-0">
