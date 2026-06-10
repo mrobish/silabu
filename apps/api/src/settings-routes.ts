@@ -59,7 +59,7 @@ export async function settingsRoutes(app: FastifyInstance) {
       const smtp = await getSMTPConfig();
       if (!smtp?.host) return { error: 'SMTP belum dikonfigurasi' };
       const nodemailer = await import('nodemailer');
-      const t = nodemailer.createTransport({ host: smtp.host, port: smtp.port||587, secure: smtp.secure||false, auth:{user:smtp.user,pass:smtp.pass} });
+      const t = nodemailer.createTransport({ host: smtp.host, port: smtp.port||587, secure: smtp.secure||false, auth:{user:smtp.user,pass:smtp.pass}, tls:{rejectUnauthorized:false}, connectionTimeout:10000, greetingTimeout:8000 });
       await t.sendMail({ from: smtp.from||smtp.user, to, subject:'SILABU DIGI — Test SMTP', text:`SMTP test: ${new Date().toISOString()}` });
       return { success: true, message: `Test email terkirim ke ${to}` };
     } catch (e:any) { return { error: `SMTP error: ${e.message}` }; }

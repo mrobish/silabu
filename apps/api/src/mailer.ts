@@ -7,16 +7,20 @@ const MAIL_LOG_DIR = process.env.MAIL_LOG_DIR || '/var/log/silabu-digi/mail';
 export async function sendEmail({ to, subject, html, text }: { to: string; subject: string; html: string; text: string }) {
   try {
     const cfg = await getSMTPConfig();
-    if (cfg?.host && cfg?.port) {
+    if (cfg?.host) {
       const nodemailer = await import('nodemailer');
       const transporter = nodemailer.createTransport({
-        host: cfg.host, port: Number(cfg.port), secure: !!cfg.secure,
+        host: cfg.host, port: Number(cfg.port || 587), secure: !!cfg.secure,
         auth: cfg.user && cfg.pass ? { user: cfg.user, pass: cfg.pass } : undefined,
+        tls: { rejectUnauthorized: false },
+        connectionTimeout: 10000, greetingTimeout: 8000,
       });
       await transporter.sendMail({ from: cfg.from || `SILABU DIGI <${cfg.user}>`, to, subject, html, text });
       return;
     }
-  } catch {}
+  } catch (e: any) {
+    console.error('[MAILER] SMTP send failed:', e.code || '', e.message || e);
+  }
   await logEmailToFile({ to, subject, html, text });
 }
 
