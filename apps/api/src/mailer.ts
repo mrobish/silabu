@@ -1,5 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+import nodemailer from 'nodemailer';
+import { getSMTPConfig } from './admin-settings.js';
 
 interface SendEmailParams {
   to: string;
@@ -11,12 +13,35 @@ interface SendEmailParams {
 const MAIL_LOG_DIR = process.env.MAIL_LOG_DIR || '/var/log/silabu-digi/mail';
 
 export async function sendEmail({ to, subject, html, text }: SendEmailParams): Promise<void> {
-  // Dev/MVP: log email to file. In prod, swap to SMTP/Postmark/SES.
+  // Log to file always
   await fs.mkdir(MAIL_LOG_DIR, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const file = path.join(MAIL_LOG_DIR, `${ts}_${to.replace(/[^a-z0-9]/gi, '_')}.log`);
   await fs.writeFile(file, `TO: ${to}\nSUBJECT: ${subject}\n\n--- TEXT ---\n${text}\n\n--- HTML ---\n${html}\n`);
   console.log(`[mail] -> ${to}: ${subject} (logged to ${file})`);
+
+  // Try SMTP if configured
+  const smtp = await getSMTPConfig();
+  if (smtp?.host) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: smtp.host,
+        port: smtp.port || 587,
+        secure: smtp.secure || false,
+        auth: { user: smtp.user, pass: smtp.pass },
+      });
+      await transporter.sendMail({
+        from: smtp.from || smtp.user,
+        to,
+        subject,
+        text,
+        html,
+      });
+      console.log(`[mail] SMTP sent to ${to}`);
+    } catch (err: any) {
+      console.error(`[mail] SMTP failed: ${err.message}`);
+    }
+  }
 }
 
 export function buildOTPEmail(otp: string, magicLink: string, purpose: 'verify' | 'reset') {
