@@ -5,6 +5,27 @@
   --color-brand: #0891b2;
   --color-brand-dark: #0e7490;
   --color-brand-light: #ecfeff;
+  --animate-fade-up: fade-up 0.6s ease-out both;
+  --animate-fade-in: fade-in 0.4s ease-out both;
+  --animate-slide-down: slide-down 0.25s ease-out both;
+  --animate-scale-in: scale-in 0.2s ease-out both;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 html { scroll-behavior: smooth; }
@@ -15,4 +36,51 @@ body {
   background: var(--color-slate-50);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.animate-fade-up { animation: fade-up 0.6s ease-out both; }
+.animate-fade-in { animation: fade-in 0.4s ease-out both; }
+.animate-slide-down { animation: slide-down 0.25s ease-out both; }
+.animate-scale-in { animation: scale-in 0.25s ease-out both; }
+
+/* Stagger delays for entrance animations */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.12s; }
+.stagger-3 { animation-delay: 0.2s; }
+.stagger-4 { animation-delay: 0.28s; }
+.stagger-5 { animation-delay: 0.36s; }
+.stagger-6 { animation-delay: 0.44s; }
+
+/* Mobile menu overlay fix */
+.mobile-menu-enter { animation: slide-down 0.25s ease-out; }
+
+/* Card hover — lightweight lift */
+.card-hover { transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
+.card-hover:hover { transform: translateY(-3px); box-shadow: 0 8px 25px -8px rgba(0,0,0,0.08); }
+
+/* Button hover — lightweight */
+.btn-primary {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(8, 145, 178, 0.3);
+}
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* Nav link */
+.nav-link {
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

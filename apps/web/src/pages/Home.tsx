@@ -8,35 +8,35 @@ export default function Home() {
   return (
     <div className="min-h-dvh bg-gradient-to-b from-slate-50 to-white">
       {/* Navbar */}
-      <nav className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 h-16">
-          <Link to="/" className="flex items-center gap-3">
-            <img src="/logo.png" alt="SILABU DIGI" className="h-10 w-auto" />
+      <nav className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+          <Link to="/" className="flex shrink-0 items-center gap-3" aria-label="SILABU DIGI Home">
+            <img src="/logo.png" alt="SILABU DIGI" className="h-9 w-auto sm:h-10" />
           </Link>
 
           {/* Desktop nav */}
           <div className="hidden sm:flex items-center gap-3">
-            <Link to="/login" className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors">
+            <Link to="/login" className="nav-link rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100">
               Masuk
             </Link>
-            <Link to="/register" className="rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow-md hover:translate-y-[-1px] transition-all">
+            <Link to="/register" className="btn-primary rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm">
               Daftar Gratis
             </Link>
           </div>
 
           {/* Mobile menu button */}
-          <button onClick={() => setOpen(!open)} className="sm:hidden p-2 text-slate-600">
-            {open ? <X size={22} /> : <Menu size={22} />}
+          <button onClick={() => setOpen(!open)} aria-label="Menu" className="sm:hidden -mr-2 p-2 text-slate-600 transition-colors hover:text-slate-900">
+            {open ? <X size={24} /> : <Menu size={24} />}
           </button>
         </div>
 
         {/* Mobile nav */}
         {open && (
-          <div className="sm:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-3">
-            <Link to="/login" onClick={() => setOpen(false)} className="block rounded-lg px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-100">
+          <div className="mobile-menu-enter sm:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2">
+            <Link to="/login" onClick={() => setOpen(false)} className="block rounded-lg px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
               Masuk
             </Link>
-            <Link to="/register" onClick={() => setOpen(false)} className="block text-center rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-3 text-sm font-semibold text-white">
+            <Link to="/register" onClick={() => setOpen(false)} className="block text-center rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm">
               Daftar Gratis
             </Link>
           </div>
@@ -45,29 +45,29 @@ export default function Home() {
 
       {/* Hero */}
       <section className="mx-auto max-w-6xl px-4 sm:px-6 pt-16 sm:pt-24 pb-12 sm:pb-16 text-center">
-        <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 leading-[1.15] mb-4 sm:mb-6">
+        <h1 className="animate-fade-up text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 leading-[1.15] mb-4 sm:mb-6">
           Kelola Keuangan{' '}
           <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
             BUM Desa
           </span>
           <br className="hidden sm:block" /> dengan Mudah
         </h1>
-        <p className="text-base sm:text-lg text-slate-500 max-w-xl mx-auto mb-8 sm:mb-10 leading-relaxed">
+        <p className="animate-fade-up stagger-1 text-base sm:text-lg text-slate-500 max-w-xl mx-auto mb-8 sm:mb-10 leading-relaxed">
           Platform digital untuk laporan keuangan BUM Desa se-Indonesia. Sesuai Kepmendesa 136/2022. Trial 14 hari gratis.
         </p>
         <Link
           to="/register"
-          className="inline-flex items-center rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-6 sm:px-8 py-3.5 sm:py-4 text-base sm:text-lg font-semibold text-white shadow-lg hover:shadow-xl hover:translate-y-[-2px] transition-all"
+          className="btn-primary animate-fade-up stagger-2 inline-flex items-center rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-6 sm:px-8 py-3.5 sm:py-4 text-base sm:text-lg font-semibold text-white shadow-lg"
         >
           Daftar & Mulai Trial 14 Hari
         </Link>
-        <p className="mt-4 text-sm text-slate-400">Tanpa kartu kredit. Batal kapan saja.</p>
+        <p className="animate-fade-up stagger-3 mt-4 text-sm text-slate-400">Tanpa kartu kredit. Batal kapan saja.</p>
       </section>
 
       {/* Features */}
       <section className="mx-auto max-w-6xl px-4 sm:px-6 pb-16 sm:pb-24">
-        <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 text-center mb-2">Fitur Unggulan</h2>
-        <p className="text-sm sm:text-base text-slate-500 text-center mb-10 sm:mb-12">Semua yang BUM Desa butuhkan untuk kelola keuangan.</p>
+        <h2 className="animate-fade-up text-2xl sm:text-3xl font-bold text-slate-900 text-center mb-2">Fitur Unggulan</h2>
+        <p className="animate-fade-up stagger-1 text-sm sm:text-base text-slate-500 text-center mb-10 sm:mb-12">Semua yang BUM Desa butuhkan untuk kelola keuangan.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
           {[
             {
@@ -119,7 +119,7 @@ export default function Home() {
               desc: 'Berlangganan via QRIS, Virtual Account, atau E-wallet. Transparan tanpa potongan.'
             },
           ].map((f, i) => (
-            <div key={i} className="group rounded-2xl border border-slate-100 bg-white p-5 sm:p-6 shadow-sm hover:shadow-md hover:border-slate-200 transition-all">
+            <div key={i} className={`animate-fade-up stagger-${i+1} card-hover rounded-2xl border border-slate-100 bg-white p-5 sm:p-6 shadow-sm`}>
               <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl ${f.bg}`}>
                 {f.icon}
               </div>
@@ -133,9 +133,9 @@ export default function Home() {
       {/* Pricing */}
       <section className="border-t border-slate-100 bg-slate-50/80">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-16 sm:py-24 text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">Harga Sederhana</h2>
-          <p className="text-sm sm:text-base text-slate-500 mb-10 sm:mb-12">Satu harga untuk semua fitur. Tanpa biaya tersembunyi.</p>
-          <div className="mx-auto max-w-sm rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
+          <h2 className="animate-fade-up text-2xl sm:text-3xl font-bold text-slate-900 mb-2">Harga Sederhana</h2>
+          <p className="animate-fade-up stagger-1 text-sm sm:text-base text-slate-500 mb-10 sm:mb-12">Satu harga untuk semua fitur. Tanpa biaya tersembunyi.</p>
+          <div className="animate-scale-in mx-auto max-w-sm rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Langganan Tahunan</p>
             <p className="mb-1">
               <span className="text-4xl sm:text-5xl font-bold text-slate-900">Rp1jt</span>
@@ -144,7 +144,7 @@ export default function Home() {
             <p className="text-sm text-slate-500 mb-6">Trial 14 hari gratis. Tanpa kartu kredit.</p>
             <Link
               to="/register"
-              className="block rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-6 py-3.5 text-base font-semibold text-white shadow-sm hover:shadow-md hover:translate-y-[-1px] transition-all"
+              className="btn-primary block rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-6 py-3.5 text-base font-semibold text-white shadow-sm"
             >
               Mulai Trial Gratis
             </Link>
