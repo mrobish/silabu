@@ -1,0 +1,1 @@
+{"name":"@silabu/db","version":"0.1.0","private":true,"type":"module","main":"dist/index.js","types":"dist/index.d.ts","scripts":{"build":"tsc","db:generate":"drizzle-kit generate","db:migrate":"drizzle-kit migrate"},"dependencies":{"drizzle-orm":"latest","pg":"latest"},"devDependencies":{"@types/pg":"latest","drizzle-kit":"latest","typescript":"latest"}}

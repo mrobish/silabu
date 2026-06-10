@@ -1,0 +1,1 @@
+{"name":"@silabu/auth","version":"0.1.0","private":true,"type":"module","main":"dist/index.js","types":"dist/index.d.ts","scripts":{"build":"tsc"},"dependencies":{"bcryptjs":"latest","jsonwebtoken":"latest"},"devDependencies":{"@types/bcryptjs":"latest","@types/jsonwebtoken":"latest","@types/node":"latest","typescript":"latest"}}

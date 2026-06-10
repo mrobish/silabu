@@ -2,14 +2,19 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import { initDatabase } from './db.js';
+import { authRoutes } from './auth-routes.js';
 
 const app = Fastify({ logger: true });
 const PORT = Number(process.env.PORT || 3010);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'https://silabu.ondesa.id';
 
+await initDatabase();
+
 await app.register(helmet);
 await app.register(cors, { origin: CORS_ORIGIN, credentials: true });
 await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
+await app.register(authRoutes, { prefix: '/api' });
 
 app.get('/api/health', async () => ({ status: 'ok', app: 'silabu-digi', timestamp: new Date().toISOString() }));
 

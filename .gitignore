@@ -1,6 +1,4 @@
-node_modules/
-dist/
-.turbo/
-.env
-.env.local
+node_modules
+dist
 *.log
+.env
