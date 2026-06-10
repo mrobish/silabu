@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { TurnstileWidget } from './TurnstileWidget';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState('');
   const navigate = useNavigate();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -16,7 +18,7 @@ export default function Login() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, captchaToken }),
       });
       const data = await res.json();
       if (data.error) { setError(data.error); return; }
@@ -54,6 +56,9 @@ export default function Login() {
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} required autoComplete="current-password"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition" placeholder="Password Anda" />
           </div>
+
+          <TurnstileWidget onVerify={t => setCaptchaToken(t)} className="flex justify-center" />
+
           <div className="text-right -mt-2">
             <Link to="/forgot-password" className="text-sm font-medium text-cyan-600 hover:underline">Lupa password?</Link>
           </div>

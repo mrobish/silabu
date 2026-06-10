@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { pool } from './db.js';
 import { sendEmail, buildVerifyLinkEmail, buildResetLinkEmail } from './mailer.js';
+import { verifyTurnstile, getSecuritySettings } from './turnstile.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'silabu-digi-secret-2026';
 const APP_URL = process.env.APP_URL || 'https://silabu.ondesa.id';
@@ -15,12 +16,19 @@ function hashToken(token: string) { return crypto.createHash('sha256').update(to
 function reqIp(req: FastifyRequest) { return req.ip || (req.headers['x-forwarded-for'] as string) || ''; }
 
 export async function authRoutes(app: FastifyInstance) {
+  app.get('/captcha-config', async () => {
+    const cfg = await getSecuritySettings();
+    return { provider: 'turnstile', siteKey: cfg.turnstile_site_key || '', enabled: !!cfg.turnstile_site_key };
+  });
+
   app.post('/register', async (req: FastifyRequest) => {
     const b = req.body as any;
     const required = ['email','password','confirmPassword','nama_lengkap','nama_bumdes','provinsi','kabupaten','kecamatan','desa','tahun_berdiri','nama_penasihat','nama_direktur','nama_sekretaris','nama_bendahara','nama_pengawas_1'];
     for (const f of required) if (!b[f]) return { error: `${f} wajib diisi` };
     if (b.password !== b.confirmPassword) return { error: 'Password tidak sama' };
     if (String(b.password).length < 8) return { error: 'Password minimal 8 karakter' };
+    const cap = await verifyTurnstile(b.captchaToken, reqIp(req));
+    if (!cap.success) return { error: cap.error };
 
     const client = await pool.connect();
     try {
@@ -70,7 +78,9 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.post('/login', async (req: FastifyRequest) => {
-    const { email, password } = req.body as any;
+    const { email, password, captchaToken } = req.body as any;
+    const cap = await verifyTurnstile(captchaToken, reqIp(req));
+    if (!cap.success) return { error: cap.error };
     const r = await pool.query('SELECT * FROM users WHERE email=$1 AND is_active=true', [String(email||'').toLowerCase()]);
     const user = r.rows[0];
     if (!user || !user.password_hash) return { error: 'Email atau password salah' };
@@ -92,7 +102,9 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.post('/forgot-password', async (req: FastifyRequest) => {
-    const { email } = req.body as any;
+    const { email, captchaToken } = req.body as any;
+    const cap = await verifyTurnstile(captchaToken, reqIp(req));
+    if (!cap.success) return { error: cap.error };
     const e = String(email || '').toLowerCase();
     // Always return success to avoid email enumeration
     const r = await pool.query('SELECT * FROM users WHERE email=$1 AND is_active=true', [e]);

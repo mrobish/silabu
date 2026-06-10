@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { TurnstileWidget } from './TurnstileWidget';
+
+
 
 export default function Register() {
   const [step, setStep] = useState(1);
@@ -27,6 +30,7 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState('');
 
   const update = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -108,7 +112,7 @@ export default function Register() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, captchaToken }),
       });
       const data = await res.json();
 
@@ -402,6 +406,10 @@ export default function Register() {
                 </div>
               </div>
             </div>
+          )}
+
+          {step === 3 && (
+            <TurnstileWidget onVerify={t => setCaptchaToken(t)} className="flex justify-center mt-6" />
           )}
 
           <div className="flex gap-4 mt-8">

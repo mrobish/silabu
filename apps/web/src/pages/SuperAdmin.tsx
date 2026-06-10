@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
-type Settings = { smtp:any; oauth:any; tripay:any };
+type Settings = { smtp: any; oauth: any; tripay: any; security: any };
+type TabKey = 'smtp' | 'oauth' | 'tripay' | 'security';
 
 export default function SuperAdmin() {
-  const [tab, setTab] = useState<'smtp'|'oauth'|'tripay'>('smtp');
-  const [settings, setSettings] = useState<Settings>({ smtp:{}, oauth:{}, tripay:{} });
+  const [tab, setTab] = useState<TabKey>('smtp');
+  const [settings, setSettings] = useState<Settings>({ smtp:{}, oauth:{}, tripay:{}, security:{} });
   const [msg, setMsg] = useState<{t:'ok'|'err';m:string}|null>(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -15,7 +16,7 @@ export default function SuperAdmin() {
     if (!token) { navigate('/login'); return; }
     fetch('/api/admin/settings', { headers:{Authorization:`Bearer ${token}`} })
       .then(r=>r.json())
-      .then(d => { if(!d.error) setSettings(d); })
+      .then(d => { if(!d.error) setSettings({ smtp:{}, oauth:{}, tripay:{}, security:{}, ...d }); })
       .catch(()=>{});
   }, [token, navigate]);
 
@@ -60,10 +61,10 @@ export default function SuperAdmin() {
         <div className="p-6 max-w-3xl">
           {msg && <div className={`mb-4 p-3 rounded-xl text-sm ${msg.t==='ok'?'bg-green-50 border-green-200 text-green-700':'bg-red-50 border-red-200 text-red-700'} border`}>{msg.m}</div>}
 
-          <div className="flex gap-2 mb-6">
-            {(['smtp','oauth','tripay'] as const).map(t => (
+          <div className="flex flex-wrap gap-2 mb-6">
+            {(['smtp','oauth','tripay','security'] as const).map(t => (
               <button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 rounded-lg text-sm font-semibold ${tab===t?'bg-cyan-600 text-white':'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'} transition`}>
-                {t==='smtp'?'SMTP Email':t==='oauth'?'Google OAuth':'Tripay'}
+                {t==='smtp'?'SMTP Email':t==='oauth'?'Google OAuth':t==='tripay'?'Tripay':'Keamanan'}
               </button>
             ))}
           </div>
@@ -74,7 +75,7 @@ export default function SuperAdmin() {
               <p className="text-sm text-slate-600">Konfigurasi pengiriman email verifikasi & notifikasi.</p>
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="text-sm font-semibold text-slate-700">Host</label><input value={settings.smtp.host||''} onChange={e=>update('smtp','host',e.target.value)} className="w-full mt-1 px-3 py-2 border rounded-lg" placeholder="smtp.gmail.com" /></div>
-                <div><label className="text-sm font-semibold text-slate-700">Port</label><input type="number" value={settings.smtp.port||587} onChange={e=>update('smtp','port',Number(e.target.value))} className="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
+                <div><label className="text-sm font-semibold text-slate-700">Port</label><input type="number" value={settings.smtp.port||587} onChange={e=>update('smtp','port',Number(e.target.value) as any)} className="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
               </div>
               <div><label className="text-sm font-semibold text-slate-700">Username</label><input value={settings.smtp.user||''} onChange={e=>update('smtp','user',e.target.value)} className="w-full mt-1 px-3 py-2 border rounded-lg" placeholder="noreply@domain.com" /></div>
               <div><label className="text-sm font-semibold text-slate-700">Password</label><input type="password" value={settings.smtp.pass||''} onChange={e=>update('smtp','pass',e.target.value)} className="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
@@ -103,6 +104,16 @@ export default function SuperAdmin() {
               <div><label className="text-sm font-semibold text-slate-700">API Key</label><input type="password" value={settings.tripay.apiKey||''} onChange={e=>update('tripay','apiKey',e.target.value)} className="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
               <div><label className="text-sm font-semibold text-slate-700">Secret Key</label><input type="password" value={settings.tripay.secretKey||''} onChange={e=>update('tripay','secretKey',e.target.value)} className="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
               <button onClick={()=>save('tripay',settings.tripay)} disabled={loading} className="px-4 py-2 bg-cyan-600 text-white rounded-lg font-semibold disabled:opacity-50">Simpan Tripay</button>
+            </div>
+          )}
+
+          {tab === 'security' && (
+            <div className="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
+              <h3 className="text-lg font-bold text-slate-900">Keamanan — Cloudflare Turnstile</h3>
+              <p className="text-sm text-slate-600">CAPTCHA anti-bot di halaman Login, Register, dan Lupa Password. Ambil key di Cloudflare Dashboard → Turnstile. Kosongkan untuk menonaktifkan CAPTCHA.</p>
+              <div><label className="text-sm font-semibold text-slate-700">Site Key</label><input value={settings.security.turnstile_site_key||''} onChange={e=>update('security','turnstile_site_key',e.target.value)} className="w-full mt-1 px-3 py-2 border rounded-lg" placeholder="0x4AAAAAAA..." /></div>
+              <div><label className="text-sm font-semibold text-slate-700">Secret Key</label><input type="password" value={settings.security.turnstile_secret_key||''} onChange={e=>update('security','turnstile_secret_key',e.target.value)} className="w-full mt-1 px-3 py-2 border rounded-lg" placeholder="0x4AAAAAAA..." /></div>
+              <button onClick={()=>save('security',settings.security)} disabled={loading} className="px-4 py-2 bg-cyan-600 text-white rounded-lg font-semibold disabled:opacity-50">Simpan Keamanan</button>
             </div>
           )}
         </div>

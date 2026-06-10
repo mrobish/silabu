@@ -28,7 +28,8 @@ export async function settingsRoutes(app: FastifyInstance) {
     const smtp = await getSetting('smtp');
     const oauth = await getSetting('oauth');
     const tripay = await getSetting('tripay');
-    return { smtp, oauth, tripay };
+    const security = await getSetting('security');
+    return { smtp, oauth, tripay, security };
   });
 
   app.put('/settings/smtp', async (req: FastifyRequest) => {
@@ -43,6 +44,11 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.put('/settings/tripay', async (req: FastifyRequest) => {
     await putSetting('tripay', req.body);
+    return { success: true };
+  });
+
+  app.put('/settings/security', async (req: FastifyRequest) => {
+    await putSetting('security', req.body);
     return { success: true };
   });
 

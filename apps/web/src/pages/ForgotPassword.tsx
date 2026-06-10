@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { TurnstileWidget } from './TurnstileWidget';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState('');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -15,7 +17,7 @@ export default function ForgotPassword() {
       const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, captchaToken }),
       });
       const data = await res.json();
       if (data.error) { setError(data.error); return; }
@@ -57,6 +59,7 @@ export default function ForgotPassword() {
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="email"
                   className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition" placeholder="Email yang terdaftar" />
               </div>
+              <TurnstileWidget onVerify={t => setCaptchaToken(t)} className="flex justify-center" />
               <button type="submit" disabled={loading}
                 className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 py-3 text-sm font-semibold text-white shadow-sm hover:shadow-md hover:translate-y-[-1px] transition-all disabled:opacity-50 disabled:translate-y-0">
                 {loading ? 'Mengirim...' : 'Kirim Link Reset'}
