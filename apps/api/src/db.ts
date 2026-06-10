@@ -11,38 +11,57 @@ export const pool = new Pool({
 });
 
 export async function initDatabase() {
-  await pool.query(`
-    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+  await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
 
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       email varchar(255) NOT NULL UNIQUE,
-      email_verified_at timestamp,
       password_hash varchar(255),
-      nama_lengkap varchar(255),
-      avatar_url text,
-      role varchar(32) NOT NULL DEFAULT 'bumdes',
-      tenant_id uuid,
+      nama_lengkap varchar(255) NOT NULL,
       auth_provider varchar(32) NOT NULL DEFAULT 'email',
       google_id varchar(64),
+      email_verification_token varchar(255),
+      email_verified_at timestamp,
+      role varchar(32) NOT NULL DEFAULT 'bumdes',
+      tenant_id uuid,
+      avatar_url text,
       is_active boolean NOT NULL DEFAULT true,
       last_login_at timestamp,
       created_at timestamp NOT NULL DEFAULT now(),
       updated_at timestamp NOT NULL DEFAULT now()
     );
+  `);
 
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS tenants (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       nama_bumdes varchar(255) NOT NULL,
-      alamat text,
+      provinsi varchar(128),
+      kabupaten varchar(128),
+      kecamatan varchar(128),
+      desa varchar(128),
+      tahun_berdiri integer,
       npwp varchar(64),
       logo_url text,
-      status varchar(32) NOT NULL DEFAULT 'active',
+      nama_penasihat varchar(255),
+      nama_direktur varchar(255),
+      nama_sekretaris varchar(255),
+      nama_bendahara varchar(255),
+      nama_pengawas_1 varchar(255),
+      nama_pengawas_2 varchar(255),
+      trial_ends_at timestamp NOT NULL DEFAULT (now() + interval '14 days'),
+      subscription_ends_at timestamp,
+      plan varchar(32) NOT NULL DEFAULT 'trial',
+      subscription_status varchar(32) NOT NULL DEFAULT 'trial',
+      is_active boolean NOT NULL DEFAULT true,
       created_by uuid REFERENCES users(id) ON DELETE SET NULL,
       created_at timestamp NOT NULL DEFAULT now(),
       updated_at timestamp NOT NULL DEFAULT now()
     );
+  `);
 
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS sessions (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -55,20 +74,22 @@ export async function initDatabase() {
       expires_at timestamp NOT NULL,
       created_at timestamp NOT NULL DEFAULT now()
     );
+  `);
 
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS verification_tokens (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id uuid REFERENCES users(id) ON DELETE CASCADE,
       email varchar(255) NOT NULL,
       purpose varchar(32) NOT NULL,
-      otp_hash varchar(255),
-      magic_token_hash varchar(255),
+      token_hash varchar(255) NOT NULL,
       consumed_at timestamp,
-      attempts integer NOT NULL DEFAULT 0,
       expires_at timestamp NOT NULL,
       created_at timestamp NOT NULL DEFAULT now()
     );
+  `);
 
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS audit_logs (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id uuid REFERENCES users(id) ON DELETE SET NULL,
@@ -79,7 +100,9 @@ export async function initDatabase() {
       metadata jsonb,
       created_at timestamp NOT NULL DEFAULT now()
     );
+  `);
 
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS signup_attempts (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       ip_address varchar(64) NOT NULL,
@@ -87,15 +110,29 @@ export async function initDatabase() {
       succeeded boolean NOT NULL DEFAULT false,
       created_at timestamp NOT NULL DEFAULT now()
     );
-
-    CREATE INDEX IF NOT EXISTS users_google_id_idx ON users(google_id);
-    CREATE INDEX IF NOT EXISTS users_tenant_idx ON users(tenant_id);
-    CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id);
-    CREATE INDEX IF NOT EXISTS sessions_token_idx ON sessions(refresh_token_hash);
-    CREATE INDEX IF NOT EXISTS verification_email_purpose_idx ON verification_tokens(email, purpose);
-    CREATE INDEX IF NOT EXISTS verification_magic_idx ON verification_tokens(magic_token_hash);
-    CREATE INDEX IF NOT EXISTS audit_user_idx ON audit_logs(user_id);
-    CREATE INDEX IF NOT EXISTS audit_event_idx ON audit_logs(event);
-    CREATE INDEX IF NOT EXISTS signup_ip_idx ON signup_attempts(ip_address, created_at);
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      key varchar(128) NOT NULL UNIQUE,
+      value_encrypted text NOT NULL DEFAULT '{}',
+      updated_at timestamp NOT NULL DEFAULT now()
+    );
+  `);
+
+  // Add UNIQUE on users.tenant_id if not exists (1 PIC per tenant)
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_tenant_id_key') THEN
+        ALTER TABLE users ADD CONSTRAINT users_tenant_id_key UNIQUE (tenant_id);
+      END IF;
+    END $$;
+  `);
+
+  // Indexes
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tenants_created_by ON tenants(created_by);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);`);
 }

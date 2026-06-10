@@ -1,259 +1,96 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { z } from 'zod';
-import {
-  generateMagicToken,
-  generateOTP,
-  hashPassword,
-  verifyPassword,
-  validatePasswordStrength,
-  signAccessToken,
-  signRefreshToken,
-  verifyRefreshToken,
-  hashRefreshToken,
-  extractClientInfo,
-} from '@silabu/auth';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { pool } from './db.js';
-import { buildOTPEmail, sendEmail } from './mailer.js';
+import { sendEmail, buildVerifyLinkEmail } from './mailer.js';
 
+const JWT_SECRET = process.env.JWT_SECRET || 'silabu-digi-secret-2026';
 const APP_URL = process.env.APP_URL || 'https://silabu.ondesa.id';
-const OTP_TTL_MINUTES = 15;
-const REFRESH_TTL_DAYS = 7;
 
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  namaLengkap: z.string().min(2).optional(),
-});
-
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-});
-
-const verifySchema = z.object({
-  email: z.string().email().optional(),
-  otp: z.string().length(6).optional(),
-  token: z.string().min(32).optional(),
-});
-
-const refreshSchema = z.object({ refreshToken: z.string().min(20) });
-const forgotSchema = z.object({ email: z.string().email() });
-const resetSchema = z.object({ email: z.string().email().optional(), otp: z.string().length(6).optional(), token: z.string().min(32).optional(), password: z.string().min(8) });
-
-type UserRow = {
-  id: string;
-  email: string;
-  password_hash: string | null;
-  nama_lengkap: string | null;
-  role: string;
-  tenant_id: string | null;
-  email_verified_at: Date | null;
-  is_active: boolean;
-  auth_provider: string;
-};
-
-function addMinutes(d: Date, mins: number) { return new Date(d.getTime() + mins * 60_000); }
-function addDays(d: Date, days: number) { return new Date(d.getTime() + days * 86400_000); }
-function normalizeEmail(email: string) { return email.trim().toLowerCase(); }
-
-async function audit(req: FastifyRequest, event: string, payload: { userId?: string; email?: string; metadata?: Record<string, unknown> } = {}) {
-  const { ipAddress, userAgent } = extractClientInfo(req);
-  await pool.query(
-    `INSERT INTO audit_logs (user_id, email, event, ip_address, user_agent, metadata) VALUES ($1,$2,$3,$4,$5,$6)`,
-    [payload.userId ?? null, payload.email ?? null, event, ipAddress, userAgent, payload.metadata ?? null]
-  );
+function sign(user: any) {
+  return jwt.sign({ userId: user.id, email: user.email, role: user.role, tenantId: user.tenant_id }, JWT_SECRET, { expiresIn: '7d' });
 }
-
-async function createVerification(req: FastifyRequest, userId: string | null, email: string, purpose: 'email_verify' | 'password_reset') {
-  const otp = generateOTP();
-  const token = generateMagicToken();
-  const otpHash = await hashPassword(otp);
-  const tokenHash = hashRefreshToken(token);
-  const expiresAt = addMinutes(new Date(), OTP_TTL_MINUTES);
-
-  await pool.query(
-    `INSERT INTO verification_tokens (user_id, email, purpose, otp_hash, magic_token_hash, expires_at) VALUES ($1,$2,$3,$4,$5,$6)`,
-    [userId, email, purpose, otpHash, tokenHash, expiresAt]
-  );
-
-  const path = purpose === 'email_verify' ? '/verify-email' : '/reset-password';
-  const magicLink = `${APP_URL}${path}?token=${token}&email=${encodeURIComponent(email)}`;
-  const msg = buildOTPEmail(otp, magicLink, purpose === 'email_verify' ? 'verify' : 'reset');
-  await sendEmail({ to: email, subject: msg.subject, html: msg.html, text: msg.text });
-
-  await audit(req, purpose === 'email_verify' ? 'verify_email_sent' : 'password_reset_request', { userId: userId ?? undefined, email });
-}
-
-async function findValidVerification(email: string | undefined, otp: string | undefined, token: string | undefined, purpose: 'email_verify' | 'password_reset') {
-  if (!otp && !token) throw new Error('OTP atau token wajib diisi');
-
-  let rows;
-  if (token) {
-    rows = await pool.query(
-      `SELECT * FROM verification_tokens WHERE magic_token_hash=$1 AND purpose=$2 AND consumed_at IS NULL AND expires_at > now() ORDER BY created_at DESC LIMIT 1`,
-      [hashRefreshToken(token), purpose]
-    );
-  } else {
-    rows = await pool.query(
-      `SELECT * FROM verification_tokens WHERE email=$1 AND purpose=$2 AND consumed_at IS NULL AND expires_at > now() ORDER BY created_at DESC LIMIT 1`,
-      [normalizeEmail(email || ''), purpose]
-    );
-  }
-
-  const row = rows.rows[0];
-  if (!row) throw new Error('Kode verifikasi tidak valid atau kedaluwarsa');
-
-  if (otp) {
-    if (row.attempts >= 5) throw new Error('Terlalu banyak percobaan OTP');
-    const ok = await verifyPassword(otp, row.otp_hash);
-    if (!ok) {
-      await pool.query(`UPDATE verification_tokens SET attempts=attempts+1 WHERE id=$1`, [row.id]);
-      throw new Error('OTP salah');
-    }
-  }
-
-  return row;
-}
-
-async function issueSession(req: FastifyRequest, user: UserRow, parentId?: string | null) {
-  const { ipAddress, userAgent } = extractClientInfo(req);
-  const sessionInsert = await pool.query(
-    `INSERT INTO sessions (user_id, refresh_token_hash, parent_id, ip_address, user_agent, expires_at) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-    [user.id, 'pending', parentId ?? null, ipAddress, userAgent, addDays(new Date(), REFRESH_TTL_DAYS)]
-  );
-  const sessionId = sessionInsert.rows[0].id;
-  const refreshToken = signRefreshToken({ sessionId, userId: user.id });
-  await pool.query(`UPDATE sessions SET refresh_token_hash=$1 WHERE id=$2`, [hashRefreshToken(refreshToken), sessionId]);
-  const accessToken = signAccessToken({ userId: user.id, email: user.email, role: user.role, tenantId: user.tenant_id });
-  return { accessToken, refreshToken };
-}
+function hashToken(token: string) { return crypto.createHash('sha256').update(token).digest('hex'); }
+function reqIp(req: FastifyRequest) { return req.ip || (req.headers['x-forwarded-for'] as string) || ''; }
 
 export async function authRoutes(app: FastifyInstance) {
-  app.post('/auth/register', async (req, reply) => {
-    const body = registerSchema.parse(req.body);
-    const email = normalizeEmail(body.email);
-    const { ipAddress } = extractClientInfo(req);
-    const strength = validatePasswordStrength(body.password);
-    if (!strength.valid) return reply.status(400).send({ error: strength.errors.join(', ') });
+  app.post('/register', async (req: FastifyRequest) => {
+    const b = req.body as any;
+    const required = ['email','password','confirmPassword','nama_lengkap','nama_bumdes','provinsi','kabupaten','kecamatan','desa','tahun_berdiri','nama_penasihat','nama_direktur','nama_sekretaris','nama_bendahara','nama_pengawas_1'];
+    for (const f of required) if (!b[f]) return { error: `${f} wajib diisi` };
+    if (b.password !== b.confirmPassword) return { error: 'Password tidak sama' };
+    if (String(b.password).length < 8) return { error: 'Password minimal 8 karakter' };
 
-    const recent = await pool.query(`SELECT count(*)::int AS c FROM signup_attempts WHERE ip_address=$1 AND created_at > now() - interval '1 hour'`, [ipAddress]);
-    if ((recent.rows[0]?.c ?? 0) >= 5) return reply.status(429).send({ error: 'Terlalu banyak percobaan daftar. Coba lagi nanti.' });
-
-    await pool.query(`INSERT INTO signup_attempts (ip_address, email) VALUES ($1,$2)`, [ipAddress, email]);
-
-    const existing = await pool.query<UserRow>(`SELECT * FROM users WHERE email=$1`, [email]);
-    if (existing.rows[0]?.email_verified_at) return reply.status(409).send({ error: 'Email sudah terdaftar' });
-
-    const passwordHash = await hashPassword(body.password);
-    let user: UserRow;
-    if (existing.rows[0]) {
-      const res = await pool.query<UserRow>(`UPDATE users SET password_hash=$1, nama_lengkap=coalesce($2,nama_lengkap), auth_provider=CASE WHEN auth_provider='google' THEN 'both' ELSE 'email' END, updated_at=now() WHERE id=$3 RETURNING *`, [passwordHash, body.namaLengkap ?? null, existing.rows[0].id]);
-      user = res.rows[0];
-    } else {
-      const res = await pool.query<UserRow>(`INSERT INTO users (email, password_hash, nama_lengkap, auth_provider) VALUES ($1,$2,$3,'email') RETURNING *`, [email, passwordHash, body.namaLengkap ?? null]);
-      user = res.rows[0];
-    }
-
-    await createVerification(req, user.id, email, 'email_verify');
-    await audit(req, 'register', { userId: user.id, email });
-    return reply.send({ success: true, message: 'OTP/link verifikasi sudah dikirim ke email', email });
-  });
-
-  app.post('/auth/verify-email', async (req, reply) => {
+    const client = await pool.connect();
     try {
-      const body = verifySchema.parse(req.body);
-      const row = await findValidVerification(body.email, body.otp, body.token, 'email_verify');
-      await pool.query(`UPDATE verification_tokens SET consumed_at=now() WHERE id=$1`, [row.id]);
-      const res = await pool.query<UserRow>(`UPDATE users SET email_verified_at=now(), updated_at=now() WHERE id=$1 RETURNING *`, [row.user_id]);
-      const user = res.rows[0];
-      const tokens = await issueSession(req, user);
-      await audit(req, 'verify_email', { userId: user.id, email: user.email });
-      return reply.send({ success: true, user: { id: user.id, email: user.email, role: user.role, tenantId: user.tenant_id }, ...tokens });
-    } catch (e: any) {
-      return reply.status(400).send({ error: e.message || 'Verifikasi gagal' });
-    }
-  });
+      await client.query('BEGIN');
+      const exists = await client.query('SELECT id FROM users WHERE email=$1', [String(b.email).toLowerCase()]);
+      if (exists.rowCount) throw new Error('Email sudah terdaftar');
 
-  app.post('/auth/login', async (req, reply) => {
-    const body = loginSchema.parse(req.body);
-    const email = normalizeEmail(body.email);
-    const res = await pool.query<UserRow>(`SELECT * FROM users WHERE email=$1`, [email]);
-    const user = res.rows[0];
-    if (!user || !user.password_hash) {
-      await audit(req, 'login_failed', { email });
-      return reply.status(401).send({ error: 'Email atau password salah' });
-    }
-    if (!user.is_active) return reply.status(403).send({ error: 'Akun dinonaktifkan' });
-    const ok = await verifyPassword(body.password, user.password_hash);
-    if (!ok) {
-      await audit(req, 'login_failed', { userId: user.id, email });
-      return reply.status(401).send({ error: 'Email atau password salah' });
-    }
-    if (!user.email_verified_at) {
-      await createVerification(req, user.id, email, 'email_verify');
-      return reply.status(403).send({ error: 'Email belum diverifikasi. OTP baru sudah dikirim.', needsVerification: true, email });
-    }
-    await pool.query(`UPDATE users SET last_login_at=now() WHERE id=$1`, [user.id]);
-    const tokens = await issueSession(req, user);
-    await audit(req, 'login_success', { userId: user.id, email });
-    return reply.send({ success: true, user: { id: user.id, email: user.email, role: user.role, tenantId: user.tenant_id }, ...tokens });
-  });
-
-  app.post('/auth/refresh', async (req, reply) => {
-    try {
-      const body = refreshSchema.parse(req.body);
-      const payload = verifyRefreshToken(body.refreshToken);
-      const tokenHash = hashRefreshToken(body.refreshToken);
-      const sess = await pool.query(`SELECT * FROM sessions WHERE id=$1 AND refresh_token_hash=$2 AND revoked_at IS NULL AND expires_at > now()`, [payload.sessionId, tokenHash]);
-      const session = sess.rows[0];
-      if (!session) throw new Error('Session tidak valid');
-      await pool.query(`UPDATE sessions SET revoked_at=now(), revoked_reason='rotated' WHERE id=$1`, [session.id]);
-      const userRes = await pool.query<UserRow>(`SELECT * FROM users WHERE id=$1 AND is_active=true`, [payload.userId]);
+      const passHash = await bcrypt.hash(b.password, 12);
+      const userRes = await client.query(
+        `INSERT INTO users (email,password_hash,nama_lengkap,role,auth_provider) VALUES ($1,$2,$3,'bumdes','email') RETURNING *`,
+        [String(b.email).toLowerCase(), passHash, b.nama_lengkap]
+      );
       const user = userRes.rows[0];
-      if (!user) throw new Error('User tidak valid');
-      const tokens = await issueSession(req, user, session.id);
-      await audit(req, 'refresh', { userId: user.id, email: user.email });
-      return reply.send({ success: true, ...tokens });
-    } catch {
-      return reply.status(401).send({ error: 'Refresh token tidak valid' });
-    }
+
+      const tenantRes = await client.query(
+        `INSERT INTO tenants (nama_bumdes,provinsi,kabupaten,kecamatan,desa,tahun_berdiri,npwp,nama_penasihat,nama_direktur,nama_sekretaris,nama_bendahara,nama_pengawas_1,nama_pengawas_2,created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+        [b.nama_bumdes,b.provinsi,b.kabupaten,b.kecamatan,b.desa,Number(b.tahun_berdiri),b.npwp||null,b.nama_penasihat,b.nama_direktur,b.nama_sekretaris,b.nama_bendahara,b.nama_pengawas_1,b.nama_pengawas_2||null,user.id]
+      );
+      const tenantId = tenantRes.rows[0].id;
+      await client.query('UPDATE users SET tenant_id=$1 WHERE id=$2', [tenantId, user.id]);
+
+      const token = crypto.randomBytes(32).toString('hex');
+      await client.query(`INSERT INTO verification_tokens (user_id,email,purpose,token_hash,expires_at) VALUES ($1,$2,'verify_email',$3,now()+interval '24 hours')`, [user.id, user.email, hashToken(token)]);
+      await client.query('COMMIT');
+
+      const link = `${APP_URL}/verify-email?token=${token}`;
+      const email = buildVerifyLinkEmail(link);
+      await sendEmail({ to: user.email, subject: email.subject, text: email.text, html: email.html });
+      return { success: true, message: 'Registrasi berhasil. Cek email untuk verifikasi.', tenantId };
+    } catch (e:any) {
+      await client.query('ROLLBACK');
+      return { error: e.message };
+    } finally { client.release(); }
   });
 
-  app.post('/auth/logout', async (req, reply) => {
-    const body = refreshSchema.safeParse(req.body);
-    if (body.success) {
-      try {
-        const payload = verifyRefreshToken(body.data.refreshToken);
-        await pool.query(`UPDATE sessions SET revoked_at=now(), revoked_reason='logout' WHERE id=$1`, [payload.sessionId]);
-        await audit(req, 'logout', { userId: payload.userId });
-      } catch {}
-    }
-    return reply.send({ success: true });
+  app.get('/verify-email', async (req: FastifyRequest) => {
+    const token = (req.query as any).token;
+    if (!token) return { error: 'Token tidak valid' };
+    const h = hashToken(token);
+    const r = await pool.query(`SELECT * FROM verification_tokens WHERE token_hash=$1 AND purpose='verify_email' AND consumed_at IS NULL AND expires_at > now()`, [h]);
+    if (!r.rowCount) return { error: 'Token tidak valid atau sudah kedaluwarsa' };
+    const v = r.rows[0];
+    await pool.query('UPDATE users SET email_verified_at=now(), updated_at=now() WHERE id=$1', [v.user_id]);
+    await pool.query('UPDATE verification_tokens SET consumed_at=now() WHERE id=$1', [v.id]);
+    return { success: true };
   });
 
-  app.post('/auth/forgot-password', async (req, reply) => {
-    const body = forgotSchema.parse(req.body);
-    const email = normalizeEmail(body.email);
-    const userRes = await pool.query<UserRow>(`SELECT * FROM users WHERE email=$1`, [email]);
-    const user = userRes.rows[0];
-    if (user) await createVerification(req, user.id, email, 'password_reset');
-    return reply.send({ success: true, message: 'Jika email terdaftar, link reset sudah dikirim' });
+  app.post('/login', async (req: FastifyRequest) => {
+    const { email, password } = req.body as any;
+    const r = await pool.query('SELECT * FROM users WHERE email=$1 AND is_active=true', [String(email||'').toLowerCase()]);
+    const user = r.rows[0];
+    if (!user || !user.password_hash) return { error: 'Email atau password salah' };
+    const ok = await bcrypt.compare(password || '', user.password_hash);
+    if (!ok) return { error: 'Email atau password salah' };
+    if (!user.email_verified_at && user.role !== 'super_admin') return { error: 'Email belum diverifikasi' };
+    await pool.query('UPDATE users SET last_login_at=now() WHERE id=$1', [user.id]);
+    return { accessToken: sign(user), user: { id:user.id,email:user.email,nama_lengkap:user.nama_lengkap,role:user.role,tenantId:user.tenant_id } };
   });
 
-  app.post('/auth/reset-password', async (req, reply) => {
+  app.get('/me', async (req: FastifyRequest) => {
+    const auth = req.headers.authorization;
+    if (!auth?.startsWith('Bearer ')) return { error: 'Unauthorized' };
     try {
-      const body = resetSchema.parse(req.body);
-      const strength = validatePasswordStrength(body.password);
-      if (!strength.valid) return reply.status(400).send({ error: strength.errors.join(', ') });
-      const row = await findValidVerification(body.email, body.otp, body.token, 'password_reset');
-      const passwordHash = await hashPassword(body.password);
-      await pool.query(`UPDATE users SET password_hash=$1, auth_provider=CASE WHEN auth_provider='google' THEN 'both' ELSE 'email' END, updated_at=now() WHERE id=$2`, [passwordHash, row.user_id]);
-      await pool.query(`UPDATE verification_tokens SET consumed_at=now() WHERE id=$1`, [row.id]);
-      await pool.query(`UPDATE sessions SET revoked_at=now(), revoked_reason='password_reset' WHERE user_id=$1 AND revoked_at IS NULL`, [row.user_id]);
-      await audit(req, 'password_reset_complete', { userId: row.user_id, email: row.email });
-      return reply.send({ success: true, message: 'Password berhasil diubah' });
-    } catch (e: any) {
-      return reply.status(400).send({ error: e.message || 'Reset password gagal' });
-    }
+      const d = jwt.verify(auth.slice(7), JWT_SECRET) as any;
+      const r = await pool.query(`SELECT u.id,u.email,u.nama_lengkap,u.role,u.tenant_id,t.nama_bumdes,t.trial_ends_at,t.subscription_ends_at,t.subscription_status,t.plan FROM users u LEFT JOIN tenants t ON t.id=u.tenant_id WHERE u.id=$1`, [d.userId]);
+      return { user: r.rows[0] };
+    } catch { return { error: 'Unauthorized' }; }
   });
+
+  app.get('/google', async () => ({ error: 'Google OAuth belum dikonfigurasi' }));
+  app.get('/google/callback', async () => ({ error: 'Google OAuth callback belum aktif' }));
 }
