@@ -4,27 +4,42 @@ import { getSMTPConfig } from './settings-routes.js';
 
 const MAIL_LOG_DIR = process.env.MAIL_LOG_DIR || '/var/log/silabu-digi/mail';
 
-export async function sendEmail(params: {to:string;subject:string;html:string;text:string}) {
-  await fs.mkdir(MAIL_LOG_DIR, { recursive: true });
-  const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  const file = path.join(MAIL_LOG_DIR, `${ts}_${params.to.replace(/[^a-z0-9]/gi, '_')}.log`);
-  await fs.writeFile(file, `TO: ${params.to}\nSUBJECT: ${params.subject}\n\n${params.text}\n`);
-  console.log(`[mail] -> ${params.to}: ${params.subject} (logged)`);
-
-  const smtp = await getSMTPConfig();
-  if (!smtp?.host) return;
+export async function sendEmail({ to, subject, html, text }: { to: string; subject: string; html: string; text: string }) {
   try {
-    const nodemailer = await import('nodemailer');
-    const t = nodemailer.createTransport({ host: smtp.host, port: smtp.port||587, secure: smtp.secure||false, auth:{user:smtp.user,pass:smtp.pass} });
-    await t.sendMail({ from: smtp.from||smtp.user, to: params.to, subject: params.subject, text: params.text, html: params.html });
-    console.log(`[mail] SMTP sent to ${params.to}`);
-  } catch (e:any) { console.error(`[mail] SMTP fail: ${e.message}`); }
+    const cfg = await getSMTPConfig();
+    if (cfg?.host && cfg?.port) {
+      const nodemailer = await import('nodemailer');
+      const transporter = nodemailer.createTransport({
+        host: cfg.host, port: Number(cfg.port), secure: !!cfg.secure,
+        auth: cfg.user && cfg.pass ? { user: cfg.user, pass: cfg.pass } : undefined,
+      });
+      await transporter.sendMail({ from: cfg.from || `SILABU DIGI <${cfg.user}>`, to, subject, html, text });
+      return;
+    }
+  } catch {}
+  await logEmailToFile({ to, subject, html, text });
+}
+
+async function logEmailToFile({ to, subject, text }: { to: string; subject: string; html: string; text: string }) {
+  try {
+    await fs.mkdir(MAIL_LOG_DIR, { recursive: true });
+    const filename = `mail_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.txt`;
+    await fs.writeFile(path.join(MAIL_LOG_DIR, filename), `To: ${to}\nSubject: ${subject}\n\n${text}`);
+  } catch {}
 }
 
 export function buildVerifyLinkEmail(link: string) {
   return {
-    subject: 'SILABU DIGI — Verifikasi Email',
-    text: `Verifikasi email SILABU DIGI:\n${link}\n\nLink berlaku 24 jam.\n— SILABU DIGI`,
-    html: `<div style="font-family:system-ui;max-width:480px;margin:auto;padding:24px;color:#0f172a"><h2>Verifikasi Email</h2><p>Klik tombol di bawah untuk verifikasi akun SILABU DIGI Anda.</p><a href="${link}" style="display:inline-block;padding:14px 28px;background:linear-gradient(135deg,#0891b2,#2563eb);color:white;text-decoration:none;border-radius:12px;font-weight:700;font-size:16px">Verifikasi Email</a><p style="color:#64748b;margin-top:24px;font-size:13px">Link berlaku 24 jam. Jika bukan Anda, abaikan email ini.</p><p>— SILABU DIGI</p></div>`,
+    subject: 'Verifikasi Email - SILABU DIGI',
+    text: `Klik link berikut untuk verifikasi email Anda: ${link}`,
+    html: `<div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;padding:20px"><h2 style="color:#0e7490">Verifikasi Email</h2><p>Klik tombol berikut untuk verifikasi email Anda:</p><a href="${link}" style="display:inline-block;padding:12px 24px;background:#0891b2;color:white;border-radius:8px;text-decoration:none;font-weight:600;margin:16px 0">Verifikasi Email</a><p style="color:#64748b;font-size:13px">Link berlaku 24 jam. Jika tidak mendaftar, abaikan email ini.</p></div>`,
+  };
+}
+
+export function buildResetLinkEmail(link: string) {
+  return {
+    subject: 'Reset Password - SILABU DIGI',
+    text: `Klik link berikut untuk reset password Anda: ${link}`,
+    html: `<div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;padding:20px"><h2 style="color:#0e7490">Reset Password</h2><p>Klik tombol berikut untuk membuat password baru:</p><a href="${link}" style="display:inline-block;padding:12px 24px;background:#0891b2;color:white;border-radius:8px;text-decoration:none;font-weight:600;margin:16px 0">Reset Password</a><p style="color:#64748b;font-size:13px">Link berlaku 1 jam. Jika tidak meminta reset, abaikan email ini.</p></div>`,
   };
 }

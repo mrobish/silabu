@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { pool } from './db.js';
-import { sendEmail, buildVerifyLinkEmail } from './mailer.js';
+import { sendEmail, buildVerifyLinkEmail, buildResetLinkEmail } from './mailer.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'silabu-digi-secret-2026';
 const APP_URL = process.env.APP_URL || 'https://silabu.ondesa.id';
@@ -89,6 +89,36 @@ export async function authRoutes(app: FastifyInstance) {
       const r = await pool.query(`SELECT u.id,u.email,u.nama_lengkap,u.role,u.tenant_id,t.nama_bumdes,t.trial_ends_at,t.subscription_ends_at,t.subscription_status,t.plan FROM users u LEFT JOIN tenants t ON t.id=u.tenant_id WHERE u.id=$1`, [d.userId]);
       return { user: r.rows[0] };
     } catch { return { error: 'Unauthorized' }; }
+  });
+
+  app.post('/forgot-password', async (req: FastifyRequest) => {
+    const { email } = req.body as any;
+    const e = String(email || '').toLowerCase();
+    // Always return success to avoid email enumeration
+    const r = await pool.query('SELECT * FROM users WHERE email=$1 AND is_active=true', [e]);
+    const user = r.rows[0];
+    if (user && user.password_hash) {
+      const token = crypto.randomBytes(32).toString('hex');
+      await pool.query(`INSERT INTO verification_tokens (user_id,email,purpose,token_hash,expires_at) VALUES ($1,$2,'reset_password',$3,now()+interval '1 hour')`, [user.id, user.email, hashToken(token)]);
+      const link = `${APP_URL}/reset-password?token=${token}`;
+      const mail = buildResetLinkEmail(link);
+      await sendEmail({ to: user.email, subject: mail.subject, text: mail.text, html: mail.html });
+    }
+    return { success: true, message: 'Jika email terdaftar, link reset sudah dikirim.' };
+  });
+
+  app.post('/reset-password', async (req: FastifyRequest) => {
+    const { token, password } = req.body as any;
+    if (!token) return { error: 'Token tidak valid' };
+    if (String(password || '').length < 8) return { error: 'Password minimal 8 karakter' };
+    const h = hashToken(token);
+    const r = await pool.query(`SELECT * FROM verification_tokens WHERE token_hash=$1 AND purpose='reset_password' AND consumed_at IS NULL AND expires_at > now()`, [h]);
+    if (!r.rowCount) return { error: 'Token tidak valid atau sudah kedaluwarsa' };
+    const v = r.rows[0];
+    const passHash = await bcrypt.hash(password, 12);
+    await pool.query('UPDATE users SET password_hash=$1, updated_at=now() WHERE id=$2', [passHash, v.user_id]);
+    await pool.query('UPDATE verification_tokens SET consumed_at=now() WHERE id=$1', [v.id]);
+    return { success: true };
   });
 
   app.get('/google', async () => ({ error: 'Google OAuth belum dikonfigurasi' }));

@@ -30,7 +30,11 @@ export default function Login() {
     <div className="min-h-dvh bg-gradient-to-b from-slate-50 to-white flex items-center justify-center p-4">
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
         <div className="text-center mb-6">
-          <Link to="/" className="inline-block mb-4">
+          <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-cyan-600 transition-colors mb-4">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            Kembali ke Beranda
+          </Link>
+          <Link to="/" className="block mb-4">
             <img src="/logo.png" alt="SILABU DIGI" className="mx-auto h-14 w-auto" />
           </Link>
           <h1 className="text-2xl font-bold text-slate-900">Masuk</h1>
@@ -42,13 +46,16 @@ export default function Login() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="email"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition" placeholder="nama@contoh.com" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required autoComplete="current-password"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition" placeholder="Password Anda" />
+          </div>
+          <div className="text-right -mt-2">
+            <Link to="/forgot-password" className="text-sm font-medium text-cyan-600 hover:underline">Lupa password?</Link>
           </div>
           <button type="submit" disabled={loading}
             className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 py-3 text-sm font-semibold text-white shadow-sm hover:shadow-md hover:translate-y-[-1px] transition-all disabled:opacity-50 disabled:translate-y-0">

@@ -151,11 +151,15 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white py-12 px-4">
+    <div className="min-h-dvh bg-gradient-to-b from-slate-50 to-white py-8 sm:py-12 px-4">
       <div className="max-w-2xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Daftar SILABU DIGI</h1>
-          <p className="text-slate-600">Platform digital untuk BUM Desa se-Indonesia</p>
+        <div className="text-center mb-6 sm:mb-8">
+          <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-cyan-600 transition-colors mb-4">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            Kembali ke Beranda
+          </Link>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">Daftar SILABU DIGI</h1>
+          <p className="text-sm sm:text-base text-slate-600">Platform digital untuk BUM Desa se-Indonesia</p>
         </div>
 
         {/* Progress indicator */}
@@ -200,8 +204,9 @@ export default function Register() {
                   type="text"
                   value={formData.nama_lengkap}
                   onChange={(e) => update('nama_lengkap', e.target.value)}
+                  autoComplete="off"
                   className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  placeholder="Nama lengkap Anda"
+                  placeholder="Nama lengkap PIC"
                 />
               </div>
 
@@ -239,6 +244,7 @@ export default function Register() {
                   type="text"
                   value={formData.nama_bumdes}
                   onChange={(e) => update('nama_bumdes', e.target.value)}
+                  autoComplete="off"
                   className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                   placeholder="Contoh: BUM Desa Maju Bersama"
                 />
@@ -251,6 +257,7 @@ export default function Register() {
                     type="text"
                     value={formData.provinsi}
                     onChange={(e) => update('provinsi', e.target.value)}
+                    autoComplete="off"
                     className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                     placeholder="Contoh: Jawa Barat"
                   />
@@ -262,6 +269,7 @@ export default function Register() {
                     type="text"
                     value={formData.kabupaten}
                     onChange={(e) => update('kabupaten', e.target.value)}
+                    autoComplete="off"
                     className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                     placeholder="Contoh: Kab. Bandung"
                   />
@@ -275,6 +283,7 @@ export default function Register() {
                     type="text"
                     value={formData.kecamatan}
                     onChange={(e) => update('kecamatan', e.target.value)}
+                    autoComplete="off"
                     className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                     placeholder="Contoh: Cileunyi"
                   />
@@ -286,6 +295,7 @@ export default function Register() {
                     type="text"
                     value={formData.desa}
                     onChange={(e) => update('desa', e.target.value)}
+                    autoComplete="off"
                     className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                     placeholder="Contoh: Cibiru Wetan"
                   />
@@ -309,19 +319,20 @@ export default function Register() {
 
           {step === 3 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-bold text-slate-900 mb-4">Struktur Pengurus</h2>
+              <h2 className="text-xl font-bold text-slate-900 mb-4">Pelaksana Operasional</h2>
               <p className="text-sm text-slate-600 mb-4">
-                Isi nama lengkap pengurus sesuai jabatan masing-masing.
+                Isi nama lengkap pengurus sesuai jabatan masing-masing. Penasihat biasanya = Kepala Desa.
               </p>
               
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Penasihat *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Penasihat (Kepala Desa) *</label>
                 <input
                   type="text"
                   value={formData.nama_penasihat}
                   onChange={(e) => update('nama_penasihat', e.target.value)}
+                  autoComplete="off"
                   className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  placeholder="Nama lengkap penasihat"
+                  placeholder="Contoh: H. Ahmad Suhendra"
                 />
               </div>
 
@@ -331,6 +342,7 @@ export default function Register() {
                   type="text"
                   value={formData.nama_direktur}
                   onChange={(e) => update('nama_direktur', e.target.value)}
+                  autoComplete="off"
                   className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                   placeholder="Nama lengkap direktur"
                 />
@@ -343,6 +355,7 @@ export default function Register() {
                     type="text"
                     value={formData.nama_sekretaris}
                     onChange={(e) => update('nama_sekretaris', e.target.value)}
+                    autoComplete="off"
                     className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                     placeholder="Nama lengkap sekretaris"
                   />
@@ -354,6 +367,7 @@ export default function Register() {
                     type="text"
                     value={formData.nama_bendahara}
                     onChange={(e) => update('nama_bendahara', e.target.value)}
+                    autoComplete="off"
                     className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                     placeholder="Nama lengkap bendahara"
                   />
@@ -367,6 +381,7 @@ export default function Register() {
                     type="text"
                     value={formData.nama_pengawas_1}
                     onChange={(e) => update('nama_pengawas_1', e.target.value)}
+                    autoComplete="off"
                     className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                     placeholder="Nama pengawas pertama"
                   />
@@ -380,6 +395,7 @@ export default function Register() {
                     type="text"
                     value={formData.nama_pengawas_2}
                     onChange={(e) => update('nama_pengawas_2', e.target.value)}
+                    autoComplete="off"
                     className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                     placeholder="Nama pengawas kedua"
                   />
