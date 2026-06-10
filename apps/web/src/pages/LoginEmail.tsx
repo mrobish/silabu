@@ -2,17 +2,18 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TurnstileWidget } from './TurnstileWidget';
 
-export default function Login() {
+export default function LoginEmail() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [captchaToken, setCaptchaToken] = useState('');
-  const navigate = useNavigate();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    if (!captchaToken) { setError('Verifikasi CAPTCHA dulu'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/auth/login', {
@@ -32,14 +33,14 @@ export default function Login() {
     <div className="min-h-dvh bg-gradient-to-b from-slate-50 to-white flex items-center justify-center p-4">
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
         <div className="text-center mb-6">
-          <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-cyan-600 transition-colors mb-4">
+          <Link to="/login" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-cyan-600 transition-colors mb-4">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-            Kembali ke Beranda
+            Kembali
           </Link>
-          <Link to="/" className="block mb-4">
-            <img src="/logo.png" alt="SILABU DIGI" className="mx-auto h-14 w-auto" />
-          </Link>
-          <h1 className="text-2xl font-bold text-slate-900">Masuk</h1>
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-cyan-50">
+            <svg className="h-7 w-7 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900">Masuk dengan Email</h1>
           <p className="text-sm text-slate-500 mt-1">Masuk ke akun BUM Desa Anda</p>
         </div>
 
@@ -47,12 +48,12 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Email</label>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Email <span className="text-red-500">*</span></label>
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="email"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition" placeholder="nama@contoh.com" />
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Password</label>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Password <span className="text-red-500">*</span></label>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} required autoComplete="current-password"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition" placeholder="Password Anda" />
           </div>
@@ -62,14 +63,15 @@ export default function Login() {
           <div className="text-right -mt-2">
             <Link to="/forgot-password" className="text-sm font-medium text-cyan-600 hover:underline">Lupa password?</Link>
           </div>
+
           <button type="submit" disabled={loading}
             className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 py-3 text-sm font-semibold text-white shadow-sm hover:shadow-md hover:translate-y-[-1px] transition-all disabled:opacity-50 disabled:translate-y-0">
-            {loading ? 'Masuk...' : 'Masuk'}
+            {loading ? 'Memproses...' : 'Masuk'}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-500">
-          Belum punya akun? <Link to="/register" className="font-semibold text-cyan-600 hover:underline">Daftar Gratis</Link>
+          Belum punya akun? <Link to="/register" className="font-semibold text-cyan-600 hover:underline">Daftar gratis</Link>
         </p>
       </div>
     </div>

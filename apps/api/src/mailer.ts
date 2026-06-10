@@ -43,3 +43,11 @@ export function buildResetLinkEmail(link: string) {
     html: `<div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;padding:20px"><h2 style="color:#0e7490">Reset Password</h2><p>Klik tombol berikut untuk membuat password baru:</p><a href="${link}" style="display:inline-block;padding:12px 24px;background:#0891b2;color:white;border-radius:8px;text-decoration:none;font-weight:600;margin:16px 0">Reset Password</a><p style="color:#64748b;font-size:13px">Link berlaku 1 jam. Jika tidak meminta reset, abaikan email ini.</p></div>`,
   };
 }
+
+export function buildOTPCodeEmail(code: string) {
+  return {
+    subject: 'Kode Verifikasi - SILABU DIGI',
+    text: `Kode verifikasi Anda: ${code}. Kode berlaku 5 menit.`,
+    html: `<div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;padding:20px"><h2 style="color:#0e7490">Kode Verifikasi</h2><p>Gunakan kode berikut untuk verifikasi akun Anda:</p><div style="font-size:32px;font-weight:900;letter-spacing:8px;text-align:center;padding:16px;background:#f1f5f9;border-radius:8px;margin:16px 0">${code}</div><p style="color:#64748b;font-size:13px">Kode berlaku 5 menit. Jangan bagikan kode ini kepada siapa pun.</p></div>`,
+  };
+}
