@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import LogoutButton from './LogoutButton';
 
 type Settings = { smtp: any; oauth: any; tripay: any; security: any };
 type TabKey = 'smtp' | 'oauth' | 'tripay' | 'security';
@@ -11,7 +12,7 @@ export default function SuperAdmin() {
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
-  const token = localStorage.getItem('accessToken');
+  const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
 
   useEffect(() => {
     if (!token) { navigate('/login'); return; }
@@ -21,7 +22,7 @@ export default function SuperAdmin() {
       .catch(()=>{});
   }, [token, navigate]);
 
-  function logout() { localStorage.clear(); navigate('/login'); }
+  function logout() { localStorage.clear(); sessionStorage.clear(); navigate('/login'); }
 
   async function save(key:string, value:any) {
     setMsg(null); setLoading(true);
@@ -68,10 +69,7 @@ export default function SuperAdmin() {
           </Link>
         </nav>
         <div className="p-3 border-t border-slate-100">
-          <button onClick={logout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-            Logout
-          </button>
+          <LogoutButton onLogout={logout} />
         </div>
       </aside>
     </>

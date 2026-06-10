@@ -135,4 +135,8 @@ export async function initDatabase() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tenants_created_by ON tenants(created_by);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);`);
+
+  // Login lockout columns (idempotent)
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_count integer NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until timestamp;`);
 }

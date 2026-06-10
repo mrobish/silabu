@@ -160,14 +160,49 @@ export async function registerRoutes(app: FastifyInstance) {
     const { email, password, captchaToken } = req.body as any;
     const cap = await verifyTurnstile(captchaToken, reqIp(req));
     if (!cap.success) return { error: cap.error };
-    const r = await pool.query('SELECT * FROM users WHERE email=$1 AND is_active=true', [String(email || '').toLowerCase()]);
+
+    const emailLower = String(email || '').toLowerCase();
+    const r = await pool.query(
+      `SELECT id,email,password_hash,nama_lengkap,role,tenant_id,
+              email_verified_at,failed_login_count,locked_until
+       FROM users WHERE email=$1 AND is_active=true`,
+      [emailLower]
+    );
     const user = r.rows[0];
     if (!user || !user.password_hash) return { error: 'Email atau password salah' };
+
+    // Lockout check
+    if (user.locked_until && new Date(user.locked_until) > new Date()) {
+      const secs = Math.ceil((new Date(user.locked_until).getTime() - Date.now()) / 1000);
+      const mins = Math.ceil(secs / 60);
+      return { error: `Terlalu banyak percobaan salah. Coba lagi ${mins} menit.` };
+    }
+
     const ok = await bcrypt.compare(password || '', user.password_hash);
-    if (!ok) return { error: 'Email atau password salah' };
+    if (!ok) {
+      // Increment failed count; lock at 3
+      const newCount = (user.failed_login_count || 0) + 1;
+      if (newCount >= 3) {
+        await pool.query(
+          `UPDATE users SET failed_login_count=$1, locked_until=now()+interval '5 minutes' WHERE id=$2`,
+          [newCount, user.id]
+        );
+        return { error: 'Password salah 3×. Akun terkunci 5 menit.' };
+      }
+      await pool.query(`UPDATE users SET failed_login_count=$1 WHERE id=$2`, [newCount, user.id]);
+      return { error: `Email atau password salah (percobaan ${newCount}/3)` };
+    }
+
+    // Password benar → reset lockout
     if (!user.email_verified_at && user.role !== 'super_admin') return { error: 'Email belum diverifikasi' };
-    await pool.query('UPDATE users SET last_login_at=now() WHERE id=$1', [user.id]);
-    return { accessToken: sign(user), user: { id: user.id, email: user.email, nama_lengkap: user.nama_lengkap, role: user.role, tenantId: user.tenant_id } };
+    await pool.query(
+      `UPDATE users SET last_login_at=now(), failed_login_count=0, locked_until=NULL WHERE id=$1`,
+      [user.id]
+    );
+    return {
+      accessToken: sign(user),
+      user: { id: user.id, email: user.email, nama_lengkap: user.nama_lengkap, role: user.role, tenantId: user.tenant_id },
+    };
   });
 
   // ========== ME ==========

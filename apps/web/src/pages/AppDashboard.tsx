@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import LogoutButton from './LogoutButton';
 
 export default function AppDashboard() {
   const [user, setUser] = useState<any>(null);
@@ -7,8 +8,8 @@ export default function AppDashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const stored = localStorage.getItem('user');
-    const token = localStorage.getItem('accessToken');
+    const stored = localStorage.getItem('user') || sessionStorage.getItem('user');
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
     if (!stored || !token) { navigate('/login'); return; }
     const u = JSON.parse(stored);
 
@@ -26,6 +27,7 @@ export default function AppDashboard() {
 
   function logout() {
     localStorage.clear();
+    sessionStorage.clear();
     navigate('/login');
   }
 
@@ -74,10 +76,7 @@ export default function AppDashboard() {
               <div className="text-xs text-slate-500 truncate">{user.email}</div>
             </div>
           </div>
-          <button onClick={logout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-            Logout
-          </button>
+          <LogoutButton onLogout={logout} />
         </div>
       </aside>
     </>
