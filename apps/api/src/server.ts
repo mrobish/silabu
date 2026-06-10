@@ -5,6 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import { initDatabase } from './db.js';
 import { authRoutes } from './auth-routes.js';
 import adminSettingsRoutes, { initSettings } from './admin-settings.js';
+import tenantRoutes from './tenant-routes.js';
 
 const app = Fastify({ logger: true });
 const PORT = Number(process.env.PORT || 3010);
@@ -18,6 +19,7 @@ await app.register(cors, { origin: CORS_ORIGIN, credentials: true });
 await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
 await app.register(authRoutes, { prefix: '/api' });
 await app.register(adminSettingsRoutes);
+await app.register(tenantRoutes);
 
 app.get('/api/health', async () => ({ status: 'ok', app: 'silabu-digi', timestamp: new Date().toISOString() }));
 

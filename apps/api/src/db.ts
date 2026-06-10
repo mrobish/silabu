@@ -31,6 +31,18 @@ export async function initDatabase() {
       updated_at timestamp NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS tenants (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      nama_bumdes varchar(255) NOT NULL,
+      alamat text,
+      npwp varchar(64),
+      logo_url text,
+      status varchar(32) NOT NULL DEFAULT 'active',
+      created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+      created_at timestamp NOT NULL DEFAULT now(),
+      updated_at timestamp NOT NULL DEFAULT now()
+    );
+
     CREATE TABLE IF NOT EXISTS sessions (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
