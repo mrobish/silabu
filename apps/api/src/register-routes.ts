@@ -216,6 +216,34 @@ export async function registerRoutes(app: FastifyInstance) {
     } catch { return { error: 'Unauthorized' }; }
   });
 
+  // ========== CHANGE PASSWORD ==========
+  app.post('/change-password', async (req: FastifyRequest) => {
+    const auth = req.headers.authorization;
+    if (!auth?.startsWith('Bearer ')) return { error: 'Unauthorized' };
+    let userId: string;
+    try {
+      const d = jwt.verify(auth.slice(7), JWT_SECRET) as any;
+      userId = d.userId;
+    } catch { return { error: 'Unauthorized' }; }
+
+    const { oldPassword, newPassword, confirmPassword } = req.body as any;
+    if (!oldPassword || !newPassword || !confirmPassword) return { error: 'Semua field wajib diisi' };
+    if (String(newPassword).length < 8) return { error: 'Password baru minimal 8 karakter' };
+    if (newPassword !== confirmPassword) return { error: 'Konfirmasi password tidak cocok' };
+    if (newPassword === oldPassword) return { error: 'Password baru harus berbeda dari password lama' };
+
+    const r = await pool.query('SELECT id, password_hash FROM users WHERE id=$1 AND is_active=true', [userId]);
+    const user = r.rows[0];
+    if (!user || !user.password_hash) return { error: 'User tidak ditemukan' };
+
+    const ok = await bcrypt.compare(oldPassword, user.password_hash);
+    if (!ok) return { error: 'Password lama salah' };
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash=$1, updated_at=now() WHERE id=$2', [hash, userId]);
+    return { success: true, message: 'Password berhasil diubah' };
+  });
+
   // ========== GOOGLE OAUTH ==========
   app.get('/google', async () => {
     const oauth = await getSetting('oauth');

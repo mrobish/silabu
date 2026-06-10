@@ -14,6 +14,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import AppDashboard from './pages/AppDashboard';
 import SuperAdmin from './pages/SuperAdmin';
+import ChangePassword from './pages/ChangePassword';
 
 createRoot(document.getElementById('root')!).render(
   <BrowserRouter>
@@ -35,6 +36,7 @@ createRoot(document.getElementById('root')!).render(
       {/* App */}
       <Route path="/app" element={<AppDashboard />} />
       <Route path="/super-admin" element={<SuperAdmin />} />
+      <Route path="/change-password" element={<ChangePassword />} />
     </Routes>
   </BrowserRouter>
 );
