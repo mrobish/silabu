@@ -7,6 +7,16 @@ import ExcelJS from 'exceljs';
 const tenantGuard = { onRequest: [requireTenant] };
 const mutationGuard = { onRequest: [requireActiveTrial] };
 
+async function checkPeriodLock(tenantId: string, tahun: number): Promise<void> {
+  const p = await pool.query(
+    'SELECT id, status FROM financial_periods WHERE tenant_id=$1 AND tahun=$2 LIMIT 1',
+    [tenantId, tahun]
+  );
+  if (p.rows.length && (p.rows[0] as any).status === 'CLOSED') {
+    throw Object.assign(new Error(`Periode ${tahun} sudah ditutup. Tidak dapat mengubah data di periode ini.`), { statusCode: 403 });
+  }
+}
+
 export async function accountingRoutes(app: FastifyInstance) {
   // ─── Chart of Accounts ────────────────────────────────────────────
 
@@ -190,6 +200,8 @@ export async function accountingRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Format tanggal tidak valid (YYYY-MM-DD)' });
     }
 
+    await checkPeriodLock(a.tenantId!, tahun);
+
     // Validate each line
     const akunIds = lines.map((l: any) => l.akun_id);
     for (const l of lines) {
@@ -226,6 +238,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     // Generate no_jurnal and ensure period
     const no_jurnal = await nextJurnalNo(a.tenantId!, tahun, bulan);
     await ensurePeriod(a.tenantId!, tahun);
+    await checkPeriodLock(a.tenantId!, tahun);
 
     // Transaction: insert entry + lines
     const client = await pool.connect();
@@ -499,7 +512,7 @@ export async function accountingRoutes(app: FastifyInstance) {
 
     // 1. Entry must exist for this tenant
     const existing = await pool.query(
-      `SELECT id, tipetransaksi AS "tipeTransaksi", islocked AS "isLocked"
+      `SELECT id, tipetransaksi AS "tipeTransaksi", islocked AS "isLocked", tanggal
        FROM journal_entries WHERE id=$1 AND tenant_id=$2`,
       [id, a.tenantId]
     );
@@ -523,6 +536,8 @@ export async function accountingRoutes(app: FastifyInstance) {
         message: 'Transaksi di bulan yang sudah Tutup Buku tidak dapat dihapus.',
       });
     }
+    const tglStr = (entry.tanggal instanceof Date ? entry.tanggal.toISOString().slice(0,10) : String(entry.tanggal));
+    await checkPeriodLock(a.tenantId!, parseInt(tglStr.slice(0,4), 10));
 
     // 4. Atomic: BEGIN → hapus lines → hapus entry → COMMIT
     const client = await pool.connect();
@@ -1497,6 +1512,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     }
     const cat = KATEGORI_COA[b.kategori];
     if (!cat) return reply.code(400).send({ error: 'Kategori tidak valid' });
+    await checkPeriodLock(a.tenantId!, parseInt(b.tanggal_perolehan.slice(0,4), 10));
 
     const client = await pool.connect();
     try {
@@ -1699,5 +1715,194 @@ export async function accountingRoutes(app: FastifyInstance) {
       }
     }
     return { ran: now.toISOString(), total: allResults.length, results: allResults };
+  });
+
+  // ── Tutup Buku Tahunan ──
+  // GET /tutup-buku/periods — daftar periode
+  app.get('/tutup-buku/periods', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const r = await pool.query(
+      `SELECT id, tahun, status, closed_at
+       FROM financial_periods WHERE tenant_id=$1 ORDER BY tahun`,
+      [a.tenantId]
+    );
+    return { periods: r.rows };
+  });
+
+  // POST /tutup-buku — jurnal penutup + lock periode
+  app.post('/tutup-buku', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const { tahun } = req.body as { tahun: number };
+    const b = req.body as any;
+    const year = tahun || b?.tahun;
+    if (!year || year < 2000 || year > 2099) return reply.code(400).send({ error: 'Tahun tidak valid' });
+    const tid = a.tenantId!;
+
+    // Cek tahun sebelumnya — harus sudah ditutup
+    if (year > 2000) {
+      const prev = await pool.query(
+        `SELECT id, status FROM financial_periods WHERE tenant_id=$1 AND tahun=$2 LIMIT 1`,
+        [tid, year - 1]
+      );
+      if (prev.rows.length && (prev.rows[0] as any).status !== 'CLOSED') {
+        return reply.code(400).send({ error: `Tahun ${year - 1} masih OPEN. Tutup buku tahun sebelumnya dulu!` });
+      }
+    }
+
+    // Cek periode ini — jika sudah CLOSED, tolak
+    const cur = await pool.query(
+      `SELECT id, status FROM financial_periods WHERE tenant_id=$1 AND tahun=$2 LIMIT 1`,
+      [tid, year]
+    );
+    if (cur.rows.length && (cur.rows[0] as any).status === 'CLOSED') {
+      return reply.code(400).send({ error: `Periode ${year} sudah ditutup.` });
+    }
+
+    // Hitung saldo akhir Gol 4-7 per 31 Des
+    const endDate = `${year}-12-31`;
+    const pnL = await pool.query(
+      `SELECT ca.id, ca.kode, ca.nama, ca.saldonormal,
+              COALESCE(SUM(
+                CASE WHEN ca.saldonormal='D' THEN jl.debit - jl.kredit
+                     ELSE jl.kredit - jl.debit END
+              ), 0) AS saldo
+       FROM journal_lines jl
+       JOIN journal_entries je ON je.id=jl.entry_id
+       JOIN chart_of_accounts ca ON ca.id=jl.akun_id AND ca.tenant_id=$1
+       WHERE je.tenant_id=$1 AND je.tanggal <= $2
+         AND LEFT(ca.kode,1) IN ('4','5','6','7')
+       GROUP BY ca.id, ca.kode, ca.nama, ca.saldonormal
+       HAVING COALESCE(SUM(
+         CASE WHEN ca.saldonormal='D' THEN jl.debit - jl.kredit
+              ELSE jl.kredit - jl.debit END
+       ), 0) != 0
+       ORDER BY ca.kode`,
+      [tid, endDate]
+    );
+
+    if (!pnL.rows.length) {
+      return reply.code(400).send({ error: 'Tidak ada saldo akun Laba/Rugi yang perlu ditutup.' });
+    }
+
+    // Hitung Laba Bersih
+    let totalPendapatan = 0, totalBeban = 0;
+    for (const r of pnL.rows) {
+      const saldo = Number((r as any).saldo);
+      if (String((r as any).kode).startsWith('4')) {
+        totalPendapatan += saldo;
+      } else {
+        totalBeban += saldo;
+      }
+    }
+    const labaBersih = totalPendapatan - totalBeban;
+
+    // Cari akun Laba Ditahan (Saldo Laba Tidak Dicadangkan — 3.3.01.01)
+    const labaDitahan = await pool.query(
+      `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND (kode='3.3.01.01' OR kode LIKE '3.3.01%') ORDER BY kode LIMIT 1`,
+      [tid]
+    );
+    if (!labaDitahan.rows.length) {
+      return reply.code(400).send({ error: 'Akun Saldo Laba Tidak Dicadangkan (3.3.01.01) tidak ditemukan. Seed CoA dulu.' });
+    }
+    const labaDitahanId = (labaDitahan.rows[0] as any).id;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Buat jurnal penutup
+      const noJurnal = `CL-${year}1231`;
+      const keterangan = `Jurnal Penutup Tahun ${year}`;
+      const je = await client.query(
+        `INSERT INTO journal_entries (tenant_id, tanggal, bulan, tahun, no_jurnal, keterangan, tipetransaksi, isposted, created_at)
+         VALUES ($1, $2, 12, $3, $4, $5, 'CLOSING', true, $6) RETURNING id`,
+        [tid, endDate, year, noJurnal, keterangan, new Date()]
+      );
+      const jeId = je.rows[0].id;
+
+      // Zeroing P&L: balik saldo masing-masing akun
+      const lines: { akunId: string; debit: number; kredit: number }[] = [];
+      let totalDebit = 0, totalKredit = 0;
+      for (const r of pnL.rows) {
+        const saldo = Number((r as any).saldo);
+        if (saldo !== 0) {
+          if (saldo > 0) {
+            // Saldo positif = debit (beban) → kredit-kan, kredit (pendapatan) → debit-kan
+            if ((r as any).saldonormal === 'D') {
+              lines.push({ akunId: (r as any).id, debit: 0, kredit: saldo });
+              totalKredit += saldo;
+            } else {
+              lines.push({ akunId: (r as any).id, debit: saldo, kredit: 0 });
+              totalDebit += saldo;
+            }
+          } else {
+            // Saldo negatif → flip
+            if ((r as any).saldonormal === 'D') {
+              lines.push({ akunId: (r as any).id, debit: Math.abs(saldo), kredit: 0 });
+              totalDebit += Math.abs(saldo);
+            } else {
+              lines.push({ akunId: (r as any).id, debit: 0, kredit: Math.abs(saldo) });
+              totalKredit += Math.abs(saldo);
+            }
+          }
+        }
+      }
+
+      // Laba bersih → Saldo Laba Tidak Dicadangkan
+      if (labaBersih > 0) {
+        lines.push({ akunId: labaDitahanId, debit: 0, kredit: labaBersih });
+        totalKredit += labaBersih;
+      } else if (labaBersih < 0) {
+        lines.push({ akunId: labaDitahanId, debit: Math.abs(labaBersih), kredit: 0 });
+        totalDebit += Math.abs(labaBersih);
+      }
+
+      // Balance check
+      if (Math.abs(totalDebit - totalKredit) > 1) {
+        await client.query('ROLLBACK');
+        return reply.code(500).send({ error: `Jurnal penutup tidak balance: D=${totalDebit} ≠ K=${totalKredit}` });
+      }
+
+      // INSERT lines
+      for (const l of lines) {
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit) VALUES ($1,$2,$3,$4)`,
+          [jeId, l.akunId, l.debit, l.kredit]
+        );
+      }
+
+      // Update period → CLOSED
+      await client.query(
+        `INSERT INTO financial_periods (tenant_id, tahun, status, closed_at, closed_by)
+         VALUES ($1, $2, 'CLOSED', $3, NULL)
+         ON CONFLICT (tenant_id, tahun) DO UPDATE SET status='CLOSED', closed_at=$3, closed_by=NULL`,
+        [tid, year, new Date()]
+      );
+
+      // Auto-create next year
+      await client.query(
+        `INSERT INTO financial_periods (tenant_id, tahun, status)
+         VALUES ($1, $2, 'OPEN')
+         ON CONFLICT (tenant_id, tahun) DO NOTHING`,
+        [tid, year + 1]
+      );
+
+      await client.query('COMMIT');
+      return {
+        success: true,
+        tahun: year,
+        noJurnal,
+        totalAkun: pnL.rows.length,
+        totalPendapatan,
+        totalBeban,
+        labaBersih,
+        message: `Tutup buku ${year} berhasil. Laba bersih Rp ${labaBersih.toLocaleString('id-ID')} dipindahkan ke Saldo Laba.`,
+      };
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return reply.code(500).send({ error: e.message });
+    } finally {
+      client.release();
+    }
   });
 }

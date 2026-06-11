@@ -8,9 +8,10 @@ import NeracaPage from './NeracaPage';
 import NeracaSaldoPage from './NeracaSaldoPage';
 import ArusKasPage from './ArusKasPage';
 import AsetTetapPage from './AsetTetapPage';
+import TutupBukuPage from './TutupBukuPage';
 import CalkPage from './CalkPage';
 
-type Page = 'dashboard' | 'password' | 'langganan' | 'profil' | 'coa' | 'saldo-awal' | 'jurnal' | 'rincian-saldo' | 'buku-besar' | 'laba-rugi' | 'neraca' | 'neraca-saldo' | 'arus-kas' | 'aset-tetap' | 'calk';
+type Page = 'dashboard' | 'password' | 'langganan' | 'profil' | 'coa' | 'saldo-awal' | 'jurnal' | 'rincian-saldo' | 'buku-besar' | 'laba-rugi' | 'neraca' | 'neraca-saldo' | 'arus-kas' | 'aset-tetap' | 'tutup-buku' | 'calk';
 
 const officeIcon = 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m6-14h.01M9 11h.01M9 15h.01M15 7h.01M15 11h.01M15 15h.01M12 21v-4a1 1 0 011-1h-2a1 1 0 011 1v4z';
 
@@ -1457,7 +1458,7 @@ export default function AppDashboard() {
   const [collapsed, setCollapsed] = useState(false);
   const [page, setPageRaw] = useState<Page>(() => {
     const saved = localStorage.getItem('activePage');
-    const valid: Page[] = ['dashboard', 'password', 'langganan', 'profil', 'coa', 'saldo-awal', 'jurnal', 'rincian-saldo', 'buku-besar', 'laba-rugi', 'neraca', 'neraca-saldo', 'arus-kas', 'aset-tetap', 'calk'];
+    const valid: Page[] = ['dashboard', 'password', 'langganan', 'profil', 'coa', 'saldo-awal', 'jurnal', 'rincian-saldo', 'buku-besar', 'laba-rugi', 'neraca', 'neraca-saldo', 'arus-kas', 'aset-tetap', 'tutup-buku', 'calk'];
     return (saved && valid.includes(saved as Page)) ? (saved as Page) : 'dashboard';
   });
   const setPage = (p: Page) => { localStorage.setItem('activePage', p); setPageRaw(p); };
@@ -1623,6 +1624,18 @@ export default function AppDashboard() {
             </button>
             )
           ))}
+
+          {/* Separator + Tutup Buku */}
+          <div className="my-2 border-t border-slate-200/60" />
+          {!collapsed && <p className="px-2.5 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pengaturan</p>}
+          <button onClick={() => { setPage('tutup-buku'); setSidebarOpen(false); }}
+            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'tutup-buku' ? 'bg-violet-50 text-violet-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
+            <span className="relative">
+              <Icon d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              {page === 'tutup-buku' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-violet-500 rounded-full" />}
+            </span>
+            {!collapsed && <span>Tutup Buku</span>}
+          </button>
         </nav>
 
 
@@ -1635,7 +1648,7 @@ export default function AppDashboard() {
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-slate-600 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 transition" aria-label="Buka menu">
             <Icon d="M4 6h16M4 12h16M4 18h16" className="w-6 h-6" />
           </button>
-          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : page === 'profil' ? 'Profil BUM Desa' : page === 'coa' ? 'Bagan Akun (CoA)' : page === 'saldo-awal' ? 'Setup Saldo Awal' : page === 'jurnal' ? 'Jurnal Umum' : page === 'rincian-saldo' ? 'Rincian Saldo' : page === 'buku-besar' ? 'Buku Besar' : page === 'laba-rugi' ? 'Laba Rugi' : page === 'neraca' ? 'Neraca' : page === 'neraca-saldo' ? 'Neraca Saldo' : page === 'arus-kas' ? 'Arus Kas' : page === 'aset-tetap' ? 'Aset & Inventaris' : page === 'calk' ? 'CALK' : 'Dashboard'}</h2>
+          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : page === 'profil' ? 'Profil BUM Desa' : page === 'coa' ? 'Bagan Akun (CoA)' : page === 'saldo-awal' ? 'Setup Saldo Awal' : page === 'jurnal' ? 'Jurnal Umum' : page === 'rincian-saldo' ? 'Rincian Saldo' : page === 'buku-besar' ? 'Buku Besar' : page === 'laba-rugi' ? 'Laba Rugi' : page === 'neraca' ? 'Neraca' : page === 'neraca-saldo' ? 'Neraca Saldo' : page === 'arus-kas' ? 'Arus Kas' : page === 'aset-tetap' ? 'Aset & Inventaris' : page === 'tutup-buku' ? 'Tutup Buku Tahunan' : page === 'calk' ? 'CALK' : 'Dashboard'}</h2>
           <div className="flex-1" />
           {/* Profile dropdown */}
           <div ref={profileRef} className="relative">
@@ -1666,7 +1679,7 @@ export default function AppDashboard() {
 
         {/* Content */}
         <div className="p-4 sm:p-6 lg:p-8">
-          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : page === 'profil' ? <ProfilPage setPage={setPage} /> : page === 'coa' ? <CoAPage /> : page === 'saldo-awal' ? <SaldoAwalPage /> : page === 'jurnal' ? <JurnalUmumPage /> : page === 'rincian-saldo' ? <RincianSaldoPage /> : page === 'buku-besar' ? <BukuBesarPage /> : page === 'laba-rugi' ? <LabaRugiPage /> : page === 'neraca' ? <NeracaPage /> : page === 'neraca-saldo' ? <NeracaSaldoPage /> : page === 'arus-kas' ? <ArusKasPage /> : page === 'aset-tetap' ? <AsetTetapPage /> : page === 'calk' ? <CalkPage /> : (
+          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : page === 'profil' ? <ProfilPage setPage={setPage} /> : page === 'coa' ? <CoAPage /> : page === 'saldo-awal' ? <SaldoAwalPage /> : page === 'jurnal' ? <JurnalUmumPage /> : page === 'rincian-saldo' ? <RincianSaldoPage /> : page === 'buku-besar' ? <BukuBesarPage /> : page === 'laba-rugi' ? <LabaRugiPage /> : page === 'neraca' ? <NeracaPage /> : page === 'neraca-saldo' ? <NeracaSaldoPage /> : page === 'arus-kas' ? <ArusKasPage /> : page === 'aset-tetap' ? <AsetTetapPage /> : page === 'tutup-buku' ? <TutupBukuPage /> : page === 'calk' ? <CalkPage /> : (
             <div className="space-y-8 animate-fade-in">
               {/* Trial banner */}
               {trialEnds && !isTrialExpired && (
