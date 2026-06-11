@@ -821,7 +821,7 @@ function CoAPage() {
                               <button
                                 onClick={() => setDeleteModal(a)}
                                 title="Hapus Akun"
-                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-red-500 hover:bg-red-100 active:bg-red-200 transition-colors"
                               >
                                 <Icon d={trashIconPath} className="w-4 h-4" />
                               </button>
