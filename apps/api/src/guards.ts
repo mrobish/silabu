@@ -63,27 +63,28 @@ export async function requireTenant(req: FastifyRequest, reply: FastifyReply) {
   }
 }
 
-/** Trial guard — check trial_ends_at. Returns true if trial active, false if expired. */
-export async function isTrialActive(tenantId: string): Promise<boolean> {
+/** SaaS access check — active if trial still running OR paid subscription still running. */
+export async function isSubscriptionAccessActive(tenantId: string): Promise<boolean> {
   const r = await pool.query(
-    'SELECT trial_ends_at FROM tenants WHERE id=$1',
+    'SELECT trial_ends_at, subscription_ends_at FROM tenants WHERE id=$1',
     [tenantId]
   );
   if (!r.rowCount) return false;
-  const endsAt = r.rows[0].trial_ends_at;
-  if (!endsAt) return false;
-  return new Date(endsAt) > new Date();
+  const trialEnds = r.rows[0].trial_ends_at ? new Date(r.rows[0].trial_ends_at) : null;
+  const subEnds = r.rows[0].subscription_ends_at ? new Date(r.rows[0].subscription_ends_at) : null;
+  const now = new Date();
+  return (!!trialEnds && trialEnds > now) || (!!subEnds && subEnds > now);
 }
 
-/** Guard that blocks mutations if trial expired. Call after requireTenant. */
+/** Guard that blocks mutations if trial/subscription expired. Call after requireTenant. */
 export async function requireActiveTrial(req: FastifyRequest, reply: FastifyReply) {
   await requireTenant(req, reply);
   if (reply.sent) return;
   const auth: AuthPayload = (req as any).auth;
-  const active = await isTrialActive(auth.tenantId!);
+  const active = await isSubscriptionAccessActive(auth.tenantId!);
   if (!active) {
     reply.code(403).send({
-      error: 'Trial telah berakhir',
+      error: 'Masa trial/langganan telah berakhir',
       code: 'TRIAL_EXPIRED',
       message: 'Silakan perpanjang langganan untuk melanjutkan.'
     });

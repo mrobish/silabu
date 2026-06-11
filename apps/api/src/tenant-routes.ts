@@ -3,9 +3,10 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { pool } from './db.js';
-import { requireTenant, type AuthPayload } from './guards.js';
+import { requireTenant, requireActiveTrial, type AuthPayload } from './guards.js';
 
 const tenantGuard = { onRequest: [requireTenant] };
+const mutationGuard = { onRequest: [requireActiveTrial] };
 
 const LOGO_DIR = process.env.LOGO_DIR || '/www/wwwroot/silabudigi/uploads/logos';
 const APP_URL = process.env.APP_URL || 'https://silabu.ondesa.id';
@@ -35,7 +36,7 @@ export async function tenantRoutes(app: FastifyInstance) {
   });
 
   // PUT /tenant/profile — update profile (whitelisted fields)
-  app.put('/tenant/profile', tenantGuard, async (req: FastifyRequest) => {
+  app.put('/tenant/profile', mutationGuard, async (req: FastifyRequest) => {
     const a = (req as any).auth as AuthPayload;
     const b = (req.body as any) || {};
 
@@ -61,7 +62,7 @@ export async function tenantRoutes(app: FastifyInstance) {
   });
 
   // POST /tenant/logo — upload logo (multipart). Stores file, saves logo_url.
-  app.post('/tenant/logo', tenantGuard, async (req: FastifyRequest) => {
+  app.post('/tenant/logo', mutationGuard, async (req: FastifyRequest) => {
     const a = (req as any).auth as AuthPayload;
     const data = await (req as any).file();
     if (!data) return { error: 'File tidak ditemukan' };

@@ -169,6 +169,7 @@ function ProfilPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [accessExpired, setAccessExpired] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
@@ -182,25 +183,30 @@ function ProfilPage() {
           ...prev,
           nama_bumdes: p.nama_bumdes || '',
           npwp: p.npwp || '',
-          nomor_sertifikat_badan_hukum: p.nomor_sertifikat_badan_hukum || '',
-          nomor_perdes_pendirian: p.nomor_perdes_pendirian || '',
+          nomor_sertifikat_badan_hukum: p.nomor_sertifikat || '',
+          nomor_perdes_pendirian: p.nomor_perdes || '',
           tahun_berdiri: p.tahun_berdiri || '',
-          telepon: p.telepon || '',
+          telepon: p.telpon || '',
           provinsi: p.provinsi || '',
           kabupaten: p.kabupaten || '',
           kecamatan: p.kecamatan || '',
           desa: p.desa || '',
-          penasihat: p.penasihat || '',
-          direktur: p.direktur || '',
-          sekretaris: p.sekretaris || '',
-          bendahara: p.bendahara || '',
-          pengawas1: p.pengawas1 || '',
-          pengawas2: p.pengawas2 || '',
+          penasihat: p.nama_penasihat || '',
+          direktur: p.nama_direktur || '',
+          sekretaris: p.nama_sekretaris || '',
+          bendahara: p.nama_bendahara || '',
+          pengawas1: p.nama_pengawas_1 || '',
+          pengawas2: p.nama_pengawas_2 || '',
         }));
         if (p.logo_url) setLogoPreview(p.logo_url);
       })
       .catch(e => setMessage({ type: 'error', text: e.message || 'Gagal memuat profil' }))
       .finally(() => setLoading(false));
+
+    fetch('/api/subscription/status', { headers: { Authorization: 'Bearer ' + token } })
+      .then(r => r.json())
+      .then(d => { if (d && d.active === false) setAccessExpired(true); })
+      .catch(() => {});
   }, []);
 
   function handleChange(key: string, value: string) {
@@ -263,10 +269,28 @@ function ProfilPage() {
     setSaving(true);
     setMessage(null);
     try {
+      const payload = {
+        nama_bumdes: form.nama_bumdes,
+        npwp: form.npwp,
+        nomor_sertifikat: form.nomor_sertifikat_badan_hukum,
+        nomor_perdes: form.nomor_perdes_pendirian,
+        tahun_berdiri: form.tahun_berdiri,
+        telpon: form.telepon,
+        provinsi: form.provinsi,
+        kabupaten: form.kabupaten,
+        kecamatan: form.kecamatan,
+        desa: form.desa,
+        nama_penasihat: form.penasihat,
+        nama_direktur: form.direktur,
+        nama_sekretaris: form.sekretaris,
+        nama_bendahara: form.bendahara,
+        nama_pengawas_1: form.pengawas1,
+        nama_pengawas_2: form.pengawas2,
+      };
       const res = await fetch('/api/tenant/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Gagal menyimpan profil');
@@ -301,8 +325,14 @@ function ProfilPage() {
           {message.text}
         </div>
       )}
+      {accessExpired && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700 flex items-center justify-between">
+          <span>Masa trial/langganan telah berakhir. Perpanjang untuk mengedit profil.</span>
+          <button onClick={() => setPage('langganan')} className="rounded-xl bg-red-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-red-700 transition">Perpanjang</button>
+        </div>
+      )}
 
-      <form onSubmit={handleSave}>
+      <form onSubmit={handleSave} className={accessExpired ? 'pointer-events-none opacity-60 select-none' : ''}>
         {/* Section 1: Info BUM Desa */}
         <div className={sectionStyle + ' mb-6'}>
           <div className="flex items-center gap-2 mb-5">
