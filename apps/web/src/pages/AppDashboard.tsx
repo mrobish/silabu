@@ -484,7 +484,7 @@ function ProfilPage() {
   );
 }
 
-type CoAAccount = { id: number; kode: string; nama: string; jenis_akun?: string; jenisAkun?: string; saldo_normal?: string; saldoNormal?: string; is_postable?: boolean; isPostable?: boolean };
+type CoAAccount = { id: number; kode: string; nama: string; jenis_akun?: string; jenisAkun?: string; saldo_normal?: string; saldoNormal?: string; is_postable?: boolean; isPostable?: boolean; parentId?: number | null; parent_id?: number | null; isSeeded?: boolean; is_seeded?: boolean; level?: number; isActive?: boolean; kelompok?: string };
 type JournalLine = { akun_id: number; debit: number; kredit: number; keterangan: string };
 type JournalEntry = { id: number; no_jurnal: string; tanggal: string; keterangan: string; total: number; lines?: JournalLine[] };
 
@@ -495,9 +495,21 @@ function CoAPage() {
   const [search, setSearch] = useState('');
   const [filterJenis, setFilterJenis] = useState('');
   const [error, setError] = useState('');
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [addModal, setAddModal] = useState<{ parent: CoAAccount } | null>(null);
+  const [addNama, setAddNama] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState('');
+  const [deleteModal, setDeleteModal] = useState<CoAAccount | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   function getToken() {
     return localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
+  }
+
+  function showToast(type: 'success' | 'error', text: string) {
+    setToast({ type, text });
+    setTimeout(() => setToast(null), 4000);
   }
 
   async function fetchCoA() {
@@ -507,7 +519,7 @@ function CoAPage() {
       const res = await fetch('/api/accounting/coa', { headers: { Authorization: 'Bearer ' + getToken() } });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal memuat CoA');
-      setAccounts(Array.isArray(data) ? data : data.accounts || []);
+      setAccounts(Array.isArray(data) ? data : data.coa || data.accounts || []);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -525,6 +537,7 @@ function CoAPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal memuat CoA default');
       await fetchCoA();
+      showToast('success', 'CoA default berhasil dimuat');
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -532,22 +545,157 @@ function CoAPage() {
     }
   }
 
-  const filtered = accounts.filter(a => {
-    const jenis = a.jenisAkun || a.jenis_akun || '';
-    if (filterJenis && jenis !== filterJenis) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      if (!a.kode.toLowerCase().includes(q) && !a.nama.toLowerCase().includes(q)) return false;
+  async function handleAddSubAccount() {
+    if (!addModal || !addNama.trim()) return;
+    setAdding(true);
+    setAddError('');
+    try {
+      const res = await fetch('/api/accounting/coa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
+        body: JSON.stringify({ parent_id: addModal.parent.id, nama: addNama.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menambah sub-akun');
+      setAddModal(null);
+      setAddNama('');
+      showToast('success', `Sub-akun "${addNama.trim()}" berhasil ditambahkan`);
+      await fetchCoA();
+    } catch (e: any) {
+      setAddError(e.message);
+    } finally {
+      setAdding(false);
     }
-    return true;
-  });
+  }
+
+  async function handleDeleteAccount() {
+    if (!deleteModal) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/accounting/coa/${deleteModal.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer ' + getToken() },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menghapus akun');
+      setDeleteModal(null);
+      showToast('success', `Akun "${deleteModal.kode} — ${deleteModal.nama}" berhasil dihapus`);
+      await fetchCoA();
+    } catch (e: any) {
+      setDeleteModal(null);
+      showToast('error', e.message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  const filtered = accounts
+    .filter(a => {
+      const jenis = a.jenisAkun || a.jenis_akun || '';
+      if (filterJenis && jenis !== filterJenis) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        if (!a.kode.toLowerCase().includes(q) && !a.nama.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => a.kode.localeCompare(b.kode, undefined, { numeric: true }));
 
   const jenisList = Array.from(new Set(accounts.map(a => a.jenisAkun || a.jenis_akun || '').filter(Boolean)));
+
+  function getLevel(a: CoAAccount): number {
+    if (a.level != null) return a.level;
+    return (a.kode.match(/\./g) || []).length + 1;
+  }
+
+  function isAccountSeeded(a: CoAAccount): boolean {
+    return !!(a.isSeeded ?? a.is_seeded ?? true);
+  }
+
+  const plusIconPath = 'M12 4v16m8-8H4';
+  const trashIconPath = 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16';
+  const closeIconPath = 'M6 18L18 6M6 6l12 12';
 
   if (loading) return <div className="rounded-2xl border border-slate-100 bg-white p-8 text-sm text-slate-500 shadow-sm">Memuat Bagan Akun...</div>;
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-6 right-6 z-[9999] flex items-center gap-3 rounded-2xl px-5 py-3.5 text-sm font-semibold shadow-xl backdrop-blur-xl transition-all ${toast.type === 'success' ? 'bg-emerald-50/90 text-emerald-800 border border-emerald-200' : 'bg-red-50/90 text-red-800 border border-red-200'}`}>
+          {toast.type === 'success' ? (
+            <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+          ) : (
+            <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          )}
+          <span>{toast.text}</span>
+          <button onClick={() => setToast(null)} className="ml-1 opacity-50 hover:opacity-100 transition"><Icon d={closeIconPath} className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      {/* Add Sub-Akun Modal */}
+      {addModal && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => { setAddModal(null); setAddNama(''); setAddError(''); }}>
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-6 space-y-5 animate-fade-in" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Tambah Sub-Akun</h3>
+              <button onClick={() => { setAddModal(null); setAddNama(''); setAddError(''); }} className="text-slate-400 hover:text-slate-600 transition"><Icon d={closeIconPath} className="w-5 h-5" /></button>
+            </div>
+            <div className="space-y-3">
+              <div className="rounded-xl bg-slate-50 px-4 py-3 border border-slate-100">
+                <p className="text-xs text-slate-400 font-medium">Induk</p>
+                <p className="text-sm font-semibold text-slate-800 font-mono">{addModal.parent.kode} — {addModal.parent.nama}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Nama Akun Baru</label>
+                <input
+                  type="text"
+                  value={addNama}
+                  onChange={e => { setAddNama(e.target.value); setAddError(''); }}
+                  placeholder="Masukkan nama akun..."
+                  autoFocus
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                  onKeyDown={e => { if (e.key === 'Enter') handleAddSubAccount(); }}
+                />
+              </div>
+              {addError && <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-700">{addError}</div>}
+            </div>
+            <div className="flex justify-end gap-3 pt-1">
+              <button onClick={() => { setAddModal(null); setAddNama(''); setAddError(''); }} className="rounded-xl px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">Batal</button>
+              <button onClick={handleAddSubAccount} disabled={adding || !addNama.trim()}
+                className="rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl disabled:opacity-50">
+                {adding ? 'Menambahkan...' : 'Tambah'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteModal && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => setDeleteModal(null)}>
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-6 space-y-5 animate-fade-in" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Hapus Akun</h3>
+              <button onClick={() => setDeleteModal(null)} className="text-slate-400 hover:text-slate-600 transition"><Icon d={closeIconPath} className="w-5 h-5" /></button>
+            </div>
+            <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-4">
+              <p className="text-sm text-red-800">
+                Hapus akun <span className="font-mono font-bold">{deleteModal.kode}</span> — <span className="font-bold">{deleteModal.nama}</span>?
+              </p>
+              <p className="text-xs text-red-500 mt-2">Tindakan ini tidak dapat dibatalkan.</p>
+            </div>
+            <div className="flex justify-end gap-3 pt-1">
+              <button onClick={() => setDeleteModal(null)} className="rounded-xl px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">Batal</button>
+              <button onClick={handleDeleteAccount} disabled={deleting}
+                className="rounded-xl bg-gradient-to-r from-red-600 to-red-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-500/20 transition hover:shadow-xl disabled:opacity-50">
+                {deleting ? 'Menghapus...' : 'Hapus'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Bagan Akun (CoA)</h1>
         <p className="mt-1 text-sm text-slate-500">Daftar seluruh akun akuntansi BUM Desa.</p>
@@ -579,32 +727,82 @@ function CoAPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
                   <tr>
-                    <th className="px-5 py-3.5 font-semibold">Kode</th>
-                    <th className="px-5 py-3.5 font-semibold">Nama Akun</th>
+                    <th className="px-5 py-3.5 font-semibold w-[45%]">Kode / Nama Akun</th>
                     <th className="px-5 py-3.5 font-semibold">Jenis</th>
                     <th className="px-5 py-3.5 font-semibold">Saldo Normal</th>
                     <th className="px-5 py-3.5 font-semibold">Posting</th>
+                    <th className="px-5 py-3.5 font-semibold text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filtered.length === 0 ? (
                     <tr><td colSpan={5} className="px-5 py-8 text-center text-slate-400">Tidak ada akun ditemukan</td></tr>
-                  ) : filtered.map(a => (
-                    <tr key={a.id} className="hover:bg-slate-50/50 transition">
-                      <td className="px-5 py-3 font-mono text-xs font-semibold text-slate-700">{a.kode}</td>
-                      <td className="px-5 py-3 font-medium text-slate-900">{a.nama}</td>
-                      <td className="px-5 py-3">
-                        <span className="inline-flex rounded-full bg-cyan-50 px-2.5 py-0.5 text-[11px] font-bold text-cyan-700">{a.jenisAkun || a.jenis_akun}</span>
-                      </td>
-                      <td className="px-5 py-3 text-slate-600">{a.saldoNormal || a.saldo_normal}</td>
-                      <td className="px-5 py-3">
-                        {(a.isPostable ?? a.is_postable)
-                          ? <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">Ya</span>
-                          : <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500">Induk</span>
-                        }
-                      </td>
-                    </tr>
-                  ))}
+                  ) : filtered.map(a => {
+                    const lv = getLevel(a);
+                    const seeded = isAccountSeeded(a);
+                    const indentPx = Math.max(0, (lv - 1) * 24);
+                    const isLvl1 = lv === 1;
+                    const isLvl2 = lv === 2;
+                    const isLvl3 = lv === 3;
+                    const isLvl4 = lv >= 4;
+
+                    return (
+                      <tr key={a.id} className="hover:bg-slate-50/50 transition group">
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-2" style={{ paddingLeft: indentPx }}>
+                            {/* Tree connector lines */}
+                            {lv > 1 && (
+                              <span className="flex-shrink-0 w-4 h-px bg-slate-200" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className={`font-mono text-xs whitespace-nowrap ${
+                                  isLvl1 ? 'font-bold text-slate-900' : isLvl2 ? 'font-bold text-slate-800' : isLvl3 ? 'font-semibold text-slate-700' : 'text-slate-500'
+                                }`}>{a.kode}</span>
+                                <span className={`truncate ${
+                                  isLvl1 ? 'font-bold text-slate-900 text-[15px] uppercase tracking-wide' : isLvl2 ? 'font-semibold text-slate-800' : isLvl3 ? 'font-medium text-slate-700' : 'text-slate-600'
+                                }`}>{a.nama}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className="inline-flex rounded-full bg-cyan-50 px-2.5 py-0.5 text-[11px] font-bold text-cyan-700">{a.jenisAkun || a.jenis_akun || '—'}</span>
+                        </td>
+                        <td className="px-5 py-3 text-slate-600">{a.saldoNormal || a.saldo_normal || '—'}</td>
+                        <td className="px-5 py-3">
+                          {(a.isPostable ?? a.is_postable)
+                            ? <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">Ya</span>
+                            : <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500">Induk</span>
+                          }
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {/* Tambah Sub-Akun button for Level 3 */}
+                            {isLvl3 && (
+                              <button
+                                onClick={() => { setAddModal({ parent: a }); setAddNama(''); setAddError(''); }}
+                                title="Tambah Sub-Akun"
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-emerald-600 hover:bg-emerald-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <Icon d={plusIconPath} className="w-4 h-4" />
+                              </button>
+                            )}
+                            {/* Hapus button for user-created Level 4 accounts */}
+                            {isLvl4 && !seeded && (
+                              <button
+                                onClick={() => setDeleteModal(a)}
+                                title="Hapus Akun"
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <Icon d={trashIconPath} className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { pool } from './db.js';
 import { requireTenant, requireActiveTrial, type AuthPayload } from './guards.js';
 import { seedDefaultCoa } from './coa-seed.js';
@@ -15,7 +15,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const r = await pool.query(
       `SELECT id, tenant_id AS "tenantId", kode, nama, jenisakun AS "jenisAkun",
               kelompok, saldonormal AS "saldoNormal", ispostable AS "isPostable",
-              parent_id AS "parentId", isactive AS "isActive", level
+              parent_id AS "parentId", is_seeded AS "isSeeded", isactive AS "isActive", level
        FROM chart_of_accounts
        WHERE tenant_id=$1 AND isActive=true
        ORDER BY kode`,
@@ -31,7 +31,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const r = await pool.query(
       `SELECT id, tenant_id AS "tenantId", kode, nama, jenisakun AS "jenisAkun",
               kelompok, saldonormal AS "saldoNormal", ispostable AS "isPostable",
-              parent_id AS "parentId", isactive AS "isActive", level
+              parent_id AS "parentId", is_seeded AS "isSeeded", isactive AS "isActive", level
        FROM chart_of_accounts
        WHERE id=$1 AND tenant_id=$2`,
       [id, a.tenantId]
@@ -59,6 +59,87 @@ export async function accountingRoutes(app: FastifyInstance) {
   });
 
   // ─── Jurnal Umum ─────────────────────────────────────────────────
+
+  // POST /accounting/coa — create sub-akun (Level 4) under a parent (Level 3)
+  app.post('/coa', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const body = req.body as any;
+    if (!body) return reply.status(400).send({ error: 'Body request kosong' });
+
+    const { parent_id, nama } = body;
+    if (!parent_id) return reply.status(400).send({ error: 'parent_id wajib diisi' });
+    if (!nama || !String(nama).trim()) return reply.status(400).send({ error: 'Nama akun wajib diisi' });
+
+    // Look up parent — must be level 3, active, belong to tenant
+    const parentRes = await pool.query(
+      `SELECT id, kode, nama, level, jenisakun AS "jenisAkun", kelompok,
+              saldonormal AS "saldoNormal" FROM chart_of_accounts
+       WHERE id=$1 AND tenant_id=$2 AND isActive=true`,
+      [parent_id, a.tenantId]
+    );
+    if (!parentRes.rowCount) return reply.status(404).send({ error: 'Induk akun tidak ditemukan' });
+    const parent = parentRes.rows[0] as any;
+    if (parent.level !== 3) return reply.status(400).send({ error: 'Sub-akun baru hanya bisa ditambahkan di bawah kelompok akun (Level 3)' });
+
+    // Find max child kode number, skip .98/.99
+    const parentPrefix = parent.kode.slice(0, 6); // e.g. "1.1.01" (no trailing dot)
+    const childrenRes = await pool.query(
+      `SELECT kode FROM chart_of_accounts
+       WHERE tenant_id=$1 AND kode LIKE $2 AND isActive=true`,
+      [a.tenantId, parentPrefix + '.%']
+    );
+
+    let maxNum = 0;
+    for (const row of childrenRes.rows) {
+      const suffix = parseInt((row as any).kode.slice(-2), 10);
+      if (isNaN(suffix)) continue;
+      if (suffix === 98 || suffix === 99) continue; // skip Lainnya/Reserve
+      if (suffix > maxNum) maxNum = suffix;
+    }
+
+    const nextNum = maxNum + 1;
+    if (nextNum > 97) return reply.status(400).send({ error: 'Tidak dapat menambah sub-akun baru — batas nomor urut tercapai (maks .97)' });
+
+    const newKode = parentPrefix + '.' + String(nextNum).padStart(2, '0');
+
+    const insertRes = await pool.query(
+      `INSERT INTO chart_of_accounts
+         (tenant_id, kode, nama, jenisAkun, kelompok, saldoNormal, isPostable, parent_id, is_seeded, isActive, level)
+       VALUES ($1,$2,$3,$4,$5,$6,true,$7,false,true,4)
+       RETURNING id, kode, nama, is_seeded AS "isSeeded", ispostable AS "isPostable",
+                 parent_id AS "parentId", saldonormal AS "saldoNormal"`,
+      [a.tenantId, newKode, String(nama).trim(),
+       parent.jenisAkun, parent.kelompok, parent.saldoNormal || 'D', parent_id]
+    );
+
+    return reply.status(201).send({ akun: insertRes.rows[0], message: 'Sub-akun berhasil ditambahkan' });
+  });
+
+  // DELETE /accounting/coa/:id — delete sub-akun buatan user
+  app.delete('/coa/:id', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const { id } = req.params as { id: string };
+
+    // Validation 1: Seeded check
+    const akunRes = await pool.query(
+      `SELECT id, kode, nama, is_seeded, tenant_id FROM chart_of_accounts
+       WHERE id=$1 AND tenant_id=$2`,
+      [id, a.tenantId]
+    );
+    if (!akunRes.rowCount) return reply.status(404).send({ error: 'Akun tidak ditemukan' });
+    const akun = akunRes.rows[0] as any;
+    if (akun.is_seeded) return reply.status(403).send({ error: 'Akun bawaan sistem tidak dapat dihapus.', code: 'SEEDED' });
+
+    // Validation 2: Usage check — if any journal lines reference this akun_id
+    const usageRes = await pool.query(
+      'SELECT 1 FROM journal_lines WHERE akun_id=$1 LIMIT 1',
+      [id]
+    );
+    if (usageRes.rowCount) return reply.status(400).send({ error: 'Akun gagal dihapus karena sudah digunakan dalam transaksi.', code: 'IN_USE' });
+
+    await pool.query('DELETE FROM chart_of_accounts WHERE id=$1', [id]);
+    return { message: 'Akun berhasil dihapus' };
+  });
 
   // Generate next no_jurnal like JU-2026-06-0001
   async function nextJurnalNo(tenantId: string, tahun: number, bulan: number): Promise<string> {

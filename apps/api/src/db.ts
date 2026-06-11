@@ -131,8 +131,9 @@ export async function initDatabase() {
       jenisAkun varchar(32),
       kelompok varchar(32),
       saldoNormal char(1) NOT NULL DEFAULT 'D',
-      isPostable boolean NOT NULL DEFAULT true,
-      parent_id uuid REFERENCES chart_of_accounts(id) ON DELETE SET NULL,
+      isPostable boolean NOT NULL DEFAULT false,
+      parent_id uuid REFERENCES chart_of_accounts(id) ON DELETE RESTRICT,
+      is_seeded boolean NOT NULL DEFAULT false,
       isActive boolean NOT NULL DEFAULT true,
       level integer NOT NULL DEFAULT 0,
       created_at timestamp NOT NULL DEFAULT now(),
@@ -233,6 +234,35 @@ export async function initDatabase() {
   await pool.query(`ALTER TABLE chart_of_accounts ADD COLUMN IF NOT EXISTS parent_id uuid REFERENCES chart_of_accounts(id) ON DELETE SET NULL;`);
   await pool.query(`ALTER TABLE chart_of_accounts ADD COLUMN IF NOT EXISTS isActive boolean NOT NULL DEFAULT true;`);
   await pool.query(`ALTER TABLE chart_of_accounts ADD COLUMN IF NOT EXISTS level integer NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE chart_of_accounts ADD COLUMN IF NOT EXISTS is_seeded boolean NOT NULL DEFAULT false;`);
+
+  // Fix FK parent_id -> ON DELETE RESTRICT (drop old auto-named constraint, re-add)
+  await pool.query(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname LIKE '%parent_id%'
+          AND conrelid = 'chart_of_accounts'::regclass AND contype = 'f'
+      ) THEN
+        EXECUTE (
+          SELECT 'ALTER TABLE chart_of_accounts DROP CONSTRAINT ' || conname
+          FROM pg_constraint WHERE conname LIKE '%parent_id%'
+            AND conrelid = 'chart_of_accounts'::regclass AND contype = 'f'
+          LIMIT 1
+        );
+      END IF;
+    END $$;
+  `);
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_coa_parent') THEN
+        ALTER TABLE chart_of_accounts ADD CONSTRAINT fk_coa_parent
+          FOREIGN KEY (parent_id) REFERENCES chart_of_accounts(id) ON DELETE RESTRICT;
+      END IF;
+    END $$;
+  `);
+
+  // Mark existing seeded rows
+  await pool.query(`UPDATE chart_of_accounts SET is_seeded=true WHERE is_seeded IS NULL OR is_seeded=false;`);
 
   // Indexes
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);`);
