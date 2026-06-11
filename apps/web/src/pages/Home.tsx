@@ -36,13 +36,13 @@ export default function Home() {
         {/* Mobile nav */}
         {open && (
           <div className="mobile-menu-enter sm:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2">
-            <Link to="/faq" onClick={() => setOpen(false)} className="block rounded-lg px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
+            <Link to="/faq" onClick={() => setOpen(false)} className="block text-center rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50/50 transition-all">
               FAQ
             </Link>
-            <Link to="/login" onClick={() => setOpen(false)} className="block rounded-lg px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
+            <Link to="/login" onClick={() => setOpen(false)} className="block text-center rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 hover:border-cyan-300 hover:text-cyan-700 hover:bg-cyan-50/50 transition-all">
               Masuk
             </Link>
-            <Link to="/register" onClick={() => setOpen(false)} className="block text-center rounded-lg bg-gradient-to-r from-emerald-600 to-cyan-600 px-4 py-3 text-sm font-semibold text-white shadow-sm">
+            <Link to="/register" onClick={() => setOpen(false)} className="block text-center rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:shadow-md transition-all">
               Daftar
             </Link>
           </div>
