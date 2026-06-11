@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, ChevronDown, ChevronRight, DollarSign, Calendar, BarChart4, Receipt } from 'lucide-react';
+import { TrendingUp, TrendingDown, ChevronDown, ChevronRight, DollarSign, Calendar, BarChart4, Receipt, Printer } from 'lucide-react';
+import ReportPrintLayout from './ReportPrintLayout';
 
 type AkunSaldo = { kode: string; nama: string; saldoNormal: string; saldo: number };
 type LabaRugiData = {
@@ -62,6 +63,7 @@ export default function LabaRugiPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     pendapatan: true, hpp: true, beban: true, nonop: true, pajak: true,
   });
+  const [printOpen, setPrintOpen] = useState(false);
 
   const fetchData = async () => {
     if (loading) return;
@@ -102,7 +104,7 @@ export default function LabaRugiPage() {
 
       {/* Filter */}
       <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-xl">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Dari Tanggal</label>
             <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} />
@@ -115,6 +117,13 @@ export default function LabaRugiPage() {
             <button type="button" onClick={fetchData} disabled={loading}
               className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
               {loading ? 'Memuat...' : 'Tampilkan'}
+            </button>
+          </div>
+          <div>
+            <button type="button" onClick={() => setPrintOpen(true)} disabled={!data}
+              className="w-full rounded-2xl border-2 border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 shadow-sm hover:border-emerald-300 hover:bg-emerald-50 transition disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center gap-2">
+              <Printer size={16} />
+              Cetak
             </button>
           </div>
         </div>
@@ -234,6 +243,118 @@ export default function LabaRugiPage() {
           </div>
         </div>
       )}
+
+      {/* Print Modal */}
+      <ReportPrintLayout title="LAPORAN LABA RUGI" isOpen={printOpen} onClose={() => setPrintOpen(false)}>
+        {data && <div className="space-y-0">
+          {/* Header label baris */}
+          <div className="flex justify-between border-b border-slate-800 pb-1 mb-3 font-bold text-[11px]">
+            <span>Akun</span>
+            <span>Jumlah (Rp)</span>
+          </div>
+
+          {/* A. PENDAPATAN */}
+          <p className="font-bold text-[11px] mt-2 mb-0.5">A. Pendapatan Operasional</p>
+          {data.pendapatanOperasional.jasa.filter(a => a.saldo !== 0).map(a => (
+            <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
+              <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
+              <span className="tabular-nums">{fmt(a.saldo)}</span>
+            </div>
+          ))}
+          {data.pendapatanOperasional.dagang.filter(a => a.saldo !== 0).map(a => (
+            <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
+              <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
+              <span className="tabular-nums">{fmt(a.saldo)}</span>
+            </div>
+          ))}
+          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5 mt-0.5">
+            <span>Subtotal Pendapatan Operasional</span>
+            <span className="tabular-nums">{fmt(data.pendapatanOperasional.subtotal)}</span>
+          </div>
+
+          {/* B. HPP */}
+          <p className="font-bold text-[11px] mt-2 mb-0.5">B. Harga Pokok Penjualan</p>
+          {data.hpp.detail.filter(a => a.saldo !== 0).map(a => (
+            <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
+              <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
+              <span className="tabular-nums">{fmt(a.saldo)}</span>
+            </div>
+          ))}
+          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
+            <span>Subtotal HPP</span>
+            <span className="tabular-nums">{fmt(data.hpp.subtotal)}</span>
+          </div>
+
+          {/* C. LABA KOTOR */}
+          <div className="flex justify-between font-bold text-[11px] border-t-2 border-slate-800 mt-1 py-0.5">
+            <span>C. Laba Kotor Operasional</span>
+            <span className="tabular-nums">{fmt(data.labaKotor)}</span>
+          </div>
+
+          {/* D. BEBAN OPERASIONAL */}
+          <p className="font-bold text-[11px] mt-2 mb-0.5">D. Beban Operasional</p>
+          {data.bebanOperasional.detail.filter(a => a.saldo !== 0).map(a => (
+            <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
+              <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
+              <span className="tabular-nums">{fmt(a.saldo)}</span>
+            </div>
+          ))}
+          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
+            <span>Subtotal Beban Operasional</span>
+            <span className="tabular-nums">{fmt(data.bebanOperasional.subtotal)}</span>
+          </div>
+
+          {/* E. LABA OPERASIONAL */}
+          <div className="flex justify-between font-bold text-[11px] border-t-2 border-slate-800 mt-1 py-0.5">
+            <span>E. Laba Operasional</span>
+            <span className="tabular-nums">{fmt(data.labaOperasional)}</span>
+          </div>
+
+          {/* F. NON-OPERASIONAL */}
+          <p className="font-bold text-[11px] mt-2 mb-0.5">F. Pendapatan &amp; Beban Non-Operasional</p>
+          {data.nonOperasional.pendapatanLain.detail.filter(a => a.saldo !== 0).map(a => (
+            <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
+              <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
+              <span className="tabular-nums">{fmt(a.saldo)}</span>
+            </div>
+          ))}
+          {data.nonOperasional.bebanLain.detail.filter(a => a.saldo !== 0).map(a => (
+            <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
+              <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
+              <span className="tabular-nums">{fmt(a.saldo)}</span>
+            </div>
+          ))}
+          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5 mt-0.5">
+            <span>Subtotal Non-Operasional</span>
+            <span className="tabular-nums">{fmt(data.nonOperasional.pendapatanLain.subtotal - data.nonOperasional.bebanLain.subtotal)}</span>
+          </div>
+
+          {/* G. LABA SEBELUM PAJAK */}
+          <div className="flex justify-between font-bold text-[11px] border-t-2 border-slate-800 mt-1 py-0.5">
+            <span>G. Laba / Rugi Sebelum Pajak</span>
+            <span className="tabular-nums">{fmt(data.labaSebelumPajak)}</span>
+          </div>
+
+          {/* H. PAJAK */}
+          <p className="font-bold text-[11px] mt-2 mb-0.5">H. Beban Pajak</p>
+          {data.pajak.detail.filter(a => a.saldo !== 0).map(a => (
+            <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
+              <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
+              <span className="tabular-nums">{fmt(a.saldo)}</span>
+            </div>
+          ))}
+          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
+            <span>Subtotal Pajak</span>
+            <span className="tabular-nums">{fmt(data.pajak.subtotal)}</span>
+          </div>
+
+          {/* LABA BERSIH */}
+          <div className="flex justify-between font-bold text-[12px] border-t-2 border-slate-800 mt-2 py-1">
+            <span>LABA BERSIH SETELAH PAJAK</span>
+            <span className="tabular-nums">{fmt(data.labaBersih)}</span>
+          </div>
+        </div>}
+      </ReportPrintLayout>
     </div>
   );
 }

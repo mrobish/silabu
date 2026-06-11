@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, FileDown } from 'lucide-react';
+import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, FileDown, Printer } from 'lucide-react';
+import ReportPrintLayout from './ReportPrintLayout';
 
 type Akun = { kode: string; nama: string; saldoNormal: string; saldo: number };
 type AsetTetap = {
@@ -79,6 +80,7 @@ export default function NeracaPage() {
   const [data, setData] = useState<NeracaData | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ lancar: true, tetap: true, lain: true, kewajiban: true, ekuitas: true });
+  const [printOpen, setPrintOpen] = useState(false);
 
   const token = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
 
@@ -133,6 +135,10 @@ export default function NeracaPage() {
               title="Download Neraca Lajur (Excel)"
               className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition whitespace-nowrap">
               <FileDown size={16} className="inline-block -mt-[2px] mr-1" /> Excel
+            </button>
+            <button type="button" onClick={() => setPrintOpen(true)} disabled={!data}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:border-emerald-300 transition whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block -mt-[2px] mr-1"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg> Cetak
             </button>
           </div>
         </div>
@@ -255,6 +261,127 @@ export default function NeracaPage() {
           </p>
         </div>
       )}
+
+      {/* Print Modal */}
+      <ReportPrintLayout title="NERACA" isOpen={printOpen} onClose={() => setPrintOpen(false)}>
+        {data && <div className="space-y-0">
+          <div className="grid grid-cols-2 gap-4">
+            {/* AKTIVA COLUMN */}
+            <div>
+              <p className="font-bold text-[11px] border-b border-slate-800 pb-1 mb-2">AKTIVA</p>
+
+              {/* Aset Lancar */}
+              <p className="font-bold text-[11px] mt-2 mb-0.5">Aset Lancar</p>
+              {data.aktiva.asetLancar.detail.filter(a => a.saldo !== 0).map(a => (
+                <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
+                  <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
+                  <span className="tabular-nums">{fmt(a.saldo)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5 mt-0.5">
+                <span>Subtotal Aset Lancar</span>
+                <span className="tabular-nums">{fmt(data.aktiva.asetLancar.subtotal)}</span>
+              </div>
+
+              {/* Aset Tetap */}
+              <p className="font-bold text-[11px] mt-2 mb-0.5">Aset Tetap</p>
+              {data.aktiva.asetTetap.bruto.akun.filter(a => a.saldo !== 0).map(a => (
+                <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
+                  <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
+                  <span className="tabular-nums">{fmt(a.saldo)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between text-[11px] py-0.5 italic border-t border-dashed border-slate-300">
+                <span className="text-slate-500 ml-3">Harga Perolehan</span>
+                <span className="tabular-nums">{fmt(data.aktiva.asetTetap.bruto.subtotal)}</span>
+              </div>
+              {data.aktiva.asetTetap.akumulasi.akun.filter(a => a.saldo !== 0).map(a => (
+                <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
+                  <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
+                  <span className="tabular-nums text-red-600">({fmt(Math.abs(a.saldo))})</span>
+                </div>
+              ))}
+              <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
+                <span>Nilai Buku Aset Tetap</span>
+                <span className="tabular-nums">{fmt(data.aktiva.asetTetap.nilaiBuku)}</span>
+              </div>
+
+              {/* Aset Lainnya */}
+              <p className="font-bold text-[11px] mt-2 mb-0.5">Aset Lainnya</p>
+              {data.aktiva.asetLainnya.detail.filter(a => a.saldo !== 0).map(a => (
+                <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
+                  <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
+                  <span className="tabular-nums">{fmt(a.saldo)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
+                <span>Subtotal Aset Lainnya</span>
+                <span className="tabular-nums">{fmt(data.aktiva.asetLainnya.subtotal)}</span>
+              </div>
+
+              {/* Total Aktiva */}
+              <div className="flex justify-between font-bold text-[11px] border-t-2 border-slate-800 mt-2 py-0.5">
+                <span>TOTAL AKTIVA</span>
+                <span className="tabular-nums">{fmt(data.aktiva.totalAset)}</span>
+              </div>
+            </div>
+
+            {/* PASSIVA COLUMN */}
+            <div>
+              <p className="font-bold text-[11px] border-b border-slate-800 pb-1 mb-2">PASSIVA</p>
+
+              {/* Kewajiban Jangka Pendek */}
+              <p className="font-bold text-[11px] mt-2 mb-0.5">Kewajiban Jangka Pendek</p>
+              {data.passiva.kewajiban.jangkaPendek.detail.filter(a => a.saldo !== 0).map(a => (
+                <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
+                  <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
+                  <span className="tabular-nums">{fmt(a.saldo)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
+                <span>Subtotal Kewajiban Pendek</span>
+                <span className="tabular-nums">{fmt(data.passiva.kewajiban.jangkaPendek.subtotal)}</span>
+              </div>
+
+              {/* Kewajiban Jangka Panjang */}
+              <p className="font-bold text-[11px] mt-2 mb-0.5">Kewajiban Jangka Panjang</p>
+              {data.passiva.kewajiban.jangkaPanjang.detail.filter(a => a.saldo !== 0).map(a => (
+                <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
+                  <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
+                  <span className="tabular-nums">{fmt(a.saldo)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
+                <span>Subtotal Kewajiban Panjang</span>
+                <span className="tabular-nums">{fmt(data.passiva.kewajiban.jangkaPanjang.subtotal)}</span>
+              </div>
+
+              {/* Ekuitas */}
+              <p className="font-bold text-[11px] mt-2 mb-0.5">Ekuitas</p>
+              {data.passiva.ekuitas.detail.filter(a => a.saldo !== 0).map(a => (
+                <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
+                  <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
+                  <span className="tabular-nums">{fmt(a.saldo)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between text-[11px] py-0.5 bg-slate-100 px-1">
+                <span className="font-semibold">Laba Tahun Berjalan</span>
+                <span className="tabular-nums font-semibold">{fmt(data.passiva.ekuitas.labaBerjalan)}</span>
+              </div>
+              <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
+                <span>Total Ekuitas</span>
+                <span className="tabular-nums">{fmt(data.passiva.ekuitas.subtotal)}</span>
+              </div>
+
+              {/* Total Passiva */}
+              <div className="flex justify-between font-bold text-[11px] border-t-2 border-slate-800 mt-2 py-0.5">
+                <span>TOTAL PASSIVA</span>
+                <span className="tabular-nums">{fmt(data.passiva.totalPassiva)}</span>
+              </div>
+            </div>
+          </div>
+        </div>}
+      </ReportPrintLayout>
     </div>
   );
 }

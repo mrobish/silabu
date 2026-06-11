@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { ArrowUpRight, ArrowDownRight, DollarSign, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, Calendar, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, DollarSign, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, Calendar, ChevronDown, ChevronRight, Printer } from 'lucide-react';
+import ReportPrintLayout from './ReportPrintLayout';
 
 type FlowItem = { kode: string; nama: string; masuk: number; keluar: number; net: number };
 type Aktivitas = { detail: FlowItem[]; totalMasuk: number; totalKeluar: number; net: number };
@@ -81,6 +82,7 @@ export default function ArusKasPage() {
   const [data, setData] = useState<ArusKasData | null>(null);
   const [loading, setLoading] = useState(false);
   const [exp, setExp] = useState<Record<string, boolean>>({ operasi: true, investasi: true, pendanaan: true });
+  const [printOpen, setPrintOpen] = useState(false);
 
   const token = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
   const fetchD = async () => {
@@ -117,10 +119,14 @@ export default function ArusKasPage() {
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Sampai Tanggal</label>
             <input type="date" value={end} onChange={e => setEnd(e.target.value)} className={inputCls} />
           </div>
-          <div className="sm:col-span-2">
+          <div className="flex gap-2 sm:col-span-2">
             <button type="button" onClick={fetchD} disabled={loading}
-              className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition disabled:opacity-40 whitespace-nowrap">
+              className="flex-1 rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition disabled:opacity-40 whitespace-nowrap">
               {loading ? 'Memuat...' : 'Tampilkan'}
+            </button>
+            <button type="button" onClick={() => setPrintOpen(true)} disabled={!data}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:border-emerald-300 transition whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block -mt-[2px] mr-1"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg> Cetak
             </button>
           </div>
         </div>
@@ -180,6 +186,77 @@ export default function ArusKasPage() {
           <p className="text-[10px] text-slate-400 text-right">Arus Kas per {data.periode.endDate}</p>
         </>
       )}
+
+      {/* Print Modal */}
+      <ReportPrintLayout title="LAPORAN ARUS KAS" isOpen={printOpen} onClose={() => setPrintOpen(false)}>
+        {data && <div className="space-y-0">
+          <div className="flex justify-between border-b border-slate-800 pb-1 mb-3 font-bold text-[11px]">
+            <span>Akun Lawan</span>
+            <span>Jumlah (Rp)</span>
+          </div>
+
+          {/* A. Operasi */}
+          <p className="font-bold text-[11px] mt-2 mb-0.5">A. Arus Kas dari Aktivitas Operasi</p>
+          {data.aktivitasOperasi.detail.filter(d => d.net !== 0).map(d => (
+            <div key={d.kode} className="flex justify-between text-[11px] py-0.5">
+              <span className="text-slate-700 ml-3"><span className="text-slate-400">{d.kode}</span> {d.nama}</span>
+              <span className={`tabular-nums ${d.net < 0 ? 'text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</span>
+            </div>
+          ))}
+          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
+            <span>Arus Kas Bersih dari Aktivitas Operasi</span>
+            <span className={`tabular-nums ${data.aktivitasOperasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasOperasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasOperasi.net)) + ')' : rupiah(data.aktivitasOperasi.net)}</span>
+          </div>
+
+          {/* B. Investasi */}
+          <p className="font-bold text-[11px] mt-2 mb-0.5">B. Arus Kas dari Aktivitas Investasi</p>
+          {data.aktivitasInvestasi.detail.filter(d => d.net !== 0).map(d => (
+            <div key={d.kode} className="flex justify-between text-[11px] py-0.5">
+              <span className="text-slate-700 ml-3"><span className="text-slate-400">{d.kode}</span> {d.nama}</span>
+              <span className={`tabular-nums ${d.net < 0 ? 'text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</span>
+            </div>
+          ))}
+          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
+            <span>Arus Kas Bersih dari Aktivitas Investasi</span>
+            <span className={`tabular-nums ${data.aktivitasInvestasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasInvestasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasInvestasi.net)) + ')' : rupiah(data.aktivitasInvestasi.net)}</span>
+          </div>
+
+          {/* C. Pendanaan */}
+          <p className="font-bold text-[11px] mt-2 mb-0.5">C. Arus Kas dari Aktivitas Pendanaan</p>
+          {data.aktivitasPendanaan.detail.filter(d => d.net !== 0).map(d => (
+            <div key={d.kode} className="flex justify-between text-[11px] py-0.5">
+              <span className="text-slate-700 ml-3"><span className="text-slate-400">{d.kode}</span> {d.nama}</span>
+              <span className={`tabular-nums ${d.net < 0 ? 'text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</span>
+            </div>
+          ))}
+          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
+            <span>Arus Kas Bersih dari Aktivitas Pendanaan</span>
+            <span className={`tabular-nums ${data.aktivitasPendanaan.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasPendanaan.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasPendanaan.net)) + ')' : rupiah(data.aktivitasPendanaan.net)}</span>
+          </div>
+
+          {/* Summary */}
+          <div className="flex justify-between font-bold text-[11px] border-t-2 border-slate-800 mt-2 py-0.5">
+            <span>Kas Awal Periode</span>
+            <span className="tabular-nums">{rupiah(data.kasTahunLalu)}</span>
+          </div>
+          <div className="flex justify-between text-[11px] py-0.5 ml-3">
+            <span>Arus Kas Operasi</span>
+            <span className={`tabular-nums ${data.aktivitasOperasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasOperasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasOperasi.net)) + ')' : '+' + rupiah(data.aktivitasOperasi.net)}</span>
+          </div>
+          <div className="flex justify-between text-[11px] py-0.5 ml-3">
+            <span>Arus Kas Investasi</span>
+            <span className={`tabular-nums ${data.aktivitasInvestasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasInvestasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasInvestasi.net)) + ')' : '+' + rupiah(data.aktivitasInvestasi.net)}</span>
+          </div>
+          <div className="flex justify-between text-[11px] py-0.5 ml-3">
+            <span>Arus Kas Pendanaan</span>
+            <span className={`tabular-nums ${data.aktivitasPendanaan.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasPendanaan.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasPendanaan.net)) + ')' : '+' + rupiah(data.aktivitasPendanaan.net)}</span>
+          </div>
+          <div className="flex justify-between font-bold text-[12px] border-t-2 border-slate-800 mt-2 py-1">
+            <span>KAS AKHIR PERIODE</span>
+            <span className="tabular-nums">{rupiah(data.kasBerjalan)}</span>
+          </div>
+        </div>}
+      </ReportPrintLayout>
     </div>
   );
 }
