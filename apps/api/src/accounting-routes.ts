@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { pool } from './db.js';
 import { requireTenant, requireActiveTrial, type AuthPayload } from './guards.js';
 import { seedDefaultCoa } from './coa-seed.js';
+import ExcelJS from 'exceljs';
 
 const tenantGuard = { onRequest: [requireTenant] };
 const mutationGuard = { onRequest: [requireActiveTrial] };
@@ -1022,5 +1023,181 @@ export async function accountingRoutes(app: FastifyInstance) {
       isBalanced,
       selisih,
     };
+  });
+
+  // ── Trail Balance (Neraca Saldo) ──
+  app.get('/neraca-saldo', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const q = req.query as any;
+    const endDate = q.end_date || new Date().toISOString().slice(0, 10);
+    const rows = await pool.query(
+      `SELECT c.kode, c.nama, c.saldonormal AS "saldoNormal",
+              COALESCE(SUM(
+                CASE WHEN c.saldonormal = 'D'
+                     THEN COALESCE(m.debit,0) - COALESCE(m.kredit,0)
+                     ELSE COALESCE(m.kredit,0) - COALESCE(m.debit,0)
+                END
+              ), 0) AS saldo
+       FROM chart_of_accounts c
+       LEFT JOIN (
+         SELECT jl.akun_id, jl.debit, jl.kredit
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id = jl.entry_id
+              AND je.tenant_id = $1
+              AND je.tanggal <= $2
+       ) m ON m.akun_id = c.id
+       WHERE c.tenant_id = $1 AND c.ispostable = true
+             AND LEFT(c.kode,1) IN ('1','2','3','4','5','6','7')
+       GROUP BY c.kode, c.nama, c.saldonormal
+       ORDER BY c.kode`,
+      [a.tenantId, endDate]
+    );
+    type AkunTB = { kode: string; nama: string; saldoNormal: string; debit: number; kredit: number };
+    const tb: AkunTB[] = rows.rows.map((r: any) => {
+      const saldo = Number(r.saldo), sn = r.saldoNormal;
+      let debit = 0, kredit = 0;
+      if (saldo >= 0) {
+        if (sn === 'D') debit = saldo; else kredit = saldo;
+      } else {
+        const absS = Math.abs(saldo);
+        if (sn === 'D') kredit = absS; else debit = absS;
+      }
+      return { kode: r.kode, nama: r.nama, saldoNormal: sn, debit, kredit };
+    });
+    const totalDebit = tb.reduce((s, a) => s + a.debit, 0);
+    const totalKredit = tb.reduce((s, a) => s + a.kredit, 0);
+    const selisih = totalDebit - totalKredit;
+    const isBalanced = Math.abs(selisih) < 0.005;
+    return { asOf: endDate, akun: tb, totalDebit, totalKredit, isBalanced, selisih };
+  });
+
+  // ── Neraca Lajur — Export Excel (8 kolom standar kertas kerja) ──
+  app.get('/neraca-lajur/export', tenantGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const q = req.query as any;
+    const endDate = q.end_date || new Date().toISOString().slice(0, 10);
+
+    // Tarik semua akun Gol 1-7 dengan mutasi s/d end_date (sama persis logika Neraca Saldo)
+    const rows = await pool.query(
+      `SELECT c.kode, c.nama, c.saldonormal AS "saldoNormal",
+              COALESCE(SUM(
+                CASE WHEN c.saldonormal = 'D'
+                     THEN COALESCE(m.debit,0) - COALESCE(m.kredit,0)
+                     ELSE COALESCE(m.kredit,0) - COALESCE(m.debit,0)
+                END
+              ), 0) AS saldo
+       FROM chart_of_accounts c
+       LEFT JOIN (
+         SELECT jl.akun_id, jl.debit, jl.kredit
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id = jl.entry_id
+              AND je.tenant_id = $1 AND je.tanggal <= $2
+       ) m ON m.akun_id = c.id
+       WHERE c.tenant_id = $1 AND c.ispostable = true
+             AND LEFT(c.kode,1) IN ('1','2','3','4','5','6','7')
+       GROUP BY c.kode, c.nama, c.saldonormal
+       ORDER BY c.kode`,
+      [a.tenantId, endDate]
+    );
+
+    // Mapping: tentukan debit/kredit per akun (sama flip logic)
+    const data = rows.rows.map((r: any) => {
+      const saldo = Number(r.saldo);
+      const sn = r.saldoNormal;
+      const isPL = ['4', '5', '6', '7'].includes(r.kode[0]);
+      const isBS = ['1', '2', '3'].includes(r.kode[0]);
+      let d = 0, k = 0;
+      if (saldo >= 0) {
+        if (sn === 'D') d = saldo; else k = saldo;
+      } else {
+        const a = Math.abs(saldo);
+        if (sn === 'D') k = a; else d = a;
+      }
+      return {
+        kode: r.kode,
+        nama: r.nama,
+        nsD: d, nsK: k,
+        lrD: isPL ? d : 0, lrK: isPL ? k : 0,
+        nerD: isBS ? d : 0, nerK: isBS ? k : 0,
+      };
+    });
+
+    // Total
+    const sum = (fn: (d: any) => number) => data.reduce((s: number, a: any) => s + fn(a), 0);
+    const totals = {
+      nsD: sum(d => d.nsD), nsK: sum(d => d.nsK),
+      lrD: sum(d => d.lrD), lrK: sum(d => d.lrK),
+      nerD: sum(d => d.nerD), nerK: sum(d => d.nerK),
+    };
+    const selisihLR = Math.abs(totals.lrD - totals.lrK);
+    const selisihNer = Math.abs(totals.nerD - totals.nerK);
+
+    // Build Excel
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'SILABU DIGI';
+    const ws = wb.addWorksheet('Neraca Lajur', { views: [{ showGridLines: false }] });
+
+    // Styling helper
+    const font = (sz: number, bold = false) => ({ name: 'Calibri', size: sz, bold });
+    const border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    const fmt = '#,##0';
+
+    // Header row
+    const headers = ['Kode Akun', 'Nama Akun', 'Neraca Saldo (D)', 'Neraca Saldo (K)', 'Laba/Rugi (D)', 'Laba/Rugi (K)', 'Neraca (D)', 'Neraca (K)'];
+    const hRow = ws.addRow(headers);
+    hRow.eachCell((c: any, col: number) => {
+      c.font = font(11, true);
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
+      c.font = { ...font(11, true), color: { argb: 'FFFFFFFF' } };
+      c.alignment = { horizontal: col <= 2 ? 'left' : 'right', vertical: 'middle' };
+      c.border = border;
+    });
+    ws.addRow([]); // spacer
+
+    // Data rows
+    data.forEach((d: any) => {
+      const row = ws.addRow([d.kode, d.nama, d.nsD || '', d.nsK || '', d.lrD || '', d.lrK || '', d.nerD || '', d.nerK || '']);
+      row.eachCell((c: any, col: number) => {
+        c.font = font(10);
+        c.alignment = { horizontal: col <= 2 ? 'left' : 'right', vertical: 'middle' };
+        c.border = border;
+        if (col <= 2) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+      });
+    });
+
+    ws.addRow([]); // spacer
+
+    // TOTAL row
+    const tRow = ws.addRow(['', 'TOTAL', totals.nsD, totals.nsK, totals.lrD, totals.lrK, totals.nerD, totals.nerK]);
+    tRow.eachCell((c: any, col: number) => {
+      c.font = font(11, true);
+      c.alignment = { horizontal: col <= 2 ? 'left' : 'right', vertical: 'middle' };
+      c.border = border;
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
+      if (col > 2) c.numFmt = fmt;
+    });
+
+    // Selisih row
+    ws.addRow(['', 'Selisih', '', '', selisihLR, '', selisihNer, '']).eachCell((c: any, col: number) => {
+      if (col === 5 || col === 7) c.font = font(11, true);
+    });
+
+    // Info row
+    ws.addRow(['', '', '', '', '', '', '', '']);
+    ws.addRow([`Neraca Lajur per ${endDate} — SILABU DIGI`, '', '', '', '', '', '', '']).eachCell((c: any) => {
+      c.font = { ...font(9), italic: true, color: { argb: 'FF94A3B8' } };
+    });
+
+    // Column widths
+    ws.getColumn(1).width = 14;
+    ws.getColumn(2).width = 36;
+    for (let i = 3; i <= 8; i++) ws.getColumn(i).width = 18;
+
+    // Stream response
+    const filename = `Neraca_Lajur_${endDate.replace(/-/g, '')}.xlsx`;
+    reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+    reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const buf = await wb.xlsx.writeBuffer();
+    reply.send(buf);
   });
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank } from 'lucide-react';
+import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, FileDown } from 'lucide-react';
 
 type Akun = { kode: string; nama: string; saldoNormal: string; saldo: number };
 type AsetTetap = {
@@ -96,6 +96,14 @@ export default function NeracaPage() {
   const toggle = (k: string) => setExpanded(p => ({ ...p, [k]: !p[k] }));
   const inputCls = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition';
 
+  const downloadExcel = () => {
+    const t = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
+    fetch('/api/accounting/neraca-lajur/export?end_date=' + endDate, { headers: { Authorization: 'Bearer ' + t } })
+      .then(r => { if (!r.ok) throw new Error(r.status.toString()); return r.blob(); })
+      .then(blob => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Neraca_Lajur_${endDate.replace(/-/g, '')}.xlsx`; a.click(); URL.revokeObjectURL(a.href); })
+      .catch(e => { console.error('Download error:', e); alert('Gagal download. Pastikan Anda sudah login.'); });
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -116,10 +124,15 @@ export default function NeracaPage() {
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Tanggal Tutup Buku (As of Date)</label>
             <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls + ' max-w-xs'} />
           </div>
-          <div>
+          <div className="flex gap-2">
             <button type="button" onClick={fetchData} disabled={loading}
-              className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition disabled:opacity-40 whitespace-nowrap">
+              className="flex-1 rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition disabled:opacity-40 whitespace-nowrap">
               {loading ? 'Memuat...' : 'Tampilkan'}
+            </button>
+            <button type="button" onClick={downloadExcel}
+              title="Download Neraca Lajur (Excel)"
+              className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition whitespace-nowrap">
+              <FileDown size={16} className="inline-block -mt-[2px] mr-1" /> Excel
             </button>
           </div>
         </div>
