@@ -134,6 +134,7 @@ export async function initDatabase() {
       isPostable boolean NOT NULL DEFAULT false,
       parent_id uuid REFERENCES chart_of_accounts(id) ON DELETE RESTRICT,
       is_seeded boolean NOT NULL DEFAULT false,
+      is_system_default boolean NOT NULL DEFAULT false,
       isActive boolean NOT NULL DEFAULT true,
       level integer NOT NULL DEFAULT 0,
       created_at timestamp NOT NULL DEFAULT now(),
@@ -235,6 +236,7 @@ export async function initDatabase() {
   await pool.query(`ALTER TABLE chart_of_accounts ADD COLUMN IF NOT EXISTS isActive boolean NOT NULL DEFAULT true;`);
   await pool.query(`ALTER TABLE chart_of_accounts ADD COLUMN IF NOT EXISTS level integer NOT NULL DEFAULT 0;`);
   await pool.query(`ALTER TABLE chart_of_accounts ADD COLUMN IF NOT EXISTS is_seeded boolean NOT NULL DEFAULT false;`);
+  await pool.query(`ALTER TABLE chart_of_accounts ADD COLUMN IF NOT EXISTS is_system_default boolean NOT NULL DEFAULT false;`);
 
   // Fix FK parent_id -> ON DELETE RESTRICT (drop old auto-named constraint, re-add)
   await pool.query(`
@@ -261,8 +263,10 @@ export async function initDatabase() {
     END $$;
   `);
 
-  // Mark existing seeded rows
-  await pool.query(`UPDATE chart_of_accounts SET is_seeded=true WHERE is_seeded IS NULL OR is_seeded=false;`);
+  // Backfill is_system_default to mirror is_seeded (safe + idempotent).
+  // Do NOT blanket-flip is_seeded here — that would convert user-created
+  // custom accounts (is_seeded=false) into system accounts on every restart.
+  await pool.query(`UPDATE chart_of_accounts SET is_system_default=true WHERE is_seeded=true AND is_system_default=false;`);
 
   // Indexes
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);`);

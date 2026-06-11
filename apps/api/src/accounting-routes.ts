@@ -15,7 +15,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const r = await pool.query(
       `SELECT id, tenant_id AS "tenantId", kode, nama, jenisakun AS "jenisAkun",
               kelompok, saldonormal AS "saldoNormal", ispostable AS "isPostable",
-              parent_id AS "parentId", is_seeded AS "isSeeded", isactive AS "isActive", level
+              parent_id AS "parentId", is_seeded AS "isSeeded", is_system_default AS "isSystemDefault", isactive AS "isActive", level
        FROM chart_of_accounts
        WHERE tenant_id=$1 AND isActive=true
        ORDER BY kode`,
@@ -31,7 +31,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const r = await pool.query(
       `SELECT id, tenant_id AS "tenantId", kode, nama, jenisakun AS "jenisAkun",
               kelompok, saldonormal AS "saldoNormal", ispostable AS "isPostable",
-              parent_id AS "parentId", is_seeded AS "isSeeded", isactive AS "isActive", level
+              parent_id AS "parentId", is_seeded AS "isSeeded", is_system_default AS "isSystemDefault", isactive AS "isActive", level
        FROM chart_of_accounts
        WHERE id=$1 AND tenant_id=$2`,
       [id, a.tenantId]
@@ -104,10 +104,10 @@ export async function accountingRoutes(app: FastifyInstance) {
 
     const insertRes = await pool.query(
       `INSERT INTO chart_of_accounts
-         (tenant_id, kode, nama, jenisAkun, kelompok, saldoNormal, isPostable, parent_id, is_seeded, isActive, level)
-       VALUES ($1,$2,$3,$4,$5,$6,true,$7,false,true,4)
-       RETURNING id, kode, nama, is_seeded AS "isSeeded", ispostable AS "isPostable",
-                 parent_id AS "parentId", saldonormal AS "saldoNormal"`,
+         (tenant_id, kode, nama, jenisAkun, kelompok, saldoNormal, isPostable, parent_id, is_seeded, is_system_default, isActive, level)
+       VALUES ($1,$2,$3,$4,$5,$6,true,$7,false,false,true,4)
+       RETURNING id, kode, nama, is_seeded AS "isSeeded", is_system_default AS "isSystemDefault", ispostable AS "isPostable",
+                 parent_id AS "parentId", saldonormal AS "saldoNormal";`,
       [a.tenantId, newKode, String(nama).trim(),
        parent.jenisAkun, parent.kelompok, parent.saldoNormal || 'D', parent_id]
     );
@@ -120,15 +120,15 @@ export async function accountingRoutes(app: FastifyInstance) {
     const a = (req as any).auth as AuthPayload;
     const { id } = req.params as { id: string };
 
-    // Validation 1: Seeded check
+    // Validation 1: System default / seeded check
     const akunRes = await pool.query(
-      `SELECT id, kode, nama, is_seeded, tenant_id FROM chart_of_accounts
+      `SELECT id, kode, nama, is_seeded, is_system_default, tenant_id FROM chart_of_accounts
        WHERE id=$1 AND tenant_id=$2`,
       [id, a.tenantId]
     );
     if (!akunRes.rowCount) return reply.status(404).send({ error: 'Akun tidak ditemukan' });
     const akun = akunRes.rows[0] as any;
-    if (akun.is_seeded) return reply.status(403).send({ error: 'Akun bawaan sistem tidak dapat dihapus.', code: 'SEEDED' });
+    if (akun.is_seeded || akun.is_system_default) return reply.status(403).send({ error: 'Akun bawaan sistem tidak dapat dihapus.', code: 'SEEDED' });
 
     // Validation 2: Usage check — if any journal lines reference this akun_id
     const usageRes = await pool.query(

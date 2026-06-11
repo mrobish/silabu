@@ -342,8 +342,8 @@ export async function seedDefaultCoa(tenantId: string): Promise<void> {
       const parentId = pk ? idByKode.get(pk) ?? null : null;
       const res = await client.query(
         `INSERT INTO chart_of_accounts
-           (tenant_id, kode, nama, jenisAkun, kelompok, saldoNormal, isPostable, parent_id, is_seeded, isActive, level)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,true,$9)
+           (tenant_id, kode, nama, jenisAkun, kelompok, saldoNormal, isPostable, parent_id, is_seeded, is_system_default, isActive, level)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,true,true,$9)
          RETURNING id`,
         [tenantId, kode, nama, jenisAkun, kelompok, saldoNormal, isPostable, parentId, level]
       );
