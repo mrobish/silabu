@@ -93,7 +93,7 @@ export default function BukuBesarPage() {
 
       {/* Filter Card */}
       <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-xl">
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
           {/* CoA dropdown */}
           <div className="sm:col-span-2 relative" ref={dropdownRef}>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Pilih Akun</label>
@@ -139,14 +139,16 @@ export default function BukuBesarPage() {
           {/* End date */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Sampai Tanggal</label>
-            <div className="flex gap-2">
-              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} />
-              <button type="button" onClick={fetchData}
-                disabled={!akunId || loading}
-                className="flex-shrink-0 rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
-                {loading ? 'Memuat...' : 'Tampilkan'}
-              </button>
-            </div>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} />
+          </div>
+
+          {/* Submit button */}
+          <div>
+            <button type="button" onClick={fetchData}
+              disabled={!akunId || loading}
+              className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
+              {loading ? 'Memuat...' : 'Tampilkan'}
+            </button>
           </div>
         </div>
 
