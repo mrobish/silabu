@@ -125,7 +125,9 @@ export default function SuperAdmin() {
       const url = modalAction === 'delete' ? `/api/admin/users/${actionUser.id}` : `/api/admin/users/${actionUser.id}/${modalAction === 'clear' ? 'clear-data' : 'deactivate'}`;
       const method = modalAction === 'delete' ? 'DELETE' : 'POST';
       const body = modalAction === 'toggle' ? JSON.stringify({ active: !actionUser.is_active }) : undefined;
-      const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body });
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      if (body) headers['Content-Type'] = 'application/json';
+      const r = await fetch(url, { method, headers, body });
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       setMsg({ t: 'ok', m: modalAction === 'delete' ? 'Akun berhasil dihapus' : modalAction === 'clear' ? (d.message || 'Data berhasil dibersihkan') : 'Status user berhasil diubah' });
