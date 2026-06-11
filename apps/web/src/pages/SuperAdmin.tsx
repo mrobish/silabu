@@ -62,6 +62,7 @@ export default function SuperAdmin() {
   const [search, setSearch] = useState('');
   const [actionUser, setActionUser] = useState<AdminUser | null>(null);
   const [modalAction, setModalAction] = useState<ModalAction>(null);
+  const [confirmText, setConfirmText] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -75,10 +76,14 @@ export default function SuperAdmin() {
   }, [token, navigate]);
 
   useEffect(() => {
-    function out(e: MouseEvent) { if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false); }
-    if (profileOpen) document.addEventListener('mousedown', out);
-    return () => document.removeEventListener('mousedown', out);
-  }, [profileOpen]);
+    const onDoc = (e: MouseEvent) => { if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  useEffect(() => {
+    setConfirmText('');
+  }, [modalAction, actionUser?.id]);
 
   async function loadSettings() {
     try {
@@ -216,7 +221,7 @@ export default function SuperAdmin() {
       </div>
     </main>
 
-    {modalAction && actionUser && <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !actionLoading && setModalAction(null)} /><div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl animate-scale-in"><div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-50"><Icon d={modalAction === 'delete' ? 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-9 0h12' : modalAction === 'clear' ? 'M4 7h16M10 11v6m4-6v6M5 7l1 12a2 2 0 002 2h8a2 2 0 002-2l1-12M9 7V4h6v3' : 'M5 13l4 4L19 7'} className="h-6 w-6 text-amber-600" /></div><h3 className="text-center text-lg font-bold text-slate-900">{modalAction === 'delete' ? 'Hapus akun?' : modalAction === 'clear' ? 'Clear data user?' : actionUser.is_active ? 'Nonaktifkan user?' : 'Aktifkan user?'}</h3><p className="mt-1 text-center text-sm text-slate-500">{actionUser.email}</p><div className="mt-6 flex gap-3"><button onClick={() => setModalAction(null)} disabled={actionLoading} className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">Batal</button><button onClick={runAction} disabled={actionLoading} className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition disabled:opacity-50">{actionLoading ? 'Memproses...' : 'Ya'}</button></div></div></div>}
+    {modalAction && actionUser && <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !actionLoading && setModalAction(null)} /><div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl animate-scale-in"><div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-50"><Icon d={modalAction === 'delete' ? 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-9 0h12' : modalAction === 'clear' ? 'M4 7h16M10 11v6m4-6v6M5 7l1 12a2 2 0 002 2h8a2 2 0 002-2l1-12M9 7V4h6v3' : 'M5 13l4 4L19 7'} className="h-6 w-6 text-amber-600" /></div><h3 className="text-center text-lg font-bold text-slate-900">{modalAction === 'delete' ? 'Hapus akun?' : modalAction === 'clear' ? 'Clear data user?' : actionUser.is_active ? 'Nonaktifkan user?' : 'Aktifkan user?'}</h3><p className="mt-1 text-center text-sm text-slate-500">{actionUser.email}</p>{modalAction === 'delete' && <div className="mt-5 rounded-xl bg-red-50 border border-red-100 p-3"><p className="text-xs text-red-700 leading-relaxed">Tindakan ini <b>permanen</b>. Akun, data BUM Desa, dan seluruh transaksi milik tenant ini akan dihapus dan <b>tidak dapat dipulihkan</b>.</p><p className="mt-3 text-xs font-medium text-slate-600">Ketik <span className="font-bold text-red-700 select-none">SAYA YAKIN MENGHAPUS PERMANEN</span> untuk melanjutkan:</p><input value={confirmText} onChange={e => setConfirmText(e.target.value)} autoFocus placeholder="SAYA YAKIN MENGHAPUS PERMANEN" className="mt-2 w-full rounded-lg border border-red-200 px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 transition" /></div>}<div className="mt-6 flex gap-3"><button onClick={() => setModalAction(null)} disabled={actionLoading} className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">Batal</button><button onClick={runAction} disabled={actionLoading || (modalAction === 'delete' && confirmText.trim() !== 'SAYA YAKIN MENGHAPUS PERMANEN')} className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed">{actionLoading ? 'Memproses...' : modalAction === 'delete' ? 'Hapus Permanen' : 'Ya, Lanjutkan'}</button></div></div></div>}
 
     {confirmLogout && <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setConfirmLogout(false)} /><div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl animate-scale-in"><div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50"><svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg></div><h3 className="text-center text-lg font-bold text-slate-900">Yakin ingin keluar?</h3><p className="mt-1 text-center text-sm text-slate-500">Anda harus login kembali untuk mengakses akun.</p><div className="mt-6 flex gap-3"><button onClick={() => setConfirmLogout(false)} className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">Batal</button><button onClick={() => { setConfirmLogout(false); logout(); }} className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition">Ya, Keluar</button></div></div></div>}
   </div>;
