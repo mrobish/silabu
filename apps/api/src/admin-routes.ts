@@ -50,20 +50,65 @@ export async function adminRoutes(app: FastifyInstance) {
     return { users: rows };
   });
 
-  // DELETE /users/:id — delete user + their tenant
+  // DELETE /users/:id — hard delete user + tenant + all tenant-owned data
   app.delete('/users/:id', async (req: FastifyRequest) => {
     const { id } = req.params as { id: string };
     const admin = verifyAdmin(req);
     if (!admin) return { error: 'Unauthorized' };
+
+    const client = await pool.connect();
     try {
-      // Delete tenant first (no cascade on tenant.id = user.tenant_id)
-      await pool.query('DELETE FROM tenants WHERE created_by=$1', [id]);
-      // Delete user (cascade: sessions, verification_tokens; audit_logs: SET NULL)
-      await pool.query('DELETE FROM users WHERE id=$1 AND role=$2', [id, 'bumdes']);
-      return { success: true };
+      await client.query('BEGIN');
+
+      const userRes = await client.query(
+        'SELECT id, role, tenant_id FROM users WHERE id=$1 FOR UPDATE',
+        [id]
+      );
+      const user = userRes.rows[0];
+      if (!user) {
+        await client.query('ROLLBACK');
+        return { error: 'User tidak ditemukan' };
+      }
+      if (user.role === 'super_admin') {
+        await client.query('ROLLBACK');
+        return { error: 'Akun super admin tidak boleh dihapus dari menu ini' };
+      }
+
+      const tenantId = user.tenant_id;
+
+      // Current Phase 0 tables only. Future tenant-owned tables must be deleted here first:
+      // transactions, journal_entries, journal_lines, accounts, opening_balances, reports, payments, etc.
+      if (tenantId) {
+        await client.query('DELETE FROM tenants WHERE id=$1', [tenantId]);
+      }
+
+      // Cleanup by user id. sessions + verification_tokens also cascade, but explicit is clearer.
+      await client.query('DELETE FROM sessions WHERE user_id=$1', [id]);
+      await client.query('DELETE FROM verification_tokens WHERE user_id=$1 OR email=(SELECT email FROM users WHERE id=$1)', [id]);
+      await client.query('UPDATE audit_logs SET user_id=NULL WHERE user_id=$1', [id]);
+      await client.query('DELETE FROM users WHERE id=$1', [id]);
+
+      await client.query('COMMIT');
+      return { success: true, deleted_user_id: id, deleted_tenant_id: tenantId };
     } catch (e: any) {
+      await client.query('ROLLBACK');
       return { error: e.message };
+    } finally {
+      client.release();
     }
+  });
+
+  // POST /users/:id/clear-data — clear tenant-owned operational data, keep account + profile
+  app.post('/users/:id/clear-data', async (req: FastifyRequest) => {
+    const { id } = req.params as { id: string };
+    const admin = verifyAdmin(req);
+    if (!admin) return { error: 'Unauthorized' };
+    const tenantRes = await pool.query('SELECT tenant_id FROM users WHERE id=$1', [id]);
+    const tenantId = tenantRes.rows[0]?.tenant_id;
+    if (!tenantId) return { error: 'User tidak punya tenant' };
+    // Phase 0 has no accounting/transaction tables yet.
+    // Future: delete tenant-owned operational tables here, but keep users + tenants profile.
+    return { success: true, message: 'Belum ada data transaksi untuk dibersihkan' };
   });
 
   // POST /users/:id/deactivate — toggle user active
@@ -74,17 +119,5 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!admin) return { error: 'Unauthorized' };
     await pool.query('UPDATE users SET is_active=$1, updated_at=now() WHERE id=$2', [active ?? false, id]);
     return { success: true };
-  });
-
-  // POST /users/:id/clear-data — clear tenant data (future: transactions, journals, etc.)
-  app.post('/users/:id/clear-data', async (req: FastifyRequest) => {
-    const { id } = req.params as { id: string };
-    const admin = verifyAdmin(req);
-    if (!admin) return { error: 'Unauthorized' };
-    const tenantRes = await pool.query('SELECT tenant_id FROM users WHERE id=$1', [id]);
-    const tenantId = tenantRes.rows[0]?.tenant_id;
-    if (!tenantId) return { error: 'User tidak punya tenant' };
-    // Phase 2: delete transactions, journal_lines, etc.
-    return { success: true, message: 'Data tenant berhasil di-clear (Phase 2)' };
   });
 }
