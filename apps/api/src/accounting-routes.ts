@@ -1326,4 +1326,295 @@ export async function accountingRoutes(app: FastifyInstance) {
       validasiNeraca: { neracaKasTotal, cocok },
     };
   });
+
+  // ── CALK Detail (Catatan Atas Laporan Keuangan) ──
+  app.get('/calk-details', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const q = req.query as any;
+    const endDate = q.end_date || new Date().toISOString().slice(0, 10);
+    const tid = a.tenantId;
+
+    // Helper: saldo akhir per akun (saldonormal aware)
+    async function akunSaldo(kodeLike: string, label: string) {
+      const r = await pool.query(
+        `SELECT c.kode, c.nama,
+                COALESCE(SUM(CASE WHEN c.saldonormal='D' THEN m.debit-m.kredit ELSE m.kredit-m.debit END),0) AS saldo
+         FROM chart_of_accounts c
+         LEFT JOIN (
+           SELECT jl.akun_id, SUM(jl.debit) AS debit, SUM(jl.kredit) AS kredit
+           FROM journal_lines jl JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal<=$2
+           GROUP BY jl.akun_id
+         ) m ON m.akun_id=c.id
+         WHERE c.tenant_id=$1 AND c.ispostable=true AND ${kodeLike}
+         GROUP BY c.kode, c.nama ORDER BY c.kode`,
+        [tid, endDate]
+      );
+      return r.rows.map((x: any) => ({ kode: x.kode, nama: x.nama, saldo: Number(x.saldo) }));
+    }
+
+    // 1. Kas & Setara Kas (Gol 1.1.01 + 1.1.02)
+    const kas = await akunSaldo(`(c.kode LIKE '1.1.01%' OR c.kode LIKE '1.1.02%')`, 'kas');
+
+    // 2. Rincian Piutang — contacts (pelanggan) + saldo per akun piutang
+    const piutang = await pool.query(
+      `SELECT c.nama, c.saldo_awal, c.saldo_awal_tipe, coa.kode AS akun_kode, coa.nama AS akun_nama
+       FROM contacts c JOIN chart_of_accounts coa ON coa.id=c.akun_id
+       WHERE c.tenant_id=$1 AND c.tipe='pelanggan' ORDER BY c.nama`,
+      [tid]
+    );
+
+    // 3. Rincian Persediaan — inventory_items
+    const persediaan = await pool.query(
+      `SELECT i.nama, i.kode, i.satuan, i.qty_awal, i.harga_satuan, i.saldo_awal, coa.kode AS akun_kode
+       FROM inventory_items i JOIN chart_of_accounts coa ON coa.id=i.akun_id
+       WHERE i.tenant_id=$1 ORDER BY i.nama`,
+      [tid]
+    );
+
+    // 4. Rincian Aset Tetap — fixed_assets (perolehan, akumulasi, nilai buku)
+    const asetTetap = await pool.query(
+      `SELECT f.nama, f.kategori, f.tanggal_perolehan, f.harga_perolehan,
+              f.akumulasi_penyusutan, f.nilai_buku_awal, f.umur_manfaat_bulan,
+              coa.kode AS akun_kode
+       FROM fixed_assets f JOIN chart_of_accounts coa ON coa.id=f.akun_id
+       WHERE f.tenant_id=$1 ORDER BY f.kategori, f.nama`,
+      [tid]
+    );
+
+    // 5. Rincian Utang — contacts (supplier)
+    const utang = await pool.query(
+      `SELECT c.nama, c.saldo_awal, c.saldo_awal_tipe, coa.kode AS akun_kode, coa.nama AS akun_nama
+       FROM contacts c JOIN chart_of_accounts coa ON coa.id=c.akun_id
+       WHERE c.tenant_id=$1 AND c.tipe='supplier' ORDER BY c.nama`,
+      [tid]
+    );
+
+    // 6. Rincian Ekuitas — equity_details
+    const ekuitas = await pool.query(
+      `SELECT e.sumber, e.tahun_penerimaan, e.keterangan, e.saldo_awal,
+              coa.kode AS akun_kode, coa.nama AS akun_nama
+       FROM equity_details e JOIN chart_of_accounts coa ON coa.id=e.akun_id
+       WHERE e.tenant_id=$1 ORDER BY e.tahun_penerimaan`,
+      [tid]
+    );
+
+    // 7. Rincian Pendapatan & Beban — akun level (Gol 4-7)
+    const labaRugi = await akunSaldo(`LEFT(c.kode,1) IN ('4','5','6','7')`, 'laba-rugi');
+
+    return {
+      asOf: endDate,
+      kas,
+      piutang: piutang.rows.map((r: any) => ({
+        nama: r.nama, saldo_awal: Number(r.saldo_awal), tipe: r.saldo_awal_tipe,
+        akun: `${r.akun_kode} ${r.akun_nama}`,
+      })),
+      persediaan: persediaan.rows.map((r: any) => ({
+        nama: r.nama, kode: r.kode, satuan: r.satuan,
+        qty_awal: Number(r.qty_awal), harga_satuan: Number(r.harga_satuan), saldo_awal: Number(r.saldo_awal),
+        akun_kode: r.akun_kode,
+      })),
+      asetTetap: asetTetap.rows.map((r: any) => ({
+        nama: r.nama, kategori: r.kategori, tanggal_perolehan: r.tanggal_perolehan,
+        harga_perolehan: Number(r.harga_perolehan),
+        akumulasi_penyusutan: Number(r.akumulasi_penyusutan),
+        nilai_buku_awal: Number(r.nilai_buku_awal),
+        umur_manfaat_bulan: r.umur_manfaat_bulan,
+        akun_kode: r.akun_kode,
+      })),
+      utang: utang.rows.map((r: any) => ({
+        nama: r.nama, saldo_awal: Number(r.saldo_awal), tipe: r.saldo_awal_tipe,
+        akun: `${r.akun_kode} ${r.akun_nama}`,
+      })),
+      ekuitas: ekuitas.rows.map((r: any) => ({
+        sumber: r.sumber, tahun: r.tahun_penerimaan, keterangan: r.keterangan,
+        saldo_awal: Number(r.saldo_awal), akun: `${r.akun_kode} ${r.akun_nama}`,
+      })),
+      labaRugi: labaRugi.filter((r: any) => Number(r.saldo) !== 0).map((r: any) => ({
+        kode: r.kode, nama: r.nama, saldo: Number(r.saldo),
+      })),
+    };
+  });
+
+  // ── Aset Tetap (Manajemen Aset & Inventaris) ──
+  const KATEGORI_COA: Record<string, { kode: string; nama: string; akumKode?: string; bebanKode?: string }> = {
+    Kendaraan: { kode: '1.3.02.01', nama: 'Kendaraan', akumKode: '1.3.07.01', bebanKode: '6.1.07.02' },
+    Komputer: { kode: '1.3.03.01', nama: 'Peralatan dan Mesin', akumKode: '1.3.07.02', bebanKode: '6.1.07.03' },
+    Meubelair: { kode: '1.3.04.01', nama: 'Meubelair', akumKode: '1.3.07.03', bebanKode: '6.1.07.04' },
+    Bangunan: { kode: '1.3.05.01', nama: 'Gedung dan Bangunan', akumKode: '1.3.07.04', bebanKode: '6.1.07.05' },
+    Tanah: { kode: '1.3.01.01', nama: 'Tanah' },
+    Lainnya: { kode: '1.3.99.99', nama: 'Aset Tetap Lainnya', akumKode: '1.3.07.02', bebanKode: '6.1.07.03' },
+  };
+
+  // GET /aset-tetap — daftar aset + nilai buku
+  app.get('/aset-tetap', tenantGuard, async (_req: FastifyRequest) => {
+    const a = (_req as any).auth as AuthPayload;
+    const rows = await pool.query(
+      `SELECT id, nama, kategori, harga_perolehan, akumulasi_penyusutan, nilai_buku_awal,
+              umur_manfaat_bulan, tanggal_perolehan, created_at
+       FROM fixed_assets WHERE tenant_id=$1 ORDER BY created_at DESC`,
+      [a.tenantId]
+    );
+    const now = new Date();
+    return {
+      data: rows.rows.map((r: any) => {
+        const bulanTerpakai = Math.floor((now.getTime() - new Date(r.tanggal_perolehan).getTime()) / (30.4375 * 86400000));
+        const bulanTersisa = Math.max(0, (r.umur_manfaat_bulan || 0) - bulanTerpakai);
+        const totalSusut = Number(r.akumulasi_penyusutan || 0);
+        const nilaiBuku = Number(r.harga_perolehan) - totalSusut;
+        const persenHidup = r.umur_manfaat_bulan ? Math.max(0, Math.min(100, Math.round((bulanTersisa / r.umur_manfaat_bulan) * 100))) : 100;
+        const habis = bulanTersisa <= 0 && r.umur_manfaat_bulan > 0;
+        return {
+          id: r.id, nama: r.nama, kategori: r.kategori,
+          hargaPerolehan: Number(r.harga_perolehan),
+          akumulasiPenyusutan: totalSusut,
+          nilaiBuku, nilaiBukuAwal: Number(r.nilai_buku_awal || 0),
+          umurManfaatBulan: r.umur_manfaat_bulan,
+          bulanTerpakai, bulanTersisa,
+          tanggalPerolehan: r.tanggal_perolehan?.toISOString?.()?.slice(0, 10) || r.tanggal_perolehan,
+          persenHidup, habis,
+        };
+      }),
+    };
+  });
+
+  // GET /aset-tetap/kas-accounts — daftar akun Kas/Bank
+  app.get('/aset-tetap/kas-accounts', tenantGuard, async (_req: FastifyRequest) => {
+    const a = (_req as any).auth as AuthPayload;
+    const rows = await pool.query(
+      `SELECT id, kode, nama FROM chart_of_accounts
+       WHERE tenant_id=$1 AND ispostable=true AND (kode LIKE '1.1.01%' OR kode LIKE '1.1.02%') ORDER BY kode`,
+      [a.tenantId]
+    );
+    return { data: rows.rows.map((r: any) => ({ id: r.id, kode: r.kode, nama: r.nama })) };
+  });
+
+  // POST /aset-tetap — tambah aset + auto jurnal
+  app.post('/aset-tetap', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const b = req.body as any;
+    if (!b.nama || !b.kategori || !b.tanggal_perolehan || !b.harga_perolehan || !b.umur_manfaat_bulan || !b.sumber_dana_id) {
+      return reply.code(400).send({ error: 'Semua field wajib diisi' });
+    }
+    const cat = KATEGORI_COA[b.kategori];
+    if (!cat) return reply.code(400).send({ error: 'Kategori tidak valid' });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. Cari akun aset & akun sumber dana
+      const assetAcc = await client.query(
+        `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode=$2 AND ispostable=true LIMIT 1`,
+        [a.tenantId, cat.kode]
+      );
+      if (!assetAcc.rows.length) return reply.code(400).send({ error: 'Akun aset tidak ditemukan' });
+      const assetId = assetAcc.rows[0].id;
+
+      // 2. Insert fixed_assets
+      const now = new Date();
+      const fa = await client.query(
+        `INSERT INTO fixed_assets (tenant_id, nama, kategori, akun_id, tanggal_perolehan, harga_perolehan, umur_manfaat_bulan, nilai_buku_awal, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$6,$8,$8) RETURNING id`,
+        [a.tenantId, b.nama, b.kategori, assetId, b.tanggal_perolehan, b.harga_perolehan, b.umur_manfaat_bulan, now]
+      );
+      const asetId = fa.rows[0].id;
+
+      // 3. Auto-buat jurnal: Debit Aset — Kredit Kas/Bank
+      const noJurnal = `BELI-${b.kategori.toUpperCase().slice(0, 3)}-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${asetId.slice(0, 8)}`;
+      const tgl = new Date(b.tanggal_perolehan);
+      const bulan = tgl.getMonth() + 1;
+      const tahun = tgl.getFullYear();
+      const je = await client.query(
+        `INSERT INTO journal_entries (tenant_id, tanggal, bulan, tahun, no_jurnal, keterangan, isposted, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,true,$7) RETURNING id`,
+        [a.tenantId, b.tanggal_perolehan, bulan, tahun, noJurnal, `Pembelian ${b.nama} (${b.kategori})`, now]
+      );
+      const entryId = je.rows[0].id;
+
+      await client.query(
+        `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit)
+         VALUES ($1,$2,$3,0), ($1,$4,0,$3)`,
+        [entryId, assetId, b.harga_perolehan, b.sumber_dana_id]
+      );
+
+      await client.query('COMMIT');
+      return { success: true, id: asetId, noJurnal };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  });
+
+  // POST /aset-tetap/depreciate — jalankan penyusutan bulanan
+  app.post('/aset-tetap/depreciate', mutationGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    // Cari aset aktif (belum habis menyusut)
+    const assets = await pool.query(
+      `SELECT fa.id, fa.nama, fa.kategori, fa.akun_id, fa.harga_perolehan, fa.umur_manfaat_bulan, fa.akumulasi_penyusutan
+       FROM fixed_assets fa
+       WHERE fa.tenant_id=$1 AND (fa.akumulasi_penyusutan IS NULL OR fa.akumulasi_penyusutan < fa.harga_perolehan)
+             AND fa.umur_manfaat_bulan > 0`,
+      [a.tenantId]
+    );
+
+    const results: { nama: string; susut: number; ok: boolean }[] = [];
+    const now = new Date();
+
+    for (const as of assets.rows) {
+      const cat = KATEGORI_COA[as.kategori];
+      if (!cat || !cat.akumKode || !cat.bebanKode) continue;
+
+      const akumAcc = await pool.query(
+        `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode=$2 LIMIT 1`,
+        [a.tenantId, cat.akumKode]
+      );
+      const bebanAcc = await pool.query(
+        `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode=$2 LIMIT 1`,
+        [a.tenantId, cat.bebanKode]
+      );
+      if (!akumAcc.rows.length || !bebanAcc.rows.length) continue;
+
+      const susut = Math.round(Number(as.harga_perolehan) / Number(as.umur_manfaat_bulan));
+      if (susut <= 0) continue;
+
+      const nilaiTersisa = Number(as.harga_perolehan) - Number(as.akumulasi_penyusutan || 0);
+      const aktualSusut = Math.min(susut, Math.max(0, nilaiTersisa));
+      if (aktualSusut <= 0) continue;
+
+      const bulanKe = Math.floor((Number(as.akumulasi_penyusutan || 0) / susut)) + 1;
+      const keterangan = `Penyusutan ${as.nama} - Bulan ke-${bulanKe}`;
+      const noJurnal = `SUSUT-${as.kategori.slice(0, 3).toUpperCase()}-${now.toISOString().slice(2, 10).replace(/-/g, '')}`;
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const je = await client.query(
+          `INSERT INTO journal_entries (tenant_id, tanggal, bulan, tahun, no_jurnal, keterangan, isposted, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,true,$7) RETURNING id`,
+          [a.tenantId, now.toISOString().slice(0, 10), now.getMonth()+1, now.getFullYear(), noJurnal, keterangan, now]
+        );
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit)
+           VALUES ($1,$2,$3,0), ($1,$4,0,$3)`,
+          [je.rows[0].id, bebanAcc.rows[0].id, aktualSusut, akumAcc.rows[0].id]
+        );
+        // Update akumulasi_penyusutan
+        await client.query(
+          `UPDATE fixed_assets SET akumulasi_penyusutan = COALESCE(akumulasi_penyusutan, 0) + $1, updated_at = $2 WHERE id = $3`,
+          [aktualSusut, now, as.id]
+        );
+        await client.query('COMMIT');
+        results.push({ nama: as.nama, susut, ok: true });
+      } catch (e) {
+        await client.query('ROLLBACK');
+        results.push({ nama: as.nama, susut, ok: false });
+      } finally {
+        client.release();
+      }
+    }
+
+    return { results, total: results.length, success: results.filter(r => r.ok).length };
+  });
 }
