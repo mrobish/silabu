@@ -57,7 +57,7 @@ export default function Home() {
           <br className="hidden sm:block" /> Jadi Mudah
         </h1>
         <p className="animate-fade-up stagger-2 text-base sm:text-lg text-slate-500 max-w-xl mx-auto mb-9 sm:mb-10 leading-relaxed">
-          Catat transaksi, jurnal otomatis, dan cetak laporan keuangan resmi yang siap diaudit — semua dalam satu aplikasi.
+          Catat transaksi, jurnal otomatis, dan cetak laporan keuangan resmi — semua dalam satu aplikasi.
         </p>
         <Link
           to="/register"
@@ -86,7 +86,7 @@ export default function Home() {
                 <svg className="w-6 h-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
               ),
               bg: 'bg-cyan-50',
-              title: 'Laporan Siap Audit',
+              title: 'Laporan Keuangan',
               desc: 'Neraca, Laba Rugi, Perubahan Modal, dan Arus Kas — cetak PDF kapan saja.'
             },
             {
