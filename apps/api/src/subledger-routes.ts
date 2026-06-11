@@ -18,6 +18,7 @@ const SUBLEDGER_MAP: { prefixes: string[]; table: string; field: string; label: 
   { prefixes: ['2.1.01'], table: 'contacts', field: 'saldo_awal', label: 'Utang',
     where: "tipe='supplier' AND saldo_awal_tipe='kredit'" },
   { prefixes: ['1.2', '1.3'], table: 'fixed_assets', field: 'nilai_buku_awal', label: 'Aset Tetap' },
+  { prefixes: ['3'], table: 'equity_details', field: 'saldo_awal', label: 'Modal / Ekuitas' },
 ];
 
 function getSubledgerForKode(kode: string): typeof SUBLEDGER_MAP[0] | null {
@@ -212,6 +213,68 @@ export async function subledgerRoutes(app: FastifyInstance) {
     const cek = await pool.query('SELECT id FROM fixed_assets WHERE id=$1 AND tenant_id=$2', [id, a.tenantId]);
     if (!cek.rowCount) return reply.status(404).send({ error: 'Aset tidak ditemukan' });
     await pool.query('DELETE FROM fixed_assets WHERE id=$1', [id]);
+    return { success: true };
+  });
+
+  // ─── EQUITY DETAILS (Rincian Modal / Ekuitas) ─────────────────
+  app.get('/equity-details', tenantGuard, async (req: FastifyRequest) => {
+    const a = getToken(req);
+    const r = await pool.query(
+      `SELECT id, tenant_id AS "tenantId", sumber, tahun_penerimaan AS "tahunPenerimaan",
+              keterangan, akun_id AS "akunId", saldo_awal AS "saldoAwal",
+              created_at AS "createdAt", updated_at AS "updatedAt"
+       FROM equity_details WHERE tenant_id=$1 ORDER BY tahun_penerimaan, sumber`,
+      [a.tenantId]
+    );
+    return { equities: r.rows };
+  });
+
+  app.post('/equity-details', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = getToken(req);
+    const b = postBody(req);
+    if (!b.akun_id) return reply.status(400).send({ error: 'akun_id wajib' });
+    if (!b.tahun_penerimaan) return reply.status(400).send({ error: 'tahun_penerimaan wajib' });
+    const tahun = parseInt(b.tahun_penerimaan, 10);
+    if (isNaN(tahun) || tahun < 2000 || tahun > 2100)
+      return reply.status(400).send({ error: 'tahun_penerimaan tidak valid (2000-2100)' });
+    if (!['Pemerintah Desa', 'Masyarakat', 'Lainnya'].includes(b.sumber || 'Lainnya'))
+      return reply.status(400).send({ error: 'sumber harus Pemerintah Desa, Masyarakat, atau Lainnya' });
+    const r = await pool.query(
+      `INSERT INTO equity_details (tenant_id, sumber, tahun_penerimaan, keterangan, akun_id, saldo_awal)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       RETURNING id, sumber, tahun_penerimaan AS "tahunPenerimaan", saldo_awal AS "saldoAwal"`,
+      [a.tenantId, b.sumber || 'Lainnya', tahun, b.keterangan || '', b.akun_id, b.saldo_awal || 0]
+    );
+    return reply.code(201).send({ equity: r.rows[0] });
+  });
+
+  app.put('/equity-details/:id', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = getToken(req);
+    const { id } = req.params as { id: string };
+    const b = postBody(req);
+    const cek = await pool.query('SELECT id FROM equity_details WHERE id=$1 AND tenant_id=$2', [id, a.tenantId]);
+    if (!cek.rowCount) return reply.status(404).send({ error: 'Rincian modal tidak ditemukan' });
+    const tahun = parseInt(b.tahun_penerimaan, 10);
+    if (isNaN(tahun) || tahun < 2000 || tahun > 2100)
+      return reply.status(400).send({ error: 'tahun_penerimaan tidak valid (2000-2100)' });
+    if (!['Pemerintah Desa', 'Masyarakat', 'Lainnya'].includes(b.sumber || 'Lainnya'))
+      return reply.status(400).send({ error: 'sumber harus Pemerintah Desa, Masyarakat, atau Lainnya' });
+    const r = await pool.query(
+      `UPDATE equity_details SET sumber=$1, tahun_penerimaan=$2, keterangan=$3, akun_id=$4,
+        saldo_awal=$5, updated_at=now()
+       WHERE id=$6 AND tenant_id=$7
+       RETURNING id, sumber, tahun_penerimaan AS "tahunPenerimaan", saldo_awal AS "saldoAwal"`,
+      [b.sumber || 'Lainnya', tahun, b.keterangan || '', b.akun_id, b.saldo_awal || 0, id, a.tenantId]
+    );
+    return { equity: r.rows[0] };
+  });
+
+  app.delete('/equity-details/:id', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = getToken(req);
+    const { id } = req.params as { id: string };
+    const cek = await pool.query('SELECT id FROM equity_details WHERE id=$1 AND tenant_id=$2', [id, a.tenantId]);
+    if (!cek.rowCount) return reply.status(404).send({ error: 'Rincian modal tidak ditemukan' });
+    await pool.query('DELETE FROM equity_details WHERE id=$1', [id]);
     return { success: true };
   });
 

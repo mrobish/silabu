@@ -71,6 +71,10 @@ const FAQ_DATA: { category: string; items: { q: string; a: string }[] }[] = [
         q: 'Apa bedanya Saldo Awal dan Rincian Saldo?',
         a: 'Saldo Awal adalah total global per akun (misal: Persediaan = Rp10.000.000). Rincian Saldo adalah rincian di balik total itu (misal: Indomie Rp3.000.000 + Beras Rp7.000.000 = Rp10.000.000). Isi Saldo Awal dulu, baru masukkan rinciannya di menu Rincian Saldo.',
       },
+      {
+        q: 'Apa itu sub-tab Modal / Ekuitas?',
+        a: 'Sub-tab ini mencatat riwayat modal BUM Desa: dari mana sumbernya (Pemerintah Desa, Masyarakat, Lainnya), tahun penerimaan, dan besarnya setiap pemasukan modal. Data ini sangat penting untuk Laporan Perubahan Modal (LPJ) karena menghindari penggandaan akun CoA yang sama.',
+      },
     ],
   },
   {

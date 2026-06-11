@@ -21,18 +21,24 @@ type FixedAsset = {
   nilaiBukuAwal: number; umurManfaatBulan: number;
 };
 
+type Equity = {
+  id: string; sumber: 'Pemerintah Desa' | 'Masyarakat' | 'Lainnya';
+  tahunPenerimaan: number; keterangan: string; akunId: string; saldoAwal: number;
+};
+
 type ReconRow = {
   akunId: string; kode: string; namaAkun: string; subledgerType: string;
   globalValue: number; rincianValue: number; selisih: number;
   detailCount: number; status: 'MATCHED' | 'UNMATCHED' | 'NO_SUBLEDGER';
 };
 
-const TABS = ['persediaan', 'hutang-piutang', 'aset-tetap'] as const;
+const TABS = ['persediaan', 'hutang-piutang', 'aset-tetap', 'modal'] as const;
 type TabId = typeof TABS[number];
 const TAB_LABELS: Record<TabId, string> = {
   'persediaan': 'Persediaan',
   'hutang-piutang': 'Hutang / Piutang',
   'aset-tetap': 'Aset Tetap',
+  'modal': 'Modal / Ekuitas',
 };
 
 const fmt = (v: number) =>
@@ -47,6 +53,7 @@ function ReconBadge({ rows, tabId }: { rows: ReconRow[]; tabId: TabId }) {
     'persediaan': ['1.1.05'],
     'hutang-piutang': ['1.1.03', '2.1.01'],
     'aset-tetap': ['1.2', '1.3'],
+    'modal': ['3'],
   };
   const relevant = rows.filter(r => prefixes[tabId].some(p => r.kode.startsWith(p)));
   if (!relevant.length) return null;
@@ -488,6 +495,138 @@ function AssetsTab({ reconRows }: { reconRows: ReconRow[] }) {
   );
 }
 
+// ─── Equity (Modal / Ekuitas) Tab ────────────────────────────────
+function EquityTab({ reconRows }: { reconRows: ReconRow[] }) {
+  const [equities, setEquities] = useState<Equity[]>([]);
+  const [coaList, setCoaList] = useState<CoAOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ sumber: 'Pemerintah Desa' as 'Pemerintah Desa' | 'Masyarakat' | 'Lainnya', tahunPenerimaan: new Date().getFullYear().toString(), keterangan: '', akunId: '', saldoAwal: '' });
+  const [editId, setEditId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    const t = getToken();
+    const [eRes, cRes] = await Promise.all([
+      fetch('/api/accounting/equity-details', { headers: { Authorization: 'Bearer ' + t } }),
+      fetch('/api/accounting/coa', { headers: { Authorization: 'Bearer ' + t } }),
+    ]);
+    const [eData, cData] = await Promise.all([eRes.json(), cRes.json()]);
+    setEquities((eData.equities || []).map((r: any) => ({ ...r, saldoAwal: Number(r.saldoAwal), tahunPenerimaan: Number(r.tahunPenerimaan) })));
+    setCoaList((Array.isArray(cData) ? cData : cData.coa || [])
+      .filter((a: any) => a.isActive && a.isPostable !== false &&
+        (a.kode?.startsWith('3') || a.kode?.startsWith('4')))
+      .map((a: any) => ({ id: a.id, kode: a.kode, nama: a.nama })));
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const save = async () => {
+    setError('');
+    const body = {
+      sumber: form.sumber, tahun_penerimaan: parseInt(form.tahunPenerimaan, 10),
+      keterangan: form.keterangan, akun_id: form.akunId, saldo_awal: parseFloat(form.saldoAwal) || 0,
+    };
+    if (!body.akun_id || !body.tahun_penerimaan) return setError('Akun CoA dan tahun wajib');
+    const method = editId ? 'PUT' : 'POST';
+    const url = '/api/accounting/equity-details' + (editId ? '/' + editId : '');
+    const res = await fetch(url, { method, headers: H(), body: JSON.stringify(body) });
+    if (!res.ok) { const d = await res.json(); return setError(d.error || 'Gagal'); }
+    setForm({ sumber: 'Pemerintah Desa', tahunPenerimaan: new Date().getFullYear().toString(), keterangan: '', akunId: '', saldoAwal: '' });
+    setEditId(null);
+    load();
+  };
+
+  const edit = (e: Equity) => {
+    setEditId(e.id);
+    setForm({ sumber: e.sumber, tahunPenerimaan: String(e.tahunPenerimaan), keterangan: e.keterangan, akunId: e.akunId, saldoAwal: String(e.saldoAwal) });
+  };
+
+  const remove = async (id: string) => {
+    await fetch('/api/accounting/equity-details/' + id, { method: 'DELETE', headers: H() });
+    load();
+  };
+
+  const saveable = form.akunId.trim() && form.tahunPenerimaan.trim();
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <ReconBadge rows={reconRows} tabId="modal" />
+
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-6 shadow-sm">
+        <h3 className="font-bold text-slate-900 mb-3">{editId ? 'Edit Rincian Modal' : 'Tambah Rincian Modal'}</h3>
+        {error && <div className="mb-3 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <select value={form.sumber} onChange={e => setForm({...form, sumber: e.target.value as 'Pemerintah Desa' | 'Masyarakat' | 'Lainnya'})}
+            className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition">
+            <option value="Pemerintah Desa">Pemerintah Desa</option>
+            <option value="Masyarakat">Masyarakat</option>
+            <option value="Lainnya">Lainnya</option>
+          </select>
+          <input type="number" placeholder="Tahun Penerimaan*" value={form.tahunPenerimaan} onChange={e => setForm({...form, tahunPenerimaan: e.target.value})}
+            className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition" />
+          <input placeholder="Keterangan" value={form.keterangan} onChange={e => setForm({...form, keterangan: e.target.value})}
+            className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition" />
+          <select value={form.akunId} onChange={e => setForm({...form, akunId: e.target.value})}
+            className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition">
+            <option value="">Pilih Akun CoA*</option>
+            {coaList.map(a => <option key={a.id} value={a.id}>{a.kode} — {a.nama}</option>)}
+          </select>
+          <input type="number" placeholder="Saldo Awal" value={form.saldoAwal} onChange={e => setForm({...form, saldoAwal: e.target.value})}
+            className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition" />
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button onClick={save} disabled={!saveable}
+            className={'rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-all shadow-sm ' +
+              (saveable ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 hover:shadow-md cursor-pointer' : 'bg-slate-300 cursor-not-allowed')}>
+            {editId ? 'Simpan' : 'Tambah'}
+          </button>
+          {editId && <button onClick={() => { setEditId(null); setForm({ sumber: 'Pemerintah Desa', tahunPenerimaan: new Date().getFullYear().toString(), keterangan: '', akunId: '', saldoAwal: '' }); }}
+            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Batal</button>}
+        </div>
+      </div>
+
+      {loading ? <p className="text-sm text-slate-400">Memuat...</p> : !equities.length
+        ? <div className="py-10 text-center text-slate-400 text-sm">Belum ada rincian modal</div>
+        : (
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="w-full text-sm min-w-[650px]">
+              <thead className="bg-slate-50/70"><tr className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <th className="px-4 py-3 rounded-l-xl">Sumber</th><th className="px-4 py-3">Tahun</th>
+                <th className="px-4 py-3">Keterangan</th>
+                <th className="px-4 py-3 text-right">Saldo Awal</th>
+                <th className="px-4 py-3 rounded-r-xl text-center">Aksi</th>
+              </tr></thead>
+              <tbody>
+                {equities.map(e => (
+                  <tr key={e.id} className="border-t border-slate-100 hover:bg-emerald-50/30 transition">
+                    <td className="px-4 py-3"><span className={
+                      e.sumber === 'Pemerintah Desa' ? 'px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700' :
+                      e.sumber === 'Masyarakat' ? 'px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700' :
+                      'px-2 py-0.5 rounded-full text-xs font-bold bg-slate-200 text-slate-700'
+                    }>{e.sumber}</span></td>
+                    <td className="px-4 py-3 font-semibold text-slate-900">{e.tahunPenerimaan}</td>
+                    <td className="px-4 py-3 text-slate-600">{e.keterangan || '-'}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-emerald-700">{fmt(e.saldoAwal)}</td>
+                    <td className="px-4 py-3 text-center space-x-2">
+                      <button onClick={() => edit(e)} className="text-cyan-600 hover:text-cyan-800 text-xs font-semibold">Edit</button>
+                      <button onClick={() => remove(e.id)} className="text-red-500 hover:text-red-700 text-xs font-semibold">Hapus</button>
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-slate-200 bg-slate-50/50 font-bold">
+                  <td colSpan={3} className="px-4 py-3 text-right text-slate-700">Total Rincian:</td>
+                  <td className="px-4 py-3 text-right text-emerald-800">{fmt(equities.reduce((s, e) => s + e.saldoAwal, 0))}</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+    </div>
+  );
+}
+
 // ─── Main Page Component ───────────────────────────────────────
 export default function RincianSaldoPage() {
   const [activeTab, setActiveTab] = useState<TabId>('persediaan');
@@ -508,7 +647,7 @@ export default function RincianSaldoPage() {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Rincian Saldo</h1>
-        <p className="mt-1 text-sm text-slate-500">Detail Persediaan, Hutang/Piutang, dan Aset Tetap yang terhubung ke Saldo Awal global.</p>
+        <p className="mt-1 text-sm text-slate-500">Detail Persediaan, Hutang/Piutang, Aset Tetap, dan Modal yang terhubung ke Saldo Awal global.</p>
       </div>
 
       <div className="flex gap-1 p-1 bg-slate-100 rounded-xl overflow-x-auto">
@@ -528,6 +667,7 @@ export default function RincianSaldoPage() {
           {activeTab === 'persediaan' && <InventoryTab reconRows={reconRows} />}
           {activeTab === 'hutang-piutang' && <ContactsTab reconRows={reconRows} />}
           {activeTab === 'aset-tetap' && <AssetsTab reconRows={reconRows} />}
+          {activeTab === 'modal' && <EquityTab reconRows={reconRows} />}
         </>
       )}
     </div>
