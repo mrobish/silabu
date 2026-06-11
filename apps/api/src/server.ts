@@ -6,6 +6,7 @@ import { initDatabase } from './db.js';
 import { authRoutes } from './auth-routes.js';
 import { registerRoutes } from './register-routes.js';
 import { settingsRoutes } from './settings-routes.js';
+import { adminRoutes } from './admin-routes.js';
 
 const app = Fastify({ logger: true });
 const PORT = Number(process.env.PORT || 3010);
@@ -19,6 +20,7 @@ await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
 await app.register(registerRoutes, { prefix: '/api/auth' });
 await app.register(authRoutes, { prefix: '/api/auth' });
 await app.register(settingsRoutes, { prefix: '/api/admin' });
+await app.register(adminRoutes, { prefix: '/api/admin' });
 
 app.get('/api/health', async () => ({
   status: 'ok',
