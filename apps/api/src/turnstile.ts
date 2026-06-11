@@ -1,4 +1,5 @@
 import { pool } from './db.js';
+import { decryptJSON } from './crypto-settings.js';
 
 export async function verifyTurnstile(token: string, remoteIp?: string): Promise<{ success: boolean; error?: string }> {
   try {
@@ -25,7 +26,7 @@ export async function getSecuritySettings() {
   try {
     const r = await pool.query(`SELECT value_encrypted FROM app_settings WHERE key='security'`);
     if (!r.rowCount) return { turnstile_site_key: '', turnstile_secret_key: '' };
-    return typeof r.rows[0].value_encrypted === 'string' ? JSON.parse(r.rows[0].value_encrypted) : r.rows[0].value_encrypted;
+    return decryptJSON(r.rows[0].value_encrypted);
   } catch {
     return { turnstile_site_key: '', turnstile_secret_key: '' };
   }

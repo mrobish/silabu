@@ -1,20 +1,11 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
-import jwt from 'jsonwebtoken';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { pool } from './db.js';
+import { requireRole } from './guards.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'silabu-digi-secret-2026';
-
-function verifyAdmin(req: FastifyRequest): { userId: string; role: string } | null {
-  const auth = req.headers.authorization;
-  if (!auth?.startsWith('Bearer ')) return null;
-  try {
-    const d = jwt.verify(auth.slice(7), JWT_SECRET) as any;
-    if (d.role !== 'super_admin') return null;
-    return { userId: d.userId, role: d.role };
-  } catch { return null; }
-}
+const requireSuperAdmin = requireRole('super_admin');
 
 export async function adminRoutes(app: FastifyInstance) {
+  app.addHook('onRequest', requireSuperAdmin);
 
   // GET /stats — dashboard stats
   app.get('/stats', async () => {
@@ -53,8 +44,6 @@ export async function adminRoutes(app: FastifyInstance) {
   // DELETE /users/:id — hard delete user + tenant + all tenant-owned data
   app.delete('/users/:id', async (req: FastifyRequest) => {
     const { id } = req.params as { id: string };
-    const admin = verifyAdmin(req);
-    if (!admin) return { error: 'Unauthorized' };
 
     const client = await pool.connect();
     try {
@@ -101,8 +90,6 @@ export async function adminRoutes(app: FastifyInstance) {
   // POST /users/:id/clear-data — clear tenant-owned operational data, keep account + profile
   app.post('/users/:id/clear-data', async (req: FastifyRequest) => {
     const { id } = req.params as { id: string };
-    const admin = verifyAdmin(req);
-    if (!admin) return { error: 'Unauthorized' };
     const tenantRes = await pool.query('SELECT tenant_id FROM users WHERE id=$1', [id]);
     const tenantId = tenantRes.rows[0]?.tenant_id;
     if (!tenantId) return { error: 'User tidak punya tenant' };
@@ -115,8 +102,6 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post('/users/:id/deactivate', async (req: FastifyRequest) => {
     const { id } = req.params as { id: string };
     const { active } = (req.body as any) || {};
-    const admin = verifyAdmin(req);
-    if (!admin) return { error: 'Unauthorized' };
     await pool.query('UPDATE users SET is_active=$1, updated_at=now() WHERE id=$2', [active ?? false, id]);
     return { success: true };
   });

@@ -1,30 +1,31 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { pool } from './db.js';
+import { requireRole } from './guards.js';
+import { encryptJSON, decryptJSON } from './crypto-settings.js';
+
+const requireSuperAdmin = requireRole('super_admin');
+const guard = { onRequest: [requireSuperAdmin] };
 
 export async function getSMTPConfig(): Promise<any> {
   const r = await pool.query("SELECT value_encrypted FROM app_settings WHERE key='smtp'");
-  const row = r.rows[0];
-  if (!row) return null;
-  try { return JSON.parse(row.value_encrypted); } catch { return null; }
+  return decryptJSON(r.rows[0]?.value_encrypted);
 }
 
 export async function getSetting(key: string): Promise<any> {
   const r = await pool.query('SELECT value_encrypted FROM app_settings WHERE key=$1', [key]);
-  const row = r.rows[0];
-  if (!row) return {};
-  try { return JSON.parse(row.value_encrypted); } catch { return {}; }
+  return decryptJSON(r.rows[0]?.value_encrypted);
 }
 
 async function putSetting(key: string, value: any) {
   await pool.query(
     `INSERT INTO app_settings (key,value_encrypted,updated_at) VALUES ($1,$2,now())
      ON CONFLICT (key) DO UPDATE SET value_encrypted=$2, updated_at=now()`,
-    [key, JSON.stringify(value)]
+    [key, encryptJSON(value)]
   );
 }
 
 export async function settingsRoutes(app: FastifyInstance) {
-  app.get('/settings', async () => {
+  app.get('/settings', guard, async () => {
     const smtp = await getSetting('smtp');
     const oauth = await getSetting('oauth');
     const tripay = await getSetting('tripay');
@@ -32,27 +33,27 @@ export async function settingsRoutes(app: FastifyInstance) {
     return { smtp, oauth, tripay, security };
   });
 
-  app.put('/settings/smtp', async (req: FastifyRequest) => {
+  app.put('/settings/smtp', guard, async (req: FastifyRequest) => {
     await putSetting('smtp', req.body);
     return { success: true };
   });
 
-  app.put('/settings/oauth', async (req: FastifyRequest) => {
+  app.put('/settings/oauth', guard, async (req: FastifyRequest) => {
     await putSetting('oauth', req.body);
     return { success: true };
   });
 
-  app.put('/settings/tripay', async (req: FastifyRequest) => {
+  app.put('/settings/tripay', guard, async (req: FastifyRequest) => {
     await putSetting('tripay', req.body);
     return { success: true };
   });
 
-  app.put('/settings/security', async (req: FastifyRequest) => {
+  app.put('/settings/security', guard, async (req: FastifyRequest) => {
     await putSetting('security', req.body);
     return { success: true };
   });
 
-  app.post('/settings/test-smtp', async (req: FastifyRequest) => {
+  app.post('/settings/test-smtp', guard, async (req: FastifyRequest) => {
     const { to } = req.body as any;
     if (!to) return { error: 'Email tujuan wajib diisi' };
     try {
