@@ -1200,4 +1200,130 @@ export async function accountingRoutes(app: FastifyInstance) {
     const buf = await wb.xlsx.writeBuffer();
     reply.send(buf);
   });
+
+  // ── Arus Kas (Cash Flow Statement) ──
+  app.get('/arus-kas', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const q = req.query as any;
+    const startDate = q.start_date;
+    const endDate = q.end_date || new Date().toISOString().slice(0, 10);
+    const tid = a.tenantId;
+
+    // ── Kas Tahun Lalu: total Kas/Bank s/d start_date ──
+    const kasTahunLalu = await (async () => {
+      if (!startDate) return 0;
+      const r = await pool.query(
+        `SELECT COALESCE(SUM(CASE WHEN c.saldonormal='D' THEN m.debit-m.kredit ELSE m.kredit-m.debit END),0) AS saldo
+         FROM chart_of_accounts c
+         LEFT JOIN (
+           SELECT jl.akun_id, SUM(jl.debit) AS debit, SUM(jl.kredit) AS kredit
+           FROM journal_lines jl
+           JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal < $2
+           GROUP BY jl.akun_id
+         ) m ON m.akun_id=c.id
+         WHERE c.tenant_id=$1 AND c.ispostable=true AND (c.kode LIKE '1.1.01%' OR c.kode LIKE '1.1.02%')`,
+        [tid, startDate]
+      );
+      return Number(r.rows[0]?.saldo || 0);
+    })();
+
+    // ── Analisis akun lawan per jurnal ──
+    // Cari semua entry di rentang waktu yang punya baris Kas/Bank.
+    // Untuk setiap garis Kas (D=penerimaan, K=pengeluaran), lihat baris akun lawan dalam entry yg sama.
+    // Kelompokkan berdasarkan golongan akun lawan.
+    const flowQuery = await pool.query(
+      `WITH kas_entries AS (
+        SELECT DISTINCT je.id AS entry_id, je.tanggal
+        FROM journal_lines jl
+        JOIN chart_of_accounts c ON c.id=jl.akun_id AND (c.kode LIKE '1.1.01%' OR c.kode LIKE '1.1.02%')
+        JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal>=$2 AND je.tanggal<=$3
+      ),
+      kas_lines AS (
+        SELECT ke.entry_id, ke.tanggal,
+               COALESCE(SUM(jl.debit),0) AS kas_debit,
+               COALESCE(SUM(jl.kredit),0) AS kas_kredit
+        FROM kas_entries ke
+        JOIN journal_lines jl ON jl.entry_id=ke.entry_id
+        JOIN chart_of_accounts c ON c.id=jl.akun_id AND (c.kode LIKE '1.1.01%' OR c.kode LIKE '1.1.02%')
+        GROUP BY ke.entry_id, ke.tanggal
+      ),
+      contra AS (
+        SELECT ke.entry_id, ke.tanggal,
+               contra.kode, contra.nama, contra.saldonormal,
+               COALESCE(contra_line.debit,0) AS d, COALESCE(contra_line.kredit,0) AS k
+        FROM kas_entries ke
+        JOIN journal_lines contra_line ON contra_line.entry_id=ke.entry_id
+        JOIN chart_of_accounts contra ON contra.id=contra_line.akun_id AND NOT (contra.kode LIKE '1.1.01%' OR contra.kode LIKE '1.1.02%')
+      )
+      SELECT c.kode, c.nama,
+             SUM(CASE WHEN kl.kas_debit>0 THEN c.k ELSE 0 END) AS masuk,
+             SUM(CASE WHEN kl.kas_kredit>0 THEN c.d ELSE 0 END) AS keluar
+      FROM contra c
+      JOIN kas_lines kl ON kl.entry_id=c.entry_id
+      GROUP BY c.kode, c.nama
+      ORDER BY c.kode`,
+      [tid, startDate || '1970-01-01', endDate]
+    );
+
+    // ── Klasifikasi per aktivitas ──
+    type FlowItem = { kode: string; nama: string; masuk: number; keluar: number; net: number };
+    const ops: FlowItem[] = [];
+    const inv: FlowItem[] = [];
+    const dana: FlowItem[] = [];
+
+    for (const r of flowQuery.rows) {
+      const item: FlowItem = {
+        kode: r.kode, nama: r.nama,
+        masuk: Number(r.masuk), keluar: Number(r.keluar),
+        net: Number(r.masuk) - Number(r.keluar),
+      };
+      // Operasi: Gol 1.1.03 (piutang), 1.1.05 (persediaan), 4, 5, 6, 7
+      // Investasi: Gol 1.3
+      // Pendanaan: Gol 2, 3
+      const g = r.kode[0];
+      const sub2 = r.kode.slice(0, 3);
+      if (sub2 === '1.3') {
+        inv.push(item);
+      } else if (g === '2' || g === '3') {
+        dana.push(item);
+      } else {
+        // sisa: termasuk Gol 1.1.03, 1.1.05, 4, 5, 6, 7
+        ops.push(item);
+      }
+    }
+
+    const sumNet = (arr: FlowItem[]) => arr.reduce((s, i) => s + i.net, 0);
+    const sumMasuk = (arr: FlowItem[]) => arr.reduce((s, i) => s + i.masuk, 0);
+    const sumKeluar = (arr: FlowItem[]) => arr.reduce((s, i) => s + i.keluar, 0);
+
+    const oNet = sumNet(ops), iNet = sumNet(inv), dNet = sumNet(dana);
+    const totalNetFlow = oNet + iNet + dNet;
+    const kasBerjalan = kasTahunLalu + totalNetFlow;
+
+    // ── Validasi dengan Neraca (Kas/Bank) ──
+    const neracaKas = await pool.query(
+      `SELECT COALESCE(SUM(CASE WHEN c.saldonormal='D' THEN m.debit-m.kredit ELSE m.kredit-m.debit END),0) AS saldo
+       FROM chart_of_accounts c
+       LEFT JOIN (
+         SELECT jl.akun_id, SUM(jl.debit) AS debit, SUM(jl.kredit) AS kredit
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal<=$2
+         GROUP BY jl.akun_id
+       ) m ON m.akun_id=c.id
+       WHERE c.tenant_id=$1 AND c.ispostable=true AND (c.kode LIKE '1.1.01%' OR c.kode LIKE '1.1.02%')`,
+      [tid, endDate]
+    );
+    const neracaKasTotal = Number(neracaKas.rows[0]?.saldo || 0);
+    const cocok = Math.abs(kasBerjalan - neracaKasTotal) < 0.005;
+
+    return {
+      periode: { startDate, endDate },
+      aktivitasOperasi: { detail: ops, totalMasuk: sumMasuk(ops), totalKeluar: sumKeluar(ops), net: oNet },
+      aktivitasInvestasi: { detail: inv, totalMasuk: sumMasuk(inv), totalKeluar: sumKeluar(inv), net: iNet },
+      aktivitasPendanaan: { detail: dana, totalMasuk: sumMasuk(dana), totalKeluar: sumKeluar(dana), net: dNet },
+      kasTahunLalu,
+      kasBerjalan,
+      validasiNeraca: { neracaKasTotal, cocok },
+    };
+  });
 }
