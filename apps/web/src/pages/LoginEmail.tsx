@@ -103,12 +103,14 @@ export default function LoginEmail() {
           </div>
 
           {/* RIGHT — branded gradient panel */}
-          <div className="relative hidden md:block overflow-hidden bg-gradient-to-br from-emerald-500 via-cyan-500 to-cyan-600">
+          <div className="relative hidden md:block overflow-hidden" style={{background:'linear-gradient(to bottom right, #059669, #0891b2, #0e7490)'}}>
             {/* wavy SVG divider — sits at the seam between left & right panels */}
             <svg className="absolute -left-[1px] top-0 z-10 h-full w-[48px] overflow-visible text-slate-50"
               preserveAspectRatio="none" viewBox="0 0 48 100" fill="currentColor" aria-hidden="true">
               <path d="M48 0 C 24 15, 0 35, 24 50 C 48 65, 24 85, 48 100 L 0 100 L 0 0 Z" />
             </svg>
+                        {/* subtle dark overlay for text contrast */}
+            <div className="absolute inset-0 bg-slate-900/20" aria-hidden="true" />
             {/* subtle decorative blobs */}
             <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/10 blur-2xl" aria-hidden="true" />
             <div className="absolute -bottom-20 left-4 h-72 w-72 rounded-full bg-emerald-300/20 blur-3xl" aria-hidden="true" />
@@ -118,7 +120,7 @@ export default function LoginEmail() {
             </svg>
 
             <div className="relative z-10 flex h-full flex-col items-center justify-center p-12 text-center text-white">
-              <img src="/logo.png" alt="" className="h-12 w-auto mb-8 brightness-0 invert opacity-90" aria-hidden="true" />
+              <img src="/logo.png" alt="" className="h-20 w-auto mb-8 brightness-0 invert opacity-95 drop-shadow-lg" aria-hidden="true" />
               <h2 className="text-3xl font-bold tracking-tight">Selamat Datang Kembali</h2>
               <p className="mt-3 max-w-xs text-sm text-cyan-50/90 leading-relaxed">
                 Kelola keuangan BUM Desa Anda dengan rapi, transparan, dan sesuai standar akuntansi desa.

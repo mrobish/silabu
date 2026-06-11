@@ -1,5 +1,5 @@
 import './style.css';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { createRoot } from 'react-dom/client';
 import Home from './pages/Home';
 import RegisterChoice from './pages/RegisterChoice';
@@ -16,27 +16,27 @@ import AppDashboard from './pages/AppDashboard';
 import SuperAdmin from './pages/SuperAdmin';
 import ChangePassword from './pages/ChangePassword';
 
+const router = createBrowserRouter([
+  { path: '/', element: <Home /> },
+  // Registration flow
+  { path: '/register', element: <RegisterChoice /> },
+  { path: '/register/email', element: <RegisterEmail /> },
+  { path: '/register/verify-otp', element: <VerifyOTP /> },
+  { path: '/register/set-password', element: <SetPassword /> },
+  { path: '/register/data-bumdes', element: <DataBumdes /> },
+  // Login flow
+  { path: '/login', element: <LoginChoice /> },
+  { path: '/login/email', element: <LoginEmail /> },
+  { path: '/login/callback', element: <LoginCallback /> },
+  // Password recovery
+  { path: '/forgot-password', element: <ForgotPassword /> },
+  { path: '/reset-password', element: <ResetPassword /> },
+  // App
+  { path: '/app', element: <AppDashboard /> },
+  { path: '/super-admin', element: <SuperAdmin /> },
+  { path: '/change-password', element: <ChangePassword /> },
+]);
+
 createRoot(document.getElementById('root')!).render(
-  <BrowserRouter>
-    <Routes>
-      <Route path="/" element={<Home />} />
-      {/* Registration flow */}
-      <Route path="/register" element={<RegisterChoice />} />
-      <Route path="/register/email" element={<RegisterEmail />} />
-      <Route path="/register/verify-otp" element={<VerifyOTP />} />
-      <Route path="/register/set-password" element={<SetPassword />} />
-      <Route path="/register/data-bumdes" element={<DataBumdes />} />
-      {/* Login flow */}
-      <Route path="/login" element={<LoginChoice />} />
-      <Route path="/login/email" element={<LoginEmail />} />
-      <Route path="/login/callback" element={<LoginCallback />} />
-      {/* Password recovery */}
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      {/* App */}
-      <Route path="/app" element={<AppDashboard />} />
-      <Route path="/super-admin" element={<SuperAdmin />} />
-      <Route path="/change-password" element={<ChangePassword />} />
-    </Routes>
-  </BrowserRouter>
+  <RouterProvider router={router} />
 );
