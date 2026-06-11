@@ -63,6 +63,14 @@ const FAQ_DATA: { category: string; items: { q: string; a: string }[] }[] = [
         q: 'Bagaimana mencatat transaksi harian?',
         a: 'Buka menu Jurnal Umum, lalu input transaksi pemasukan atau pengeluaran. Pilih akun yang sesuai, masukkan jumlah, dan simpan. Jurnal double-entry akan tersusun otomatis.',
       },
+      {
+        q: 'Apa itu menu Rincian Saldo?',
+        a: 'Rincian Saldo adalah modul buku pembantu yang memecah total global Saldo Awal menjadi detail barang, kontak, dan aset. Terdiri dari 3 kategori:\n• Persediaan — daftar barang beserta jumlah dan harga\n• Hutang/Piutang — nama supplier dan pelanggan dengan sisa saldo\n• Aset Tetap — aset seperti kendaraan atau bangunan beserta penyusutan\nSistem akan otomatis membandingkan total rincian dengan angka di Buku Besar dan menampilkan badge hijau (cocok) atau merah (selisih).',
+      },
+      {
+        q: 'Apa bedanya Saldo Awal dan Rincian Saldo?',
+        a: 'Saldo Awal adalah total global per akun (misal: Persediaan = Rp10.000.000). Rincian Saldo adalah rincian di balik total itu (misal: Indomie Rp3.000.000 + Beras Rp7.000.000 = Rp10.000.000). Isi Saldo Awal dulu, baru masukkan rinciannya di menu Rincian Saldo.',
+      },
     ],
   },
   {
