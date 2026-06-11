@@ -1286,7 +1286,12 @@ export default function AppDashboard() {
   const [user, setUser] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [page, setPage] = useState<Page>('dashboard');
+  const [page, setPageRaw] = useState<Page>(() => {
+    const saved = localStorage.getItem('activePage');
+    const valid: Page[] = ['dashboard', 'password', 'langganan', 'profil', 'coa', 'saldo-awal', 'jurnal'];
+    return (saved && valid.includes(saved as Page)) ? (saved as Page) : 'dashboard';
+  });
+  const setPage = (p: Page) => { localStorage.setItem('activePage', p); setPageRaw(p); };
   const [profileOpen, setProfileOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -1325,7 +1330,7 @@ export default function AppDashboard() {
     </div>
   );
 
-  function logout() { localStorage.clear(); sessionStorage.clear(); navigate('/login'); }
+  function logout() { localStorage.removeItem('activePage'); localStorage.clear(); sessionStorage.clear(); navigate('/login'); }
 
   const trialEnds = user.trial_ends_at ? new Date(user.trial_ends_at) : null;
   const now = new Date();
