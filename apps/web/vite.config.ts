@@ -8,8 +8,18 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) return 'vendor-react';
-          if (id.includes('node_modules/lucide-react')) return 'vendor-icons';
+          // Keep the entire React ecosystem AND anything that depends on React
+          // (lucide-react, scheduler, jsx-runtime) in ONE chunk.
+          // Splitting them causes cross-chunk circular imports where lucide
+          // evaluates before React is initialized -> "Cannot read properties
+          // of null (reading 'useRef')" -> blank white screen.
+          if (
+            id.includes('node_modules/react') ||
+            id.includes('node_modules/scheduler') ||
+            id.includes('node_modules/lucide-react')
+          ) {
+            return 'vendor-react';
+          }
         },
       },
     },
