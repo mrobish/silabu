@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Package, Plus, Download, CalendarDots, Calculator, Laptop, Truck, Armchair, Building, Trees, BoxArrowUp, CheckCircle, AlertTriangle, X, Search } from 'lucide-react';
+import { Package, Plus, Download, CalendarDots, Calculator, Laptop, Truck, Armchair, Building, Trees, BoxArrowUp, CheckCircle, AlertTriangle, X, Search, Printer } from 'lucide-react';
+import ReportPrintLayout from './ReportPrintLayout';
 
 type Aset = {
   id: string; nama: string; kategori: string;
@@ -168,6 +169,11 @@ export default function AsetTetapPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [depreMsg, setDepreMsg] = useState('');
   const [kategoriFilter, setKategoriFilter] = useState('');
+  const [printOpen, setPrintOpen] = useState(false);
+
+  const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const fmtIdDate = (d: string) => { const p = d.split('-'); return `${parseInt(p[2])} ${MONTHS_ID[parseInt(p[1]) - 1]} ${p[0]}`; };
+  const periodLabelAset = `Per ${fmtIdDate(new Date().toISOString().slice(0, 10))}`;
 
   const token = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
 
@@ -219,6 +225,10 @@ export default function AsetTetapPage() {
           <button onClick={() => setModalOpen(true)}
             className="rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition whitespace-nowrap">
             <Plus size={16} className="inline -mt-0.5 mr-1" /> Tambah Aset
+          </button>
+          <button type="button" onClick={() => setPrintOpen(true)} disabled={!asets.length}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:border-emerald-300 transition whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed">
+            <Printer size={16} className="inline -mt-0.5 mr-1" /> Cetak
           </button>
         </div>
       </div>
@@ -279,6 +289,51 @@ export default function AsetTetapPage() {
       <AddAssetModal open={modalOpen} onClose={() => setModalOpen(false)} onDone={fetchData} />
 
       <p className="text-[10px] text-slate-400 text-right">Penyusutan metode garis lurus · bulanan auto-jurnal</p>
+
+      {/* Print Modal */}
+      <ReportPrintLayout title="LAPORAN ASET & INVENTARIS" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabelAset} landscape={true}>
+        {asets.length > 0 && (
+          <div className="text-[11px]">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800">
+                  <th className="text-left py-1 pr-2 font-bold">No</th>
+                  <th className="text-left py-1 pr-2 font-bold">Kode Aset</th>
+                  <th className="text-left py-1 pr-2 font-bold">Nama Aset</th>
+                  <th className="text-left py-1 pr-2 font-bold">Kategori</th>
+                  <th className="text-right py-1 pr-2 font-bold">Harga Perolehan</th>
+                  <th className="text-right py-1 pr-2 font-bold">Akumulasi</th>
+                  <th className="text-right py-1 pr-2 font-bold">Nilai Buku</th>
+                  <th className="text-center py-1 font-bold">Kondisi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {asets.map((a, i) => (
+                  <tr key={a.id} className="border-b border-slate-200">
+                    <td className="py-1 pr-2 text-slate-600">{i + 1}</td>
+                    <td className="py-1 pr-2 text-slate-600">{a.id.slice(0, 8)}</td>
+                    <td className="py-1 pr-2 text-slate-800">{a.nama}</td>
+                    <td className="py-1 pr-2 text-slate-600">{a.kategori}</td>
+                    <td className="py-1 pr-2 text-right tabular-nums">{rupiah(a.hargaPerolehan)}</td>
+                    <td className="py-1 pr-2 text-right tabular-nums text-red-600">{rupiah(a.akumulasiPenyusutan)}</td>
+                    <td className="py-1 pr-2 text-right tabular-nums font-semibold">{rupiah(a.nilaiBuku)}</td>
+                    <td className="py-1 text-center">{a.habis ? 'Habis' : 'Aktif'}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-800 font-bold">
+                  <td colSpan={4} className="py-1.5 pr-2 text-right">TOTAL</td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums">{rupiah(asets.reduce((s, a) => s + a.hargaPerolehan, 0))}</td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums text-red-600">{rupiah(asets.reduce((s, a) => s + a.akumulasiPenyusutan, 0))}</td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums font-bold">{rupiah(asets.reduce((s, a) => s + a.nilaiBuku, 0))}</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </ReportPrintLayout>
     </div>
   );
 }

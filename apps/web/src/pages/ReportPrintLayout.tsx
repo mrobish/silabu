@@ -18,34 +18,31 @@ interface Props {
   title: string;
   isOpen: boolean;
   onClose: () => void;
+  periodLabel?: string;
+  landscape?: boolean;
 }
 
-const fmt = (v: number) => 'Rp ' + Math.abs(v).toLocaleString('id-ID');
+const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
-export default function ReportPrintLayout({ children, title, isOpen, onClose }: Props) {
+export default function ReportPrintLayout({ children, title, isOpen, onClose, periodLabel, landscape }: Props) {
   const [tenant, setTenant] = useState<TenantProfile | null>(null);
-  const [tglCetak, setTglCetak] = useState('');
+  const today = new Date();
+  const [tglCetak, setTglCetak] = useState(`${today.getDate()} ${MONTHS[today.getMonth()]} ${today.getFullYear()}`);
   const [namaBendahara, setNamaBendahara] = useState('');
   const [namaDirektur, setNamaDirektur] = useState('');
   const printRef = useRef<HTMLDivElement>(null);
-  const today = new Date();
-  const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
   useEffect(() => {
     if (!isOpen) return;
     (async () => {
       try {
-        const token = localStorage.getItem('token');
-        const res = await fetch('/api/tenant/profile', {
-          headers: { Authorization: 'Bearer ' + token }
-        });
+        const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
+        const res = await fetch('/api/tenant/profile', { headers: { Authorization: 'Bearer ' + token } });
         const data = await res.json();
         const p = data?.profile;
         if (p) {
           setTenant(p);
-          const kab = p.kabupaten || '';
-          const tgl = `${p.desa || p.kecamatan || ''}, ${today.getDate()} ${months[today.getMonth()]} ${today.getFullYear()}`;
-          setTglCetak(tgl);
+          setTglCetak(`${p.desa || p.kecamatan || ''}, ${today.getDate()} ${MONTHS[today.getMonth()]} ${today.getFullYear()}`);
           setNamaBendahara(p.nama_bendahara || '');
           setNamaDirektur(p.nama_direktur || '');
         }
@@ -57,33 +54,41 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose }: 
     ? `${tenant.desa || ''}, Kec. ${tenant.kecamatan || ''}, ${tenant.kabupaten || ''}${tenant.provinsi ? ', ' + tenant.provinsi : ''}`
     : '';
 
-  function handlePrint() {
-    window.print();
-  }
-
   if (!isOpen) return null;
+
+  const pageStyle = landscape ? 'A4 landscape' : 'A4';
 
   return (
     <>
-      {/* Print-only style @media */}
       <style>{`
         @media print {
           body { margin: 0; padding: 0; }
           .no-print { display: none !important; }
           .print-area { display: block !important; position: static !important; overflow: visible !important; }
-          @page { size: A4; margin: 1.5cm 1.8cm; }
+          .print-area input { border: none !important; outline: none !important; box-shadow: none !important; padding: 0 !important; background: transparent !important; font-weight: inherit !important; }
+          @page { size: ${pageStyle}; margin: 1.5cm 1.8cm; }
+        }
+        .print-input {
+          border: none; outline: none; box-shadow: none; padding: 0; background: transparent;
+          font-weight: bold; text-align: center; width: 100%;
+          border-bottom: 1px solid #1e293b; padding-bottom: 1px;
+        }
+        .print-input-date {
+          border: none; outline: none; box-shadow: none; padding: 0; background: transparent;
+          font-weight: 500; text-align: center; width: auto; max-width: 280px;
+          border-bottom: 1px dashed #94a3b8; padding-bottom: 1px;
         }
       `}</style>
 
-      {/* Overlay — hidden when printing */}
-      <div className={`no-print fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4 print-area`}
-        style={{ background: 'rgba(0,0,0,0.4)' }}>
-        <div ref={printRef} className="bg-white rounded-2xl shadow-2xl w-full max-w-[210mm] max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="no-print fixed inset-0 z-[9999] flex items-center justify-center p-4"
+        style={{ background: 'rgba(0,0,0,0.5)' }}>
+        <div ref={printRef} className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+          style={{ width: '100%', maxWidth: landscape ? '297mm' : '210mm', maxHeight: '92vh' }}>
           {/* Toolbar */}
-          <div className="no-print flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-slate-50">
+          <div className="no-print flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
             <h3 className="text-sm font-semibold text-slate-700">Cetak {title}</h3>
             <div className="flex gap-2">
-              <button onClick={handlePrint}
+              <button onClick={() => window.print()}
                 className="rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2 text-sm font-bold text-white shadow-md hover:shadow-lg transition-all">
                 🖨 Cetak / Simpan PDF
               </button>
@@ -94,68 +99,63 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose }: 
             </div>
           </div>
 
-          {/* Scrollable print preview area */}
+          {/* Scrollable preview */}
           <div className="flex-1 overflow-y-auto p-6" style={{ background: '#fff' }}>
-            <div className="print-area max-w-[190mm] mx-auto" style={{ fontFamily: "'Segoe UI', 'Arial', sans-serif" }}>
+            <div className="print-area mx-auto" style={{
+              fontFamily: "'Segoe UI', 'Arial', sans-serif",
+              maxWidth: landscape ? '277mm' : '190mm',
+            }}>
               {/* KOP SURAT */}
-              <div className="text-center mb-4">
-                {/* Logo placeholder */}
-                <div className="flex justify-center mb-2">
-                  <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-lg font-bold">
-                    {tenant?.nama_bumdes?.[0] || 'B'}
-                  </div>
+              <div className="text-center mb-3">
+                <div className="flex justify-center mb-1.5">
+                  {tenant?.logo_url
+                    ? <img src={tenant.logo_url} alt="Logo" className="w-14 h-14 object-contain" />
+                    : <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 text-lg font-bold">
+                        {tenant?.nama_bumdes?.[0] || 'B'}
+                      </div>
+                  }
                 </div>
-                <h1 className="text-lg font-bold text-slate-900 uppercase tracking-wide">{tenant?.nama_bumdes || 'BUM Desa'}</h1>
-                <p className="text-[11px] text-slate-500 mt-0.5">{alamat}</p>
+                <h1 className="text-[16px] font-bold text-slate-900 uppercase tracking-wide leading-tight">{tenant?.nama_bumdes || 'BUM DESA'}</h1>
+                <p className="text-[11px] text-slate-600 mt-0.5">{alamat}</p>
                 {tenant?.telpon && <p className="text-[10px] text-slate-400">Telp. {tenant.telpon}</p>}
               </div>
-              <hr className="border-t-2 border-slate-800 mb-3" />
+              <div className="border-b-2 border-slate-900 mb-2" />
+              <div className="border-b-[3px] border-slate-900 mb-3" />
 
-              {/* JUDUL LAPORAN */}
-              <h2 className="text-center font-bold text-slate-900 text-sm uppercase mb-1">{title}</h2>
-              <p className="text-center text-[10px] text-slate-500 mb-4">(Dalam Rupiah)</p>
+              {/* JUDUL + PERIODE */}
+              <h2 className="text-center font-bold text-slate-900 text-[13px] uppercase mb-0.5">{title}</h2>
+              {periodLabel && <p className="text-center text-[11px] text-slate-700 mb-0.5">{periodLabel}</p>}
+              <p className="text-center text-[10px] text-slate-400 mb-3">(Dalam Rupiah)</p>
 
-              {/* BODY — children */}
-              <div className="print-body text-[11px]">
-                {children}
-              </div>
+              {/* BODY */}
+              <div className="print-body text-[11px]">{children}</div>
 
               {/* FOOTER — Tanda Tangan */}
               <div className="mt-8 mb-4">
-                <p className="text-center text-[11px] text-slate-700 font-medium">
-                  <span contentEditable suppressContentEditableWarning
-                    className="border-b border-dashed border-slate-300 px-1 outline-emerald-400"
-                    onBlur={e => setTglCetak(e.currentTarget.textContent || '')}
-                  >{tglCetak}</span>
-                </p>
+                <div className="text-center mb-6">
+                  <input type="text" className="print-input-date"
+                    value={tglCetak} onChange={e => setTglCetak(e.target.value)} />
+                </div>
 
-                <div className="flex justify-between mt-8" style={{ maxWidth: '90%', margin: '2rem auto 0' }}>
-                  {/* Left: Bendahara */}
+                <div className="flex justify-between" style={{ maxWidth: '90%', margin: '0 auto' }}>
+                  {/* Bendahara */}
                   <div className="text-center" style={{ width: '45%' }}>
                     <p className="text-[11px] text-slate-600">Disusun oleh,</p>
                     <p className="text-[11px] font-bold text-slate-800 mt-0.5">BENDAHARA</p>
                     <p className="text-[11px] text-slate-700 mb-1">BUM Desa {tenant?.nama_bumdes || '...'}</p>
-                    <div style={{ height: '70px' }}></div>
-                    <p className="text-[11px] font-semibold text-slate-800 mt-1">
-                      (<span contentEditable suppressContentEditableWarning
-                        className="border-b border-slate-800 px-2 outline-emerald-400"
-                        onBlur={e => setNamaBendahara(e.currentTarget.textContent || '')}
-                      >{namaBendahara}</span>)
-                    </p>
+                    <div style={{ height: '70px' }} />
+                    <input type="text" className="print-input"
+                      value={namaBendahara} onChange={e => setNamaBendahara(e.target.value)} />
                   </div>
 
-                  {/* Right: Direktur */}
+                  {/* Direktur */}
                   <div className="text-center" style={{ width: '45%' }}>
                     <p className="text-[11px] text-slate-600">Mengetahui,</p>
                     <p className="text-[11px] font-bold text-slate-800 mt-0.5">DIREKTUR</p>
                     <p className="text-[11px] text-slate-700 mb-1">BUM Desa {tenant?.nama_bumdes || '...'}</p>
-                    <div style={{ height: '70px' }}></div>
-                    <p className="text-[11px] font-semibold text-slate-800 mt-1">
-                      (<span contentEditable suppressContentEditableWarning
-                        className="border-b border-slate-800 px-2 outline-emerald-400"
-                        onBlur={e => setNamaDirektur(e.currentTarget.textContent || '')}
-                      >{namaDirektur}</span>)
-                    </p>
+                    <div style={{ height: '70px' }} />
+                    <input type="text" className="print-input"
+                      value={namaDirektur} onChange={e => setNamaDirektur(e.target.value)} />
                   </div>
                 </div>
               </div>

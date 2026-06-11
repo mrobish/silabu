@@ -65,6 +65,13 @@ export default function LabaRugiPage() {
   });
   const [printOpen, setPrintOpen] = useState(false);
 
+  const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const fmtIdDate = (d: string) => { const p = d.split('-'); return `${parseInt(p[2])} ${MONTHS_ID[parseInt(p[1]) - 1]} ${p[0]}`; };
+  const isFullYear = startDate.endsWith('-01-01') && endDate.endsWith('-12-31');
+  const periodLabel = isFullYear
+    ? `Untuk Tahun yang Berakhir Pada ${fmtIdDate(endDate)}`
+    : `Periode: ${fmtIdDate(startDate)} s/d ${fmtIdDate(endDate)}`;
+
   const fetchData = async () => {
     if (loading) return;
     setLoading(true);
@@ -245,7 +252,7 @@ export default function LabaRugiPage() {
       )}
 
       {/* Print Modal */}
-      <ReportPrintLayout title="LAPORAN LABA RUGI" isOpen={printOpen} onClose={() => setPrintOpen(false)}>
+      <ReportPrintLayout title="LAPORAN LABA RUGI" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabel}>
         {data && <div className="space-y-0">
           {/* Header label baris */}
           <div className="flex justify-between border-b border-slate-800 pb-1 mb-3 font-bold text-[11px]">

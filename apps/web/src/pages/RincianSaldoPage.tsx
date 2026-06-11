@@ -2,6 +2,8 @@
 // Badge rekonsiliasi membandingkan SUM(rincian) vs Saldo Awal global CoA
 
 import { useState, useEffect, useCallback } from 'react';
+import { Printer } from 'lucide-react';
+import ReportPrintLayout from './ReportPrintLayout';
 
 type CoAOption = { id: string; kode: string; nama: string };
 
@@ -632,6 +634,7 @@ export default function RincianSaldoPage() {
   const [activeTab, setActiveTab] = useState<TabId>('persediaan');
   const [reconRows, setReconRows] = useState<ReconRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [printOpen, setPrintOpen] = useState(false);
 
   const loadRecon = useCallback(async () => {
     const t = getToken();
@@ -645,9 +648,15 @@ export default function RincianSaldoPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Rincian Saldo</h1>
-        <p className="mt-1 text-sm text-slate-500">Detail Persediaan, Hutang/Piutang, Aset Tetap, dan Modal yang terhubung ke Saldo Awal global.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Rincian Saldo</h1>
+          <p className="mt-1 text-sm text-slate-500">Detail Persediaan, Hutang/Piutang, Aset Tetap, dan Modal yang terhubung ke Saldo Awal global.</p>
+        </div>
+        <button type="button" onClick={() => setPrintOpen(true)} disabled={!reconRows.length}
+          className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:border-emerald-300 transition whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed shrink-0">
+          <Printer size={16} className="inline -mt-0.5 mr-1" /> Cetak
+        </button>
       </div>
 
       <div className="flex gap-1 p-1 bg-slate-100 rounded-xl overflow-x-auto">
@@ -670,6 +679,44 @@ export default function RincianSaldoPage() {
           {activeTab === 'modal' && <EquityTab reconRows={reconRows} />}
         </>
       )}
+
+      {/* Print Modal */}
+      <ReportPrintLayout title="BUKU KAS" isOpen={printOpen} onClose={() => setPrintOpen(false)}>
+        {reconRows.length > 0 && (
+          <div className="text-[11px]">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800">
+                  <th className="text-left py-1 pr-2 font-bold">No</th>
+                  <th className="text-left py-1 pr-2 font-bold">Kode Akun</th>
+                  <th className="text-left py-1 pr-2 font-bold">Nama Akun</th>
+                  <th className="text-left py-1 pr-2 font-bold">Tipe</th>
+                  <th className="text-right py-1 pr-2 font-bold">Buku Besar</th>
+                  <th className="text-right py-1 pr-2 font-bold">Rincian</th>
+                  <th className="text-right py-1 pr-2 font-bold">Selisih</th>
+                  <th className="text-center py-1 font-bold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reconRows.map((r, i) => (
+                  <tr key={r.akunId} className="border-b border-slate-200">
+                    <td className="py-1 pr-2 text-slate-600">{i + 1}</td>
+                    <td className="py-1 pr-2 text-slate-600">{r.kode}</td>
+                    <td className="py-1 pr-2 text-slate-800">{r.namaAkun}</td>
+                    <td className="py-1 pr-2 text-slate-600">{r.subledgerType}</td>
+                    <td className="py-1 pr-2 text-right tabular-nums">{fmt(r.globalValue)}</td>
+                    <td className="py-1 pr-2 text-right tabular-nums">{fmt(r.rincianValue)}</td>
+                    <td className={`py-1 pr-2 text-right tabular-nums ${Math.abs(r.selisih) < 1 ? '' : 'text-red-600'}`}>{fmt(r.selisih)}</td>
+                    <td className="py-1 text-center">
+                      <span className={r.status === 'MATCHED' ? 'text-emerald-600' : 'text-red-600'}>{r.status === 'MATCHED' ? '✓ Cocok' : '✗ Tidak Cocok'}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </ReportPrintLayout>
     </div>
   );
 }

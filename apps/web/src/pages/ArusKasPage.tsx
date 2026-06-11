@@ -84,6 +84,10 @@ export default function ArusKasPage() {
   const [exp, setExp] = useState<Record<string, boolean>>({ operasi: true, investasi: true, pendanaan: true });
   const [printOpen, setPrintOpen] = useState(false);
 
+  const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const fmtIdDate = (d: string) => { const p = d.split('-'); return `${parseInt(p[2])} ${MONTHS_ID[parseInt(p[1]) - 1]} ${p[0]}`; };
+  const periodLabelArus = `Periode: ${fmtIdDate(start)} s/d ${fmtIdDate(end)}`;
+
   const token = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
   const fetchD = async () => {
     setLoading(true);
@@ -188,7 +192,7 @@ export default function ArusKasPage() {
       )}
 
       {/* Print Modal */}
-      <ReportPrintLayout title="LAPORAN ARUS KAS" isOpen={printOpen} onClose={() => setPrintOpen(false)}>
+      <ReportPrintLayout title="LAPORAN ARUS KAS" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabelArus}>
         {data && <div className="space-y-0">
           <div className="flex justify-between border-b border-slate-800 pb-1 mb-3 font-bold text-[11px]">
             <span>Akun Lawan</span>

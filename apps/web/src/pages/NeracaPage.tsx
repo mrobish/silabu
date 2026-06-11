@@ -82,6 +82,10 @@ export default function NeracaPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ lancar: true, tetap: true, lain: true, kewajiban: true, ekuitas: true });
   const [printOpen, setPrintOpen] = useState(false);
 
+  const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const fmtIdDate = (d: string) => { const p = d.split('-'); return `${parseInt(p[2])} ${MONTHS_ID[parseInt(p[1]) - 1]} ${p[0]}`; };
+  const periodLabelNeraca = `Per ${fmtIdDate(endDate)}`;
+
   const token = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
 
   const fetchData = async () => {
@@ -263,7 +267,7 @@ export default function NeracaPage() {
       )}
 
       {/* Print Modal */}
-      <ReportPrintLayout title="NERACA" isOpen={printOpen} onClose={() => setPrintOpen(false)}>
+      <ReportPrintLayout title="LAPORAN NERACA" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabelNeraca}>
         {data && <div className="space-y-0">
           <div className="grid grid-cols-2 gap-4">
             {/* AKTIVA COLUMN */}
