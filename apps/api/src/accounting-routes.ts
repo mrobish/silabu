@@ -1617,4 +1617,87 @@ export async function accountingRoutes(app: FastifyInstance) {
 
     return { results, total: results.length, success: results.filter(r => r.ok).length };
   });
+
+  // ── CRON: Depresiasi bulanan (internal — localhost only) ──
+  app.post('/cron/depreciate', async (req: FastifyRequest, reply: FastifyReply) => {
+    const ip = req.ip || (req as any).connection?.remoteAddress || '';
+    if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
+      return reply.code(403).send({ error: 'Forbidden — localhost only' });
+    }
+    // Dapatkan semua tenant
+    const tenants = await pool.query('SELECT id FROM tenants WHERE is_active=true');
+    const allResults: any[] = [];
+    const now = new Date();
+
+    for (const t of tenants.rows) {
+      const assets = await pool.query(
+        `SELECT fa.id, fa.nama, fa.kategori, fa.harga_perolehan, fa.umur_manfaat_bulan,
+                COALESCE(fa.akumulasi_penyusutan,0) AS akumulasi_penyusutan
+         FROM fixed_assets fa
+         WHERE fa.tenant_id=$1
+           AND COALESCE(fa.akumulasi_penyusutan,0) < fa.harga_perolehan
+           AND fa.umur_manfaat_bulan > 0`,
+        [t.id]
+      );
+
+      const KATEGORI_COA_LOCAL: Record<string, { akumKode?: string; bebanKode?: string }> = {
+        Kendaraan: { akumKode: '1.3.07.01', bebanKode: '6.1.07.02' },
+        Komputer: { akumKode: '1.3.07.02', bebanKode: '6.1.07.03' },
+        Meubelair: { akumKode: '1.3.07.03', bebanKode: '6.1.07.04' },
+        Bangunan: { akumKode: '1.3.07.04', bebanKode: '6.1.07.05' },
+        Tanah: {},
+        Lainnya: { akumKode: '1.3.07.02', bebanKode: '6.1.07.03' },
+      };
+
+      for (const as of assets.rows) {
+        const cat = KATEGORI_COA_LOCAL[as.kategori];
+        if (!cat?.akumKode || !cat?.bebanKode) continue;
+
+        const akumAcc = await pool.query(
+          `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode=$2 LIMIT 1`, [t.id, cat.akumKode]
+        );
+        const bebanAcc = await pool.query(
+          `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode=$2 LIMIT 1`, [t.id, cat.bebanKode]
+        );
+        if (!akumAcc.rows.length || !bebanAcc.rows.length) continue;
+
+        const susut = Math.round(Number(as.harga_perolehan) / Number(as.umur_manfaat_bulan));
+        const nilaiTersisa = Number(as.harga_perolehan) - Number(as.akumulasi_penyusutan);
+        const aktualSusut = Math.min(susut, Math.max(0, nilaiTersisa));
+        if (aktualSusut <= 0) continue;
+
+        const bulanKe = Math.floor((Number(as.akumulasi_penyusutan) / susut)) + 1;
+        const keterangan = `Penyusutan ${as.nama} - Bulan ke-${bulanKe}`;
+        const noJurnal = `SUSUT-${as.kategori.slice(0, 3).toUpperCase()}-${now.toISOString().slice(2, 10).replace(/-/g, '')}`;
+
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          const je = await client.query(
+            `INSERT INTO journal_entries (tenant_id, tanggal, bulan, tahun, no_jurnal, keterangan, isposted, created_at)
+             VALUES ($1,$2,$3,$4,$5,$6,true,$7) RETURNING id`,
+            [t.id, now.toISOString().slice(0, 10), now.getMonth()+1, now.getFullYear(), noJurnal, keterangan, now]
+          );
+          await client.query(
+            `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit)
+             VALUES ($1,$2,$3,0), ($1,$4,0,$3)`,
+            [je.rows[0].id, bebanAcc.rows[0].id, aktualSusut, akumAcc.rows[0].id]
+          );
+          await client.query(
+            `UPDATE fixed_assets SET akumulasi_penyusutan = akumulasi_penyusutan + $1, updated_at = $2 WHERE id = $3`,
+            [aktualSusut, now, as.id]
+          );
+          await client.query('COMMIT');
+          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, susut: aktualSusut });
+        } catch (e: any) {
+          await client.query('ROLLBACK');
+          const msg = e.code === '23505' ? 'SKIP — sudah ada' : e.message;
+          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, susut: aktualSusut, error: msg });
+        } finally {
+          client.release();
+        }
+      }
+    }
+    return { ran: now.toISOString(), total: allResults.length, results: allResults };
+  });
 }
