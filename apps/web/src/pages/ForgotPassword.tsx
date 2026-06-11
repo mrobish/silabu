@@ -35,11 +35,11 @@ export default function ForgotPassword() {
 
           {/* LEFT — form */}
           <div className="relative z-10 p-6 sm:p-10 md:p-12">
-            <div className="mb-6">
+            <div className="mb-6 text-center md:text-left">
               <Link to="/" className="inline-block mb-6">
                 <img src="/logo.png" alt="SILABU DIGI" className="h-12 w-auto" />
               </Link>
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-50">
+              <div className="mx-auto md:mx-0 mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-50">
                 <svg className="h-7 w-7 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
               </div>
               <h1 className="text-2xl font-bold text-slate-900">Lupa Password</h1>

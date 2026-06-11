@@ -44,7 +44,7 @@ export default function RegisterEmail() {
 
           {/* LEFT — form */}
           <div className="relative z-10 p-6 sm:p-10 md:p-12">
-            <div className="mb-6">
+            <div className="mb-6 text-center md:text-left">
               <Link to="/" className="inline-block mb-6">
                 <img src="/logo.png" alt="SILABU DIGI" className="h-12 w-auto" />
               </Link>

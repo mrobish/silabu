@@ -63,7 +63,7 @@ export default function LoginChoice() {
 
           {/* RIGHT — form (slides in from right) */}
           <div className="relative z-10 p-6 sm:p-10 md:p-12 animate-slide-in-right stagger-1">
-            <div className="mb-8">
+            <div className="mb-8 text-center md:text-left">
               <Link to="/" className="inline-block mb-6">
                 <img src="/logo.png" alt="SILABU DIGI" className="h-12 w-auto" />
               </Link>
