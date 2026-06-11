@@ -496,7 +496,8 @@ function CoAPage() {
   const [filterJenis, setFilterJenis] = useState('');
   const [error, setError] = useState('');
   const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [addModal, setAddModal] = useState<{ parent: CoAAccount } | null>(null);
+  const [addModal, setAddModal] = useState<boolean>(false);
+  const [addParentId, setAddParentId] = useState('');
   const [addNama, setAddNama] = useState('');
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState('');
@@ -546,18 +547,19 @@ function CoAPage() {
   }
 
   async function handleAddSubAccount() {
-    if (!addModal || !addNama.trim()) return;
+    if (!addParentId || !addNama.trim()) return;
     setAdding(true);
     setAddError('');
     try {
       const res = await fetch('/api/accounting/coa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
-        body: JSON.stringify({ parent_id: addModal.parent.id, nama: addNama.trim() }),
+        body: JSON.stringify({ parent_id: addParentId, nama: addNama.trim() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menambah sub-akun');
-      setAddModal(null);
+      setAddModal(false);
+      setAddParentId('');
       setAddNama('');
       showToast('success', `Sub-akun "${addNama.trim()}" berhasil ditambahkan`);
       await fetchCoA();
@@ -612,7 +614,6 @@ function CoAPage() {
     return !!(a.isSystemDefault ?? a.is_system_default ?? a.isSeeded ?? a.is_seeded ?? true);
   }
 
-  const plusIconPath = 'M12 4v16m8-8H4';
   const trashIconPath = 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16';
   const closeIconPath = 'M6 18L18 6M6 6l12 12';
 
@@ -633,38 +634,64 @@ function CoAPage() {
         </div>
       )}
 
-      {/* Add Sub-Akun Modal */}
+      {/* Add Custom Account Modal */}
       {addModal && (
-        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => { setAddModal(null); setAddNama(''); setAddError(''); }}>
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => { setAddModal(false); setAddParentId(''); setAddNama(''); setAddError(''); }}>
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-6 space-y-5 animate-fade-in" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-slate-900">Tambah Sub-Akun</h3>
-              <button onClick={() => { setAddModal(null); setAddNama(''); setAddError(''); }} className="text-slate-400 hover:text-slate-600 transition"><Icon d={closeIconPath} className="w-5 h-5" /></button>
+              <h3 className="text-lg font-bold text-slate-900">Tambah Akun Custom</h3>
+              <button onClick={() => { setAddModal(false); setAddParentId(''); setAddNama(''); setAddError(''); }} className="text-slate-400 hover:text-slate-600 transition"><Icon d={closeIconPath} className="w-5 h-5" /></button>
             </div>
-            <div className="space-y-3">
-              <div className="rounded-xl bg-slate-50 px-4 py-3 border border-slate-100">
-                <p className="text-xs text-slate-400 font-medium">Induk</p>
-                <p className="text-sm font-semibold text-slate-800 font-mono">{addModal.parent.kode} — {addModal.parent.nama}</p>
-              </div>
+            <div className="space-y-4">
+              {/* Field 1: Induk Akun */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Nama Akun Baru</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Induk Akun <span className="text-red-500">*</span></label>
+                <select
+                  value={addParentId}
+                  onChange={e => { setAddParentId(e.target.value); setAddError(''); }}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2394a3b8%22%20strokeWidth%3D%222%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%3E%3C%2Fpath%3E%3C%2Fsvg%3E')] bg-[length:1.25rem] bg-[right_0.75rem_center] bg-no-repeat pr-10"
+                >
+                  <option value="">Pilih induk akun...</option>
+                  {accounts.filter(a => a.level === 3 && a.isActive).map(a => (
+                    <option key={a.id} value={a.id}>{a.kode} — {a.nama}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Field 2: Nama Akun */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Nama Akun <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={addNama}
                   onChange={e => { setAddNama(e.target.value); setAddError(''); }}
-                  placeholder="Masukkan nama akun..."
+                  placeholder="Contoh: Bank Jago, Bank BJB Desa, Kas Toko"
                   autoFocus
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
                   onKeyDown={e => { if (e.key === 'Enter') handleAddSubAccount(); }}
                 />
               </div>
+
+              {/* Field 3: Kode Akun (disabled) */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Kode Akun</label>
+                <input
+                  type="text"
+                  value=""
+                  disabled
+                  placeholder="Dibuat otomatis oleh sistem"
+                  className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-400 placeholder-slate-300 cursor-not-allowed"
+                />
+                <p className="mt-1 text-xs text-slate-400">Kode akun akan dibuat otomatis berdasarkan induk yang dipilih.</p>
+              </div>
+
               {addError && <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-700">{addError}</div>}
             </div>
             <div className="flex justify-end gap-3 pt-1">
-              <button onClick={() => { setAddModal(null); setAddNama(''); setAddError(''); }} className="rounded-xl px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">Batal</button>
-              <button onClick={handleAddSubAccount} disabled={adding || !addNama.trim()}
+              <button onClick={() => { setAddModal(false); setAddParentId(''); setAddNama(''); setAddError(''); }} className="rounded-xl px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">Batal</button>
+              <button onClick={handleAddSubAccount} disabled={adding || !addParentId || !addNama.trim()}
                 className="rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl disabled:opacity-50">
-                {adding ? 'Menambahkan...' : 'Tambah'}
+                {adding ? 'Menambahkan...' : 'Simpan'}
               </button>
             </div>
           </div>
@@ -696,9 +723,20 @@ function CoAPage() {
         </div>
       )}
 
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Bagan Akun (CoA)</h1>
-        <p className="mt-1 text-sm text-slate-500">Daftar seluruh akun akuntansi BUM Desa.</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Bagan Akun (CoA)</h1>
+          <p className="mt-1 text-sm text-slate-500">Daftar seluruh akun akuntansi BUM Desa.</p>
+        </div>
+        {accounts.length > 0 && (
+          <button
+            onClick={() => { setAddModal(true); setAddParentId(''); setAddNama(''); setAddError(''); }}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+            Tambah Akun Custom
+          </button>
+        )}
       </div>
       {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{error}</div>}
 
@@ -778,16 +816,6 @@ function CoAPage() {
                         </td>
                         <td className="px-5 py-3 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            {/* Tambah Sub-Akun button for Level 3 */}
-                            {isLvl3 && (
-                              <button
-                                onClick={() => { setAddModal({ parent: a }); setAddNama(''); setAddError(''); }}
-                                title="Tambah Sub-Akun"
-                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-emerald-600 hover:bg-emerald-50 opacity-0 group-hover:opacity-100 transition-opacity"
-                              >
-                                <Icon d={plusIconPath} className="w-4 h-4" />
-                              </button>
-                            )}
                             {/* Hapus button for user-created Level 4 accounts */}
                             {isLvl4 && !seeded && (
                               <button
