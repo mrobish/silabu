@@ -1,8 +1,18 @@
 import { useEffect, useState, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import PasswordForm from './PasswordForm';
 
-type Page = 'dashboard' | 'password';
+type Page = 'dashboard' | 'password' | 'langganan';
+
+type SubscriptionStatus = {
+  status?: 'trial' | 'active' | 'expired' | string;
+  active?: boolean;
+  daysLeft?: number;
+  price?: number;
+  payments?: Array<{ reference?: string; amount?: number; status?: string; created_at?: string; paid_at?: string; date?: string }>;
+  trial_ends_at?: string;
+  subscription_ends_at?: string;
+};
 
 const financeMenus = [
   { label: 'Buku Kas', soon: true, icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
@@ -15,6 +25,119 @@ function Icon({ d, className = 'w-5 h-5' }: { d: string; className?: string }) {
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}>
       <path d={d} />
     </svg>
+  );
+}
+
+const creditCardIcon = 'M3 10h18M7 15h1m4 0h3M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z';
+
+function formatRupiah(value?: number) {
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value || 0);
+}
+
+function formatDate(value?: string) {
+  if (!value) return '-';
+  return new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(value));
+}
+
+function LanggananPage() {
+  const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    setLoading(true);
+    fetch('/api/subscription/status', { headers: { Authorization: 'Bearer ' + token } })
+      .then(async r => {
+        const data = await r.json();
+        if (!r.ok || data.error) throw new Error(data.error || 'Gagal memuat status langganan');
+        setSubscription(data);
+      })
+      .catch(e => setError(e.message || 'Gagal memuat status langganan'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function checkout() {
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    setCheckoutLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/subscription/checkout', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Checkout gagal');
+      if (data.checkout_url) window.location.href = data.checkout_url;
+      else throw new Error('Checkout URL tidak tersedia');
+    } catch (e: any) {
+      setError(e.message || 'Checkout gagal');
+    } finally {
+      setCheckoutLoading(false);
+    }
+  }
+
+  if (loading) return <div className="rounded-2xl border border-slate-100 bg-white p-8 text-sm text-slate-500 shadow-sm">Memuat status langganan...</div>;
+
+  const status = subscription?.status || 'trial';
+  const isActive = status === 'active' || subscription?.active;
+  const isExpired = status === 'expired';
+  const daysLeft = Math.max(0, subscription?.daysLeft ?? 0);
+  const price = subscription?.price || 1000000;
+  const progress = status === 'trial' ? Math.max(0, Math.min(100, (daysLeft / 14) * 100)) : isActive ? 100 : 0;
+  const payments = subscription?.payments || [];
+
+  return (
+    <div className="space-y-8 animate-fade-in">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Langganan</h1>
+        <p className="mt-1 text-sm text-slate-500">Kelola masa trial, paket tahunan, checkout, dan riwayat pembayaran SILABU DIGI.</p>
+      </div>
+
+      {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{error}</div>}
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2 rounded-3xl border border-white/70 bg-white/80 p-6 shadow-sm backdrop-blur-xl">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <span className={'inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ' + (isActive ? 'bg-cyan-50 text-cyan-700' : isExpired ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700')}>
+                {isActive ? 'Active' : isExpired ? 'Expired' : 'Trial'}
+              </span>
+              <h2 className="mt-4 text-xl font-bold text-slate-900">Status Langganan</h2>
+              <p className="mt-1 text-sm text-slate-500">Harga paket: <span className="font-semibold text-slate-700">{formatRupiah(price)}/tahun</span></p>
+            </div>
+            <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-600 px-6 py-5 text-white shadow-lg shadow-emerald-500/20">
+              <p className="text-xs font-semibold uppercase tracking-wider text-white/70">Hari tersisa</p>
+              <p className="mt-1 text-5xl font-black">{isActive ? '-' : daysLeft}</p>
+            </div>
+          </div>
+          <div className="mt-7">
+            <div className="mb-2 flex justify-between text-xs font-semibold text-slate-500"><span>Progress trial</span><span>{Math.round(progress)}%</span></div>
+            <div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all" style={{ width: progress + '%' }} /></div>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-emerald-100 bg-gradient-to-br from-white to-emerald-50/70 p-6 shadow-sm">
+          <Icon d={creditCardIcon} className="w-10 h-10 text-emerald-600" />
+          <h3 className="mt-4 text-lg font-bold text-slate-900">{isActive ? 'Langganan Aktif' : 'Perpanjang Langganan'}</h3>
+          <p className="mt-2 text-sm text-slate-500">{isActive ? 'Langganan aktif sampai ' + formatDate(subscription?.subscription_ends_at) : 'Bayar paket tahunan agar akses tetap aktif setelah trial selesai.'}</p>
+          {!isActive && status === 'trial' && <p className="mt-3 text-xs text-emerald-700">Trial berakhir {formatDate(subscription?.trial_ends_at)}. Setelah itu akses butuh langganan aktif.</p>}
+          {!isActive && <button onClick={checkout} disabled={checkoutLoading} className="mt-6 w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl disabled:opacity-60">{checkoutLoading ? 'Memproses...' : 'Bayar Sekarang — Rp1.000.000'}</button>}
+        </div>
+      </div>
+
+      {payments.length > 0 && (
+        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+          <h3 className="font-bold text-slate-900">Riwayat Pembayaran</h3>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-xs uppercase tracking-wide text-slate-400"><tr><th className="py-3">Reference</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {payments.map((p, i) => <tr key={i} className="text-slate-600"><td className="py-3 font-mono text-xs">{p.reference || '-'}</td><td>{formatRupiah(p.amount)}</td><td><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold">{p.status || '-'}</span></td><td>{formatDate(p.paid_at || p.created_at || p.date)}</td></tr>)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -110,6 +233,15 @@ export default function AppDashboard() {
             {!collapsed && <span>Dashboard</span>}
           </button>
 
+          <button onClick={() => { setPage('langganan'); setSidebarOpen(false); }}
+            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'langganan' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
+            <span className="relative">
+              <Icon d={creditCardIcon} />
+              {page === 'langganan' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
+            </span>
+            {!collapsed && <span>Langganan</span>}
+          </button>
+
           {!collapsed && <p className="px-2.5 pt-4 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Keuangan</p>}
           {financeMenus.map((m, i) => (
             <span key={i} className={'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-400 cursor-not-allowed ' + (collapsed ? 'justify-center px-0' : '')}>
@@ -130,7 +262,7 @@ export default function AppDashboard() {
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-slate-600 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 transition" aria-label="Buka menu">
             <Icon d="M4 6h16M4 12h16M4 18h16" className="w-6 h-6" />
           </button>
-          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : 'Dashboard'}</h2>
+          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : 'Dashboard'}</h2>
           <div className="flex-1" />
           {/* Profile dropdown */}
           <div ref={profileRef} className="relative">
@@ -161,7 +293,7 @@ export default function AppDashboard() {
 
         {/* Content */}
         <div className="p-4 sm:p-6 lg:p-8">
-          {page === 'password' ? <PasswordForm /> : (
+          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : (
             <div className="space-y-8 animate-fade-in">
               {/* Trial banner */}
               {trialEnds && !isTrialExpired && (
@@ -169,7 +301,7 @@ export default function AppDashboard() {
                   <Icon d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <strong>Trial {daysLeft} hari lagi.</strong> Setelah habis, data tetap aman.{' '}
-                    <Link to="/app/langganan" className="font-semibold underline underline-offset-2 decoration-emerald-400">Berlangganan sekarang</Link>
+                    <button onClick={() => setPage('langganan')} className="font-semibold underline underline-offset-2 decoration-emerald-400">Perpanjang Sekarang</button>
                   </div>
                 </div>
               )}
@@ -177,8 +309,8 @@ export default function AppDashboard() {
                 <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/60 rounded-2xl text-amber-800 text-sm flex items-start gap-3 animate-slide-down">
                   <Icon d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <strong>Trial telah berakhir.</strong> Data tetap aman.{' '}
-                    <Link to="/app/langganan" className="font-semibold underline underline-offset-2 decoration-amber-400">Berlangganan</Link>
+                    <strong>Masa percobaan telah berakhir.</strong> Data tetap aman.{' '}
+                    <button onClick={() => setPage('langganan')} className="font-semibold underline underline-offset-2 decoration-amber-400">Perpanjang Sekarang</button>
                   </div>
                 </div>
               )}

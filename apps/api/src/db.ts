@@ -121,7 +121,31 @@ export async function initDatabase() {
     );
   `);
 
-  // Add UNIQUE on users.tenant_id if not exists (1 PIC per tenant)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS payments (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
+      user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+      provider varchar(32) NOT NULL DEFAULT 'tripay',
+      merchant_ref varchar(64) NOT NULL UNIQUE,
+      reference varchar(128),
+      amount integer NOT NULL DEFAULT 1000000,
+      fee integer NOT NULL DEFAULT 0,
+      total_amount integer NOT NULL DEFAULT 1000000,
+      status varchar(32) NOT NULL DEFAULT 'pending',
+      checkout_url text,
+      raw_payload jsonb,
+      paid_at timestamp,
+      expires_at timestamp,
+      created_at timestamp NOT NULL DEFAULT now(),
+      updated_at timestamp NOT NULL DEFAULT now()
+    );
+  `);
+
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_payments_tenant ON payments(tenant_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);`);
+
+  // Idempotent alterations for existing databases
   await pool.query(`
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_tenant_id_key') THEN

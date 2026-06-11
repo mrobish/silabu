@@ -8,6 +8,8 @@ import { registerRoutes } from './register-routes.js';
 import { settingsRoutes } from './settings-routes.js';
 import { adminRoutes } from './admin-routes.js';
 
+import { subscriptionRoutes } from './subscription-routes.js';
+
 const app = Fastify({ logger: true });
 const PORT = Number(process.env.PORT || 3010);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'https://silabu.ondesa.id';
@@ -21,6 +23,7 @@ await app.register(registerRoutes, { prefix: '/api/auth' });
 await app.register(authRoutes, { prefix: '/api/auth' });
 await app.register(settingsRoutes, { prefix: '/api/admin' });
 await app.register(adminRoutes, { prefix: '/api/admin' });
+await app.register(subscriptionRoutes, { prefix: '/api' });
 
 app.get('/api/health', async () => ({
   status: 'ok',
