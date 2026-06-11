@@ -833,4 +833,98 @@ export async function accountingRoutes(app: FastifyInstance) {
       mutasi,
     };
   });
+
+  // GET /accounting/laba-rugi — Laporan Laba Rugi multi-step (Golongan 4-7)
+  // Query params: start_date, end_date (YYYY-MM-DD). Exclude OPENING_BALANCE.
+  app.get('/laba-rugi', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const q = req.query as any;
+    const startDate = q.start_date || null;
+    const endDate = q.end_date || null;
+
+    // Agregasi saldo per akun postable Golongan 4-7, periode, exclude OPENING_BALANCE.
+    // Saldo akun sesuai saldonormal: D-normal → debit-kredit; K-normal → kredit-debit.
+    const params: any[] = [a.tenantId];
+    let dateClause = '';
+    if (startDate) { params.push(startDate); dateClause += ` AND je.tanggal >= $${params.length}`; }
+    if (endDate) { params.push(endDate); dateClause += ` AND je.tanggal <= $${params.length}`; }
+
+    const rows = await pool.query(
+      `SELECT c.kode, c.nama, c.saldonormal AS "saldoNormal",
+              COALESCE(SUM(
+                CASE WHEN c.saldonormal = 'D'
+                     THEN COALESCE(m.debit,0) - COALESCE(m.kredit,0)
+                     ELSE COALESCE(m.kredit,0) - COALESCE(m.debit,0)
+                END
+              ), 0) AS saldo
+       FROM chart_of_accounts c
+       LEFT JOIN (
+         SELECT jl.akun_id, jl.debit, jl.kredit
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id = jl.entry_id
+              AND je.tenant_id = $1
+              AND je.tipetransaksi <> 'OPENING_BALANCE'${dateClause}
+       ) m ON m.akun_id = c.id
+       WHERE c.tenant_id = $1 AND c.ispostable = true
+             AND LEFT(c.kode,1) IN ('4','5','6','7')
+       GROUP BY c.kode, c.nama, c.saldonormal
+       ORDER BY c.kode`,
+      params
+    );
+
+    type Akun = { kode: string; nama: string; saldoNormal: string; saldo: number };
+    const akunList: Akun[] = rows.rows.map((r: any) => ({
+      kode: r.kode, nama: r.nama, saldoNormal: r.saldoNormal, saldo: Number(r.saldo),
+    }));
+
+    const sumBy = (pred: (a: Akun) => boolean) =>
+      akunList.filter(pred).reduce((s, x) => s + x.saldo, 0);
+    const filterBy = (pred: (a: Akun) => boolean) => akunList.filter(pred);
+
+    // Pendapatan Operasional (Gol 4)
+    const pendapatanJasa = filterBy(a => a.kode.startsWith('4.1'));
+    const pendapatanDagang = filterBy(a => a.kode.startsWith('4.2') || a.kode.startsWith('4.3'));
+    const totalPendapatanOp = sumBy(a => a.kode.startsWith('4'));
+
+    // HPP (Gol 5)
+    const hpp = filterBy(a => a.kode.startsWith('5'));
+    const totalHpp = sumBy(a => a.kode.startsWith('5'));
+    const labaKotor = totalPendapatanOp - totalHpp;
+
+    // Beban Operasional (Gol 6)
+    const bebanOperasional = filterBy(a => a.kode.startsWith('6'));
+    const totalBebanOp = sumBy(a => a.kode.startsWith('6'));
+    const labaOperasional = labaKotor - totalBebanOp;
+
+    // Non-Operasional (Gol 7): 7.1 Pendapatan Lain (K), 7.2 Beban Lain (D), 7.3 Beban Pajak (D)
+    const pendapatanLain = filterBy(a => a.kode.startsWith('7.1'));
+    const totalPendapatanLain = sumBy(a => a.kode.startsWith('7.1'));
+    const bebanLain = filterBy(a => a.kode.startsWith('7.2'));
+    const totalBebanLain = sumBy(a => a.kode.startsWith('7.2'));
+    const bebanPajak = filterBy(a => a.kode.startsWith('7.3'));
+    const totalBebanPajak = sumBy(a => a.kode.startsWith('7.3'));
+
+    const labaSebelumPajak = labaOperasional + totalPendapatanLain - totalBebanLain;
+    const labaBersih = labaSebelumPajak - totalBebanPajak;
+
+    return {
+      periode: { startDate, endDate },
+      pendapatanOperasional: {
+        jasa: pendapatanJasa,
+        dagang: pendapatanDagang,
+        subtotal: totalPendapatanOp,
+      },
+      hpp: { detail: hpp, subtotal: totalHpp },
+      labaKotor,
+      bebanOperasional: { detail: bebanOperasional, subtotal: totalBebanOp },
+      labaOperasional,
+      nonOperasional: {
+        pendapatanLain: { detail: pendapatanLain, subtotal: totalPendapatanLain },
+        bebanLain: { detail: bebanLain, subtotal: totalBebanLain },
+      },
+      labaSebelumPajak,
+      pajak: { detail: bebanPajak, subtotal: totalBebanPajak },
+      labaBersih,
+    };
+  });
 }
