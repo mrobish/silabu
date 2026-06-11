@@ -1041,6 +1041,7 @@ function JurnalUmumPage() {
   const [error, setError] = useState('');
   const [tanggal, setTanggal] = useState(() => new Date().toISOString().slice(0, 10));
   const [keterangan, setKeterangan] = useState('');
+  const [referensi, setReferensi] = useState('');
   const [lines, setLines] = useState<{ akun_id: string; debit: string; kredit: string; keterangan: string; searchTerm?: string }[]>([
     { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' },
     { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' },
@@ -1067,7 +1068,23 @@ function JurnalUmumPage() {
   }, []);
 
   function updateLine(i: number, field: string, val: string) {
-    setLines(prev => prev.map((l, idx) => idx === i ? { ...l, [field]: val } : l));
+    setLines(prev => {
+      let next = prev.map((l, idx) => {
+        if (idx !== i) return l;
+        const updated = { ...l, [field]: val };
+        // Single-side rule: filling debit clears kredit, and vice versa
+        if (field === 'debit' && parseFloat(val) > 0) updated.kredit = '';
+        if (field === 'kredit' && parseFloat(val) > 0) updated.debit = '';
+        return updated;
+      });
+      // Auto-add an empty row when the LAST row starts getting filled
+      const last = next[next.length - 1];
+      const lastTouched = last.akun_id || last.debit || last.kredit || last.searchTerm;
+      if (i === next.length - 1 && lastTouched) {
+        next = [...next, { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' }];
+      }
+      return next;
+    });
   }
 
   function addLine() {
@@ -1082,7 +1099,7 @@ function JurnalUmumPage() {
   const totalKredit = lines.reduce((s, l) => s + (parseFloat(l.kredit) || 0), 0);
   const isBalanced = Math.abs(totalDebit - totalKredit) < 0.01;
   const validLines = lines.filter(l => l.akun_id && (parseFloat(l.debit) > 0 || parseFloat(l.kredit) > 0));
-  const canSubmit = isBalanced && validLines.length >= 2 && !!tanggal && !submitting;
+  const canSubmit = isBalanced && validLines.length >= 2 && !!tanggal && !!keterangan.trim() && !submitting;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1094,6 +1111,7 @@ function JurnalUmumPage() {
       const payload = {
         tanggal,
         keterangan,
+        referensi: referensi.trim() || undefined,
         lines: validLines.map(l => ({
           akun_id: l.akun_id,
           debit: parseFloat(l.debit) || 0,
@@ -1108,9 +1126,10 @@ function JurnalUmumPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan jurnal');
-      const no = data.no_jurnal || data.entry?.no_jurnal || '';
+      const no = data.no_jurnal || data.entry?.no_jurnal || data.jurnal?.no_jurnal || '';
       setShowSuccess(no ? 'Jurnal berhasil disimpan: ' + no : 'Jurnal berhasil disimpan');
       setKeterangan('');
+      setReferensi('');
       setLines([{ akun_id: '', debit: '', kredit: '', keterangan: '' }, { akun_id: '', debit: '', kredit: '', keterangan: '' }]);
       const refreshed = await fetch('/api/accounting/jurnal-umum?limit=20', { headers: { Authorization: 'Bearer ' + getToken() } });
       const rd = await refreshed.json();
@@ -1142,14 +1161,18 @@ function JurnalUmumPage() {
           <Icon d={jurnalIcon} className="w-5 h-5 text-emerald-600" />
           <h2 className="text-lg font-bold text-slate-900">Form Jurnal Baru</h2>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Tanggal</label>
             <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className={inputCls} required />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Keterangan</label>
-            <input type="text" value={keterangan} onChange={e => setKeterangan(e.target.value)} placeholder="Keterangan jurnal" className={inputCls} />
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Keterangan <span className="text-red-400">*</span></label>
+            <input type="text" value={keterangan} onChange={e => setKeterangan(e.target.value)} placeholder="Deskripsi transaksi..." className={inputCls} required />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">No. Referensi <span className="text-slate-400 font-normal">(opsional)</span></label>
+            <input type="text" value={referensi} onChange={e => setReferensi(e.target.value)} placeholder="No. kwitansi/nota" className={inputCls} />
           </div>
         </div>
 

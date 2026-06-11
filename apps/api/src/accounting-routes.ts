@@ -173,10 +173,11 @@ export async function accountingRoutes(app: FastifyInstance) {
     const body = req.body as any;
     if (!body) return { error: 'Body request kosong' };
 
-    const { tanggal, keterangan, lines } = body;
+    const { tanggal, keterangan, referensi, lines } = body;
 
     // Validate required fields
     if (!tanggal) return { error: 'Tanggal wajib diisi' };
+    if (!keterangan || !String(keterangan).trim()) return { error: 'Deskripsi/keterangan wajib diisi' };
     if (!lines || !Array.isArray(lines) || lines.length < 2) {
       return { error: 'Minimal 2 baris jurnal' };
     }
@@ -231,10 +232,10 @@ export async function accountingRoutes(app: FastifyInstance) {
 
       const entryRes = await client.query(
         `INSERT INTO journal_entries
-           (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, tipeTransaksi, isPosted, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,'jurnal_umum',true,$7)
+           (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, referensi, tipeTransaksi, isPosted, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'GENERAL',true,$8)
          RETURNING id`,
-        [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan || null, a.userId]
+        [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan || null, referensi || null, a.userId]
       );
       const entryId = entryRes.rows[0].id as string;
 
@@ -274,7 +275,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const limit = Math.min(parseInt(q.limit, 10) || 50, 200);
     const offset = parseInt(q.offset, 10) || 0;
 
-    const conditions: string[] = ['je.tenant_id=$1'];
+    const conditions: string[] = ['je.tenant_id=$1', "je.tipetransaksi <> 'OPENING_BALANCE'"];
     const params: any[] = [a.tenantId];
     let paramIdx = 2;
 
@@ -290,7 +291,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const where = conditions.join(' AND ');
     const r = await pool.query(
       `SELECT je.id, je.no_jurnal AS "noJurnal", je.tanggal, je.bulan, je.tahun,
-              je.keterangan, je.tipetransaksi AS "tipeTransaksi",
+              je.keterangan, je.referensi, je.tipetransaksi AS "tipeTransaksi",
               je.isposted AS "isPosted", je.islocked AS "isLocked",
               je.created_by AS "createdBy", je.created_at AS "createdAt"
        FROM journal_entries je
@@ -344,7 +345,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const r = await pool.query(
       `SELECT id, no_jurnal AS "noJurnal", tanggal, bulan, tahun,
-              keterangan, tipetransaksi AS "tipeTransaksi",
+              keterangan, referensi, tipetransaksi AS "tipeTransaksi",
               isposted AS "isPosted", islocked AS "isLocked",
               created_by AS "createdBy", created_at AS "createdAt"
        FROM journal_entries WHERE id=$1 AND tenant_id=$2`,

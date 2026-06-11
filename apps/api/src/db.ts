@@ -152,6 +152,7 @@ export async function initDatabase() {
       bulan integer NOT NULL,
       tahun integer NOT NULL,
       keterangan text,
+      referensi varchar(128),
       tipeTransaksi varchar(32) NOT NULL DEFAULT 'jurnal_umum',
       isPosted boolean NOT NULL DEFAULT true,
       isLocked boolean NOT NULL DEFAULT false,
@@ -282,4 +283,6 @@ export async function initDatabase() {
   await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS nomor_sertifikat varchar(128);`);
   await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS nomor_perdes varchar(128);`);
   await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS telpon varchar(64);`);
+
+  await pool.query(`ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS referensi varchar(128);`);
 }
