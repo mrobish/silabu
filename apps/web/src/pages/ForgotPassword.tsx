@@ -35,7 +35,24 @@ export default function ForgotPassword() {
 
           {/* LEFT — form */}
           <div className="relative z-10 p-6 sm:p-10 md:p-12">
-            <div className="mb-6 text-center md:text-left">
+
+            {/* MOBILE — gradient header banner */}
+            <div className="md:hidden -mx-6 sm:-mx-10 -mt-6 sm:-mt-10 mb-8 px-6 py-9 text-center text-white relative overflow-hidden"
+              style={{background: 'linear-gradient(to bottom right, #059669, #0891b2, #0e7490)'}}>
+              <div className="absolute inset-0 bg-slate-900/15" aria-hidden="true" />
+              <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10 blur-2xl" aria-hidden="true" />
+              <div className="absolute -bottom-16 -left-10 h-44 w-44 rounded-full bg-emerald-300/20 blur-2xl" aria-hidden="true" />
+              <div className="relative z-10">
+                <Link to="/" className="inline-block mb-4">
+                  <img src="/logo.png" alt="SILABU DIGI" className="h-14 w-auto mx-auto brightness-0 invert drop-shadow-lg" />
+                </Link>
+                <h1 className="text-2xl font-bold tracking-tight">Lupa Password</h1>
+                <p className="text-sm text-cyan-50/90 mt-1">Masukkan email untuk reset password</p>
+              </div>
+            </div>
+
+            {/* DESKTOP — form header */}
+            <div className="hidden md:block mb-6 text-center md:text-left">
               <Link to="/" className="inline-block mb-6">
                 <img src="/logo.png" alt="SILABU DIGI" className="h-12 w-auto" />
               </Link>
