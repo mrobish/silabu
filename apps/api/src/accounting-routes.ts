@@ -834,17 +834,10 @@ export async function accountingRoutes(app: FastifyInstance) {
     };
   });
 
-  // GET /accounting/laba-rugi — Laporan Laba Rugi multi-step (Golongan 4-7)
-  // Query params: start_date, end_date (YYYY-MM-DD). Exclude OPENING_BALANCE.
-  app.get('/laba-rugi', tenantGuard, async (req: FastifyRequest) => {
-    const a = (req as any).auth as AuthPayload;
-    const q = req.query as any;
-    const startDate = q.start_date || null;
-    const endDate = q.end_date || null;
-
-    // Agregasi saldo per akun postable Golongan 4-7, periode, exclude OPENING_BALANCE.
-    // Saldo akun sesuai saldonormal: D-normal → debit-kredit; K-normal → kredit-debit.
-    const params: any[] = [a.tenantId];
+  // ── Helper: hitung Laba Rugi (Golongan 4-7) untuk tenant pada periode tertentu.
+  // Dipakai oleh endpoint /laba-rugi DAN disuntikkan ke /neraca sebagai Laba Berjalan.
+  async function computeLabaRugi(tenantId: string, startDate: string | null, endDate: string | null) {
+    const params: any[] = [tenantId];
     let dateClause = '';
     if (startDate) { params.push(startDate); dateClause += ` AND je.tanggal >= $${params.length}`; }
     if (endDate) { params.push(endDate); dateClause += ` AND je.tanggal <= $${params.length}`; }
@@ -881,22 +874,18 @@ export async function accountingRoutes(app: FastifyInstance) {
       akunList.filter(pred).reduce((s, x) => s + x.saldo, 0);
     const filterBy = (pred: (a: Akun) => boolean) => akunList.filter(pred);
 
-    // Pendapatan Operasional (Gol 4)
     const pendapatanJasa = filterBy(a => a.kode.startsWith('4.1'));
     const pendapatanDagang = filterBy(a => a.kode.startsWith('4.2') || a.kode.startsWith('4.3'));
     const totalPendapatanOp = sumBy(a => a.kode.startsWith('4'));
 
-    // HPP (Gol 5)
     const hpp = filterBy(a => a.kode.startsWith('5'));
     const totalHpp = sumBy(a => a.kode.startsWith('5'));
     const labaKotor = totalPendapatanOp - totalHpp;
 
-    // Beban Operasional (Gol 6)
     const bebanOperasional = filterBy(a => a.kode.startsWith('6'));
     const totalBebanOp = sumBy(a => a.kode.startsWith('6'));
     const labaOperasional = labaKotor - totalBebanOp;
 
-    // Non-Operasional (Gol 7): 7.1 Pendapatan Lain (K), 7.2 Beban Lain (D), 7.3 Beban Pajak (D)
     const pendapatanLain = filterBy(a => a.kode.startsWith('7.1'));
     const totalPendapatanLain = sumBy(a => a.kode.startsWith('7.1'));
     const bebanLain = filterBy(a => a.kode.startsWith('7.2'));
@@ -909,11 +898,7 @@ export async function accountingRoutes(app: FastifyInstance) {
 
     return {
       periode: { startDate, endDate },
-      pendapatanOperasional: {
-        jasa: pendapatanJasa,
-        dagang: pendapatanDagang,
-        subtotal: totalPendapatanOp,
-      },
+      pendapatanOperasional: { jasa: pendapatanJasa, dagang: pendapatanDagang, subtotal: totalPendapatanOp },
       hpp: { detail: hpp, subtotal: totalHpp },
       labaKotor,
       bebanOperasional: { detail: bebanOperasional, subtotal: totalBebanOp },
@@ -925,6 +910,109 @@ export async function accountingRoutes(app: FastifyInstance) {
       labaSebelumPajak,
       pajak: { detail: bebanPajak, subtotal: totalBebanPajak },
       labaBersih,
+    };
+  }
+
+  // GET /accounting/laba-rugi — Laporan Laba Rugi multi-step (Golongan 4-7)
+  // Query params: start_date, end_date (YYYY-MM-DD). Exclude OPENING_BALANCE.
+  app.get('/laba-rugi', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const q = req.query as any;
+    return computeLabaRugi(a.tenantId as string, q.start_date || null, q.end_date || null);
+  });
+
+  // GET /accounting/neraca — Laporan Neraca / Balance Sheet (snapshot as-of end_date)
+  // Query param: end_date (YYYY-MM-DD). Default hari ini.
+  // Aset (Gol 1) = Kewajiban (Gol 2) + Ekuitas (Gol 3) + Laba Berjalan.
+  app.get('/neraca', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const q = req.query as any;
+    const endDate = q.end_date || new Date().toISOString().slice(0, 10);
+
+    // Agregasi SEMUA mutasi (termasuk OPENING_BALANCE) dari awal hingga end_date.
+    // Saldo akun sesuai saldonormal: D-normal → debit-kredit; K-normal → kredit-debit.
+    // Akumulasi Penyusutan (Gol 1, saldonormal K) otomatis mengurangi Aset Tetap.
+    const rows = await pool.query(
+      `SELECT c.kode, c.nama, c.saldonormal AS "saldoNormal",
+              COALESCE(SUM(
+                CASE WHEN c.saldonormal = 'D'
+                     THEN COALESCE(m.debit,0) - COALESCE(m.kredit,0)
+                     ELSE COALESCE(m.kredit,0) - COALESCE(m.debit,0)
+                END
+              ), 0) AS saldo
+       FROM chart_of_accounts c
+       LEFT JOIN (
+         SELECT jl.akun_id, jl.debit, jl.kredit
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id = jl.entry_id
+              AND je.tenant_id = $1
+              AND je.tanggal <= $2
+       ) m ON m.akun_id = c.id
+       WHERE c.tenant_id = $1 AND c.ispostable = true
+             AND LEFT(c.kode,1) IN ('1','2','3')
+       GROUP BY c.kode, c.nama, c.saldonormal
+       ORDER BY c.kode`,
+      [a.tenantId, endDate]
+    );
+
+    type Akun = { kode: string; nama: string; saldoNormal: string; saldo: number };
+    const akunList: Akun[] = rows.rows.map((r: any) => ({
+      kode: r.kode, nama: r.nama, saldoNormal: r.saldoNormal, saldo: Number(r.saldo),
+    }));
+
+    const sumBy = (pred: (a: Akun) => boolean) =>
+      akunList.filter(pred).reduce((s, x) => s + x.saldo, 0);
+    const filterBy = (pred: (a: Akun) => boolean) => akunList.filter(pred);
+
+    // ── AKTIVA (Golongan 1) ──
+    const asetLancar = filterBy(a => a.kode.startsWith('1.1'));
+    const asetTetap = filterBy(a => a.kode.startsWith('1.3'));
+    const asetLainnya = filterBy(a => a.kode.startsWith('1.') && !a.kode.startsWith('1.1') && !a.kode.startsWith('1.3'));
+    const totalAset = sumBy(a => a.kode.startsWith('1'));
+
+    // ── PASSIVA: Kewajiban (Golongan 2) ──
+    const kewajibanPendek = filterBy(a => a.kode.startsWith('2.1'));
+    const kewajibanPanjang = filterBy(a => a.kode.startsWith('2.2'));
+    const totalKewajiban = sumBy(a => a.kode.startsWith('2'));
+
+    // ── PASSIVA: Ekuitas (Golongan 3) + Laba Berjalan ──
+    const ekuitasAkun = filterBy(a => a.kode.startsWith('3'));
+    const totalEkuitasAkun = sumBy(a => a.kode.startsWith('3'));
+
+    // SUNTIKAN MAUT: Laba Berjalan dari awal terbentuk tenant s/d end_date
+    const lr = await computeLabaRugi(a.tenantId as string, null, endDate);
+    const labaBerjalan = lr.labaBersih;
+
+    const totalEkuitas = totalEkuitasAkun + labaBerjalan;
+    const totalPassiva = totalKewajiban + totalEkuitas;
+
+    // Validasi Emas: Total Aset === Total Passiva
+    const selisih = totalAset - totalPassiva;
+    const isBalanced = Math.abs(selisih) < 0.005; // toleransi pembulatan float
+
+    return {
+      asOf: endDate,
+      aktiva: {
+        asetLancar: { detail: asetLancar, subtotal: sumBy(a => a.kode.startsWith('1.1')) },
+        asetTetap: { detail: asetTetap, subtotal: sumBy(a => a.kode.startsWith('1.3')) },
+        asetLainnya: { detail: asetLainnya, subtotal: sumBy(a => a.kode.startsWith('1.') && !a.kode.startsWith('1.1') && !a.kode.startsWith('1.3')) },
+        totalAset,
+      },
+      passiva: {
+        kewajiban: {
+          jangkaPendek: { detail: kewajibanPendek, subtotal: sumBy(a => a.kode.startsWith('2.1')) },
+          jangkaPanjang: { detail: kewajibanPanjang, subtotal: sumBy(a => a.kode.startsWith('2.2')) },
+          subtotal: totalKewajiban,
+        },
+        ekuitas: {
+          detail: ekuitasAkun,
+          labaBerjalan,
+          subtotal: totalEkuitas,
+        },
+        totalPassiva,
+      },
+      isBalanced,
+      selisih,
     };
   });
 }
