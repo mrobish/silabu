@@ -822,9 +822,9 @@ function JurnalUmumPage() {
   const [error, setError] = useState('');
   const [tanggal, setTanggal] = useState(() => new Date().toISOString().slice(0, 10));
   const [keterangan, setKeterangan] = useState('');
-  const [lines, setLines] = useState<{ akun_id: string; debit: string; kredit: string; keterangan: string }[]>([
-    { akun_id: '', debit: '', kredit: '', keterangan: '' },
-    { akun_id: '', debit: '', kredit: '', keterangan: '' },
+  const [lines, setLines] = useState<{ akun_id: string; debit: string; kredit: string; keterangan: string; searchTerm?: string }[]>([
+    { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' },
+    { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' },
   ]);
   const [showSuccess, setShowSuccess] = useState('');
 
@@ -839,7 +839,7 @@ function JurnalUmumPage() {
       fetch('/api/accounting/jurnal-umum?limit=20', { headers: { Authorization: 'Bearer ' + t } }).then(r => r.json()),
     ])
       .then(([coaData, jurnalData]) => {
-        const all: CoAAccount[] = Array.isArray(coaData) ? coaData : coaData.accounts || [];
+        const all: CoAAccount[] = (Array.isArray(coaData) ? coaData : coaData.coa || coaData.accounts || []);
         setCoaAccounts(all.filter((a: CoAAccount) => a.isPostable ?? a.is_postable));
         setEntries(Array.isArray(jurnalData) ? jurnalData : jurnalData.entries || jurnalData.data || []);
       })
@@ -876,7 +876,7 @@ function JurnalUmumPage() {
         tanggal,
         keterangan,
         lines: validLines.map(l => ({
-          akun_id: Number(l.akun_id),
+          akun_id: l.akun_id,
           debit: parseFloat(l.debit) || 0,
           kredit: parseFloat(l.kredit) || 0,
           keterangan: l.keterangan,
@@ -944,10 +944,47 @@ function JurnalUmumPage() {
           {lines.map((line, i) => (
             <div key={i} className="grid grid-cols-12 gap-2 items-start">
               <div className="col-span-4">
-                <select value={line.akun_id} onChange={e => updateLine(i, 'akun_id', e.target.value)} className={selectCls}>
-                  <option value="">Pilih akun</option>
-                  {coaAccounts.map(a => <option key={a.id} value={a.id}>{a.kode} — {a.nama}</option>)}
-                </select>
+                {/* Account picker: searchable dropdown */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Cari akun..."
+                    value={line.searchTerm || ''}
+                    onChange={e => {
+                      const val = e.target.value;
+                      updateLine(i, 'searchTerm', val);
+                      // auto-select if exact match by kode
+                      const match = coaAccounts.find(a => a.kode === val || a.nama.toLowerCase() === val.toLowerCase());
+                      if (match) { updateLine(i, 'akun_id', String(match.id)); }
+                    }}
+                    className={selectCls}
+                  />
+                  {line.searchTerm && line.searchTerm.length > 0 && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-slate-200 max-h-48 overflow-y-auto">
+                      {(() => {
+                        const q = line.searchTerm.toLowerCase();
+                        const matches = coaAccounts.filter(a => a.kode.includes(q) || a.nama.toLowerCase().includes(q));
+                        if (matches.length === 0) {
+                          return <p className="px-3 py-2 text-sm text-slate-400 italic">Akun tidak ditemukan</p>;
+                        }
+                        return matches.map(a => (
+                          <button
+                            key={a.id}
+                            type="button"
+                            className={'w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 transition ' + (String(a.id) === line.akun_id ? 'bg-emerald-50 font-medium text-emerald-700' : 'text-slate-700')}
+                            onClick={() => {
+                              updateLine(i, 'searchTerm', a.kode + ' — ' + a.nama);
+                              updateLine(i, 'akun_id', String(a.id));
+                            }}
+                          >
+                            <span className="font-mono text-xs text-slate-400">{a.kode}</span>
+                            <span className="ml-2">{a.nama}</span>
+                          </button>
+                        ));
+                      })()}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="col-span-3">
                 <input type="number" step="0.01" min="0" placeholder="0" value={line.debit} onChange={e => updateLine(i, 'debit', e.target.value)} className={inputCls} />
