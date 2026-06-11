@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 export default function ChangePassword() {
   const navigate = useNavigate();
@@ -79,19 +79,40 @@ export default function ChangePassword() {
   if (!token) { navigate('/login'); return null; }
 
   return (
-    <div className="min-h-dvh flex items-center justify-center p-4 bg-slate-50">
-      <div className="w-full max-w-md">
-        <button onClick={() => navigate(-1)}
-          className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-cyan-600 transition-colors">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-          Kembali
-        </button>
-        <div className="rounded-2xl bg-white p-6 sm:p-8 shadow-sm border border-slate-100">
-          <h1 className="text-xl font-bold text-slate-900 text-center">Ubah Password</h1>
-          <p className="mt-1 text-sm text-slate-500 text-center">Masukkan password lama dan password baru</p>
-          {error && <p className="mt-4 text-sm font-medium text-red-600 bg-red-50 rounded-xl px-4 py-3">{error}</p>}
-          {success && <p className="mt-4 text-sm font-medium text-emerald-600 bg-emerald-50 rounded-xl px-4 py-3">{success}</p>}
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+    <div className="min-h-dvh bg-slate-50 flex items-center justify-center p-4">
+      <div className="grid w-full max-w-4xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60 md:grid-cols-2 animate-scale-in">
+
+        {/* LEFT — form */}
+        <div className="relative z-10 p-6 sm:p-10 md:p-12">
+
+          {/* MOBILE — gradient header banner */}
+          <div className="md:hidden -mx-6 sm:-mx-10 -mt-6 sm:-mt-10 mb-8 px-6 py-9 text-center text-white relative overflow-hidden"
+            style={{background: 'linear-gradient(to bottom right, #059669, #0891b2, #0e7490)'}}>
+            <div className="absolute inset-0 bg-slate-900/15" aria-hidden="true" />
+            <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10 blur-2xl" aria-hidden="true" />
+            <div className="absolute -bottom-16 -left-10 h-44 w-44 rounded-full bg-emerald-300/20 blur-2xl" aria-hidden="true" />
+            <div className="relative z-10">
+              <img src="/logo.png" alt="SILABU DIGI" className="h-14 w-auto mx-auto mb-4 brightness-0 invert drop-shadow-lg" />
+              <h1 className="text-2xl font-bold tracking-tight">Ubah Password</h1>
+              <p className="text-sm text-cyan-50/90 mt-1">Perbarui password akun Anda</p>
+            </div>
+          </div>
+
+          {/* DESKTOP — form header */}
+          <div className="hidden md:block mb-6">
+            <button onClick={() => navigate(-1)}
+              className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-cyan-600 transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+              Kembali
+            </button>
+            <h1 className="text-2xl font-bold text-slate-900">Ubah Password</h1>
+            <p className="mt-1 text-sm text-slate-500">Masukkan password lama dan password baru</p>
+          </div>
+
+          {error && <p className="mb-4 text-sm font-medium text-red-600 bg-red-50 rounded-xl px-4 py-3">{error}</p>}
+          {success && <p className="mb-4 text-sm font-medium text-emerald-600 bg-emerald-50 rounded-xl px-4 py-3">{success}</p>}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Password Lama</label>
               {input(oldPassword, setOldPassword, 'Password lama', showOld, 'old')}
@@ -105,11 +126,33 @@ export default function ChangePassword() {
               {input(confirmPassword, setConfirmPassword, 'Ulangi password baru', showConfirm, 'confirm')}
             </div>
             <button type="submit" disabled={loading}
-              className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 py-3 text-sm font-semibold text-white hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 transition">
+              className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 py-3 text-sm font-semibold text-white shadow-sm hover:shadow-md hover:translate-y-[-1px] transition-all disabled:opacity-50 disabled:translate-y-0">
               {loading ? 'Menyimpan...' : 'Simpan Password'}
             </button>
           </form>
+
+          <p className="mt-6 text-center md:text-left text-sm text-slate-500 md:hidden">
+            <button onClick={() => navigate(-1)} className="font-semibold text-cyan-600 hover:underline">Kembali</button>
+          </p>
         </div>
+
+        {/* RIGHT — branded gradient panel (desktop) */}
+        <div className="relative hidden md:flex flex-col overflow-hidden" style={{background: 'linear-gradient(to bottom right, #059669, #0891b2, #0e7490)'}}>
+          <div className="absolute inset-0 bg-slate-900/20" aria-hidden="true" />
+          <svg className="absolute -left-[1px] top-0 z-10 h-full w-[48px] overflow-visible text-white" preserveAspectRatio="none" viewBox="0 0 48 100" fill="currentColor" aria-hidden="true">
+            <path d="M48 0 C 24 15, 0 35, 24 50 C 48 65, 24 85, 48 100 L 0 100 L 0 0 Z" />
+          </svg>
+          <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/10 blur-2xl" aria-hidden="true" />
+          <div className="absolute -bottom-20 left-4 h-72 w-72 rounded-full bg-emerald-300/20 blur-3xl" aria-hidden="true" />
+          <div className="relative z-10 flex h-full flex-col items-center justify-center p-12 text-center text-white">
+            <img src="/logo.png" alt="" className="h-20 w-auto mb-8 brightness-0 invert opacity-95 drop-shadow-lg" aria-hidden="true" />
+            <h2 className="text-3xl font-bold tracking-tight">Jaga Keamanan</h2>
+            <p className="mt-3 max-w-xs text-sm text-cyan-50/90 leading-relaxed">
+              Ganti password secara berkala untuk menjaga keamanan akun BUM Desa Anda.
+            </p>
+          </div>
+        </div>
+
       </div>
     </div>
   );
