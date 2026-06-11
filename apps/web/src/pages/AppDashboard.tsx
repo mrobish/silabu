@@ -1,8 +1,9 @@
 import { Fragment, useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PasswordForm from './PasswordForm';
+import RincianSaldoPage from './RincianSaldoPage';
 
-type Page = 'dashboard' | 'password' | 'langganan' | 'profil' | 'coa' | 'saldo-awal' | 'jurnal';
+type Page = 'dashboard' | 'password' | 'langganan' | 'profil' | 'coa' | 'saldo-awal' | 'jurnal' | 'rincian-saldo';
 
 const officeIcon = 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m6-14h.01M9 11h.01M9 15h.01M15 7h.01M15 11h.01M15 15h.01M12 21v-4a1 1 0 011-1h-2a1 1 0 011 1v4z';
 
@@ -1311,7 +1312,7 @@ export default function AppDashboard() {
   const [collapsed, setCollapsed] = useState(false);
   const [page, setPageRaw] = useState<Page>(() => {
     const saved = localStorage.getItem('activePage');
-    const valid: Page[] = ['dashboard', 'password', 'langganan', 'profil', 'coa', 'saldo-awal', 'jurnal'];
+    const valid: Page[] = ['dashboard', 'password', 'langganan', 'profil', 'coa', 'saldo-awal', 'jurnal', 'rincian-saldo'];
     return (saved && valid.includes(saved as Page)) ? (saved as Page) : 'dashboard';
   });
   const setPage = (p: Page) => { localStorage.setItem('activePage', p); setPageRaw(p); };
@@ -1445,6 +1446,14 @@ export default function AppDashboard() {
             </span>
             {!collapsed && <span>Jurnal Umum</span>}
           </button>
+          <button onClick={() => { setPage('rincian-saldo'); setSidebarOpen(false); }}
+            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'rincian-saldo' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
+            <span className="relative">
+              <Icon d="M4 6h16M4 10h16M4 14h10M4 18h10" />
+              {page === 'rincian-saldo' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
+            </span>
+            {!collapsed && <span>Rincian Saldo</span>}
+          </button>
           {financeMenus.map((m, i) => (
             <span key={i} className={'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-400 cursor-not-allowed ' + (collapsed ? 'justify-center px-0' : '')}>
               <Icon d={m.icon} className="w-5 h-5 text-slate-300 shrink-0" />
@@ -1464,7 +1473,7 @@ export default function AppDashboard() {
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-slate-600 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 transition" aria-label="Buka menu">
             <Icon d="M4 6h16M4 12h16M4 18h16" className="w-6 h-6" />
           </button>
-          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : page === 'profil' ? 'Profil BUM Desa' : page === 'coa' ? 'Bagan Akun (CoA)' : page === 'saldo-awal' ? 'Setup Saldo Awal' : page === 'jurnal' ? 'Jurnal Umum' : 'Dashboard'}</h2>
+          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : page === 'profil' ? 'Profil BUM Desa' : page === 'coa' ? 'Bagan Akun (CoA)' : page === 'saldo-awal' ? 'Setup Saldo Awal' : page === 'jurnal' ? 'Jurnal Umum' : page === 'rincian-saldo' ? 'Rincian Saldo' : 'Dashboard'}</h2>
           <div className="flex-1" />
           {/* Profile dropdown */}
           <div ref={profileRef} className="relative">
@@ -1495,7 +1504,7 @@ export default function AppDashboard() {
 
         {/* Content */}
         <div className="p-4 sm:p-6 lg:p-8">
-          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : page === 'profil' ? <ProfilPage /> : page === 'coa' ? <CoAPage /> : page === 'saldo-awal' ? <SaldoAwalPage /> : page === 'jurnal' ? <JurnalUmumPage /> : (
+          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : page === 'profil' ? <ProfilPage /> : page === 'coa' ? <CoAPage /> : page === 'saldo-awal' ? <SaldoAwalPage /> : page === 'jurnal' ? <JurnalUmumPage /> : page === 'rincian-saldo' ? <RincianSaldoPage /> : (
             <div className="space-y-8 animate-fade-in">
               {/* Trial banner */}
               {trialEnds && !isTrialExpired && (

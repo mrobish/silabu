@@ -13,6 +13,7 @@ import { adminRoutes } from './admin-routes.js';
 import { subscriptionRoutes } from './subscription-routes.js';
 import { tenantRoutes } from './tenant-routes.js';
 import { accountingRoutes } from './accounting-routes.js';
+import { subledgerRoutes } from './subledger-routes.js';
 
 const app = Fastify({ logger: true });
 const PORT = Number(process.env.PORT || 3010);
@@ -32,6 +33,7 @@ await app.register(adminRoutes, { prefix: '/api/admin' });
 await app.register(subscriptionRoutes, { prefix: '/api' });
 await app.register(tenantRoutes, { prefix: '/api' });
 await app.register(accountingRoutes, { prefix: '/api/accounting' });
+await app.register(subledgerRoutes, { prefix: '/api/accounting' });
 
 
 app.get('/api/health', async () => ({
