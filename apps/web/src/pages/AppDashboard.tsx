@@ -1048,6 +1048,9 @@ function JurnalUmumPage() {
     { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' },
   ]);
   const [showSuccess, setShowSuccess] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteModal, setDeleteModal] = useState<JournalEntry | null>(null);
+  const [confirmText, setConfirmText] = useState('');
 
   function getToken() {
     return localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
@@ -1120,18 +1123,87 @@ function JurnalUmumPage() {
           keterangan: l.keterangan,
         })),
       };
-      const res = await fetch('/api/accounting/jurnal-umum', {
-        method: 'POST',
+      const res = await fetch(editingId ? '/api/accounting/jurnal-umum/' + editingId : '/api/accounting/jurnal-umum', {
+        method: editingId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan jurnal');
+      if (!res.ok) throw new Error(data.error || (data.message ? data.error + ' — ' + data.message : 'Gagal menyimpan jurnal'));
       const no = data.no_jurnal || data.entry?.no_jurnal || data.jurnal?.no_jurnal || '';
-      setShowSuccess(no ? 'Jurnal berhasil disimpan: ' + no : 'Jurnal berhasil disimpan');
+      setShowSuccess(editingId ? ('Jurnal berhasil diperbarui' + (no ? ': ' + no : '')) : (no ? 'Jurnal berhasil disimpan: ' + no : 'Jurnal berhasil disimpan'));
+      setEditingId(null);
       setKeterangan('');
       setReferensi('');
       setLines([{ akun_id: '', debit: '', kredit: '', keterangan: '' }, { akun_id: '', debit: '', kredit: '', keterangan: '' }]);
+      const refreshed = await fetch('/api/accounting/jurnal-umum?limit=20', { headers: { Authorization: 'Bearer ' + getToken() } });
+      const rd = await refreshed.json();
+      setEntries(Array.isArray(rd) ? rd : rd.entries || rd.data || []);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function startEdit(entryId: number | string) {
+    setError('');
+    setShowSuccess('');
+    try {
+      const res = await fetch('/api/accounting/jurnal-umum/' + entryId, { headers: { Authorization: 'Bearer ' + getToken() } });
+      const data = await res.json();
+      const j = data.jurnal || data;
+      if (!j || j.error) throw new Error(j?.error || 'Gagal memuat jurnal');
+      // Pagar UI: hanya GENERAL yang bisa diedit (backend juga menolak, ini hanya UX)
+      if (j.tipeTransaksi && j.tipeTransaksi !== 'GENERAL') {
+        setError('Saldo Awal hanya bisa diubah dari modul Saldo Awal.');
+        return;
+      }
+      setEditingId(String(entryId));
+      setTanggal((j.tanggal || '').slice(0, 10));
+      setKeterangan(j.keterangan || '');
+      setReferensi(j.referensi || '');
+      const loadedLines = (j.lines || []).map((l: any) => ({
+        akun_id: l.akunId || l.akun_id || '',
+        debit: Number(l.debit) > 0 ? String(Number(l.debit)) : '',
+        kredit: Number(l.kredit) > 0 ? String(Number(l.kredit)) : '',
+        keterangan: l.keterangan || '',
+        searchTerm: '',
+      }));
+      // Pastikan minimal 2 baris + 1 baris kosong untuk tambah
+      while (loadedLines.length < 2) loadedLines.push({ akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' });
+      loadedLines.push({ akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' });
+      setLines(loadedLines);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e: any) {
+      setError(e.message || 'Gagal memuat jurnal untuk diedit');
+    }
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setError('');
+    setKeterangan('');
+    setReferensi('');
+    setTanggal(new Date().toISOString().slice(0, 10));
+    setLines([{ akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' }, { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' }]);
+  }
+
+  async function handleDelete() {
+    if (!deleteModal) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/accounting/jurnal-umum/' + deleteModal.id, {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer ' + getToken() },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || (data.message || 'Gagal menghapus jurnal'));
+      setShowSuccess('Jurnal ' + deleteModal.no_jurnal + ' berhasil dihapus');
+      setDeleteModal(null);
+      setConfirmText('');
+      if (editingId === String(deleteModal.id)) cancelEdit();
       const refreshed = await fetch('/api/accounting/jurnal-umum?limit=20', { headers: { Authorization: 'Bearer ' + getToken() } });
       const rd = await refreshed.json();
       setEntries(Array.isArray(rd) ? rd : rd.entries || rd.data || []);
@@ -1159,8 +1231,9 @@ function JurnalUmumPage() {
 
       <form onSubmit={handleSubmit} className="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-sm backdrop-blur-xl space-y-5">
         <div className="flex items-center gap-2 mb-2">
-          <Icon d={jurnalIcon} className="w-5 h-5 text-emerald-600" />
-          <h2 className="text-lg font-bold text-slate-900">Form Jurnal Baru</h2>
+          <Icon d={jurnalIcon} className={'w-5 h-5 ' + (editingId ? 'text-amber-600' : 'text-emerald-600')} />
+          <h2 className="text-lg font-bold text-slate-900">{editingId ? 'Edit Jurnal' : 'Form Jurnal Baru'}</h2>
+          {editingId && <span className="ml-auto inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">Mode Edit</span>}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
@@ -1261,10 +1334,18 @@ function JurnalUmumPage() {
               {isBalanced ? 'Seimbang' : 'Belum Seimbang'}
             </span>
           </div>
-          <button type="submit" disabled={!canSubmit}
-            className="rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl disabled:opacity-40 disabled:cursor-not-allowed">
-            {submitting ? 'Menyimpan...' : 'Simpan Jurnal'}
-          </button>
+          <div className="flex gap-3 flex-wrap">
+            <button type="submit" disabled={!canSubmit}
+              className="rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl disabled:opacity-40 disabled:cursor-not-allowed">
+              {submitting ? 'Menyimpan...' : editingId ? 'Perbarui Jurnal' : 'Simpan Jurnal'}
+            </button>
+            {editingId && (
+              <button type="button" onClick={cancelEdit}
+                className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 hover:border-slate-400">
+                Batal
+              </button>
+            )}
+          </div>
         </div>
       </form>
 
@@ -1285,23 +1366,75 @@ function JurnalUmumPage() {
                     <th className="px-5 py-3.5 font-semibold">Tanggal</th>
                     <th className="px-5 py-3.5 font-semibold">Keterangan</th>
                     <th className="px-5 py-3.5 font-semibold text-right">Total</th>
+                    <th className="px-5 py-3.5 font-semibold text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {entries.map(e => (
-                    <tr key={e.id} className="hover:bg-slate-50/50 transition">
-                      <td className="px-5 py-3 font-mono text-xs font-semibold text-emerald-700">{e.no_jurnal}</td>
+                  {entries.map(e => {
+                    const noJurnal = e.no_jurnal || (e as any).noJurnal || '';
+                    const rowTotal = Number((e as any).total) || ((e as any).lines || []).reduce((s: number, l: any) => s + Number(l.debit || 0), 0);
+                    const isOpening = noJurnal.startsWith('OB') || (e as any).tipeTransaksi === 'OPENING_BALANCE';
+                    return (
+                    <tr key={e.id} className={'transition ' + (editingId === String(e.id) ? 'bg-amber-50/60' : 'hover:bg-slate-50/50')}>
+                      <td className="px-5 py-3 font-mono text-xs font-semibold text-emerald-700">{noJurnal}</td>
                       <td className="px-5 py-3 text-slate-600">{formatDate(e.tanggal)}</td>
                       <td className="px-5 py-3 text-slate-900">{e.keterangan || '-'}</td>
-                      <td className="px-5 py-3 text-right font-semibold text-slate-900">{formatRupiah(e.total)}</td>
+                      <td className="px-5 py-3 text-right font-semibold text-slate-900">{formatRupiah(rowTotal)}</td>
+                      <td className="px-5 py-3">
+                        {isOpening ? (
+                          <span className="block text-center text-xs text-slate-400 italic" title="Saldo Awal hanya bisa diubah dari modul Saldo Awal">Saldo Awal</span>
+                        ) : (
+                          <div className="flex items-center justify-center gap-2">
+                            <button type="button" onClick={() => startEdit(e.id)}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition" title="Edit jurnal">
+                              <Icon d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" className="w-4 h-4" />
+                            </button>
+                            <button type="button" onClick={() => { setDeleteModal(e); setConfirmText(''); }}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition" title="Hapus jurnal">
+                              <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
         )}
       </div>
+
+      {/* Delete confirmation modal */}
+      {deleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => { setDeleteModal(null); setConfirmText(''); }}>
+          <div className="mx-4 w-full max-w-md rounded-3xl border border-white/70 bg-white p-6 shadow-2xl backdrop-blur-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Hapus Jurnal</h3>
+                <p className="text-sm text-slate-500">Hapus jurnal <span className="font-mono font-bold text-red-600">{deleteModal.no_jurnal}</span> — {deleteModal.keterangan?.slice(0, 50) || '-'}</p>
+              </div>
+            </div>
+            <p className="mb-2 text-sm text-slate-700">Ketik <strong className="text-red-600">HAPUS</strong> untuk konfirmasi:</p>
+            <input type="text" value={confirmText} onChange={e => setConfirmText(e.target.value)} placeholder="Ketik HAPUS" autoFocus
+              className="w-full rounded-xl border border-red-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 transition focus:border-red-400 focus:ring-2 focus:ring-red-500/20 focus:outline-none mb-4" />
+            <div className="flex gap-3">
+              <button type="button" onClick={() => { setDeleteModal(null); setConfirmText(''); }}
+                className="flex-1 rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                Batal
+              </button>
+              <button type="button" disabled={confirmText !== 'HAPUS' || submitting} onClick={handleDelete}
+                className="flex-1 rounded-2xl bg-red-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-red-500/20 transition hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                {submitting ? 'Menghapus...' : 'Hapus Jurnal'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

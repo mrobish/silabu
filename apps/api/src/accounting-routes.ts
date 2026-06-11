@@ -361,6 +361,196 @@ export async function accountingRoutes(app: FastifyInstance) {
     return { jurnal: { ...r.rows[0], lines: lines.rows } };
   });
 
+  // PUT /accounting/jurnal-umum/:id — edit journal entry (GENERAL only, atomic)
+  app.put('/jurnal-umum/:id', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const { id } = req.params as { id: string };
+    const body = req.body as any;
+    if (!body) return reply.status(400).send({ error: 'Body request kosong' });
+
+    // 1. Entry must exist for this tenant
+    const existing = await pool.query(
+      `SELECT id, tipetransaksi AS "tipeTransaksi", islocked AS "isLocked", no_jurnal AS "noJurnal"
+       FROM journal_entries WHERE id=$1 AND tenant_id=$2`,
+      [id, a.tenantId]
+    );
+    if (!existing.rowCount) return reply.status(404).send({ error: 'Jurnal tidak ditemukan' });
+    const entry = existing.rows[0] as any;
+
+    // 2. PAGAR TIPE TRANSAKSI — hanya GENERAL yang boleh diedit
+    if (entry.tipeTransaksi !== 'GENERAL') {
+      return reply.status(403).send({
+        error: 'Transaksi ini tidak dapat diedit dari Jurnal Umum',
+        code: 'NOT_GENERAL',
+        message: 'Saldo Awal (OPENING_BALANCE) hanya bisa diubah dari modul Saldo Awal.',
+      });
+    }
+
+    // 3. PAGAR PERIODE TERKUNCI (untuk fitur Tutup Buku nanti)
+    if (entry.isLocked) {
+      return reply.status(403).send({
+        error: 'Jurnal berada di periode yang sudah ditutup',
+        code: 'PERIOD_LOCKED',
+        message: 'Transaksi di bulan yang sudah Tutup Buku tidak dapat diedit.',
+      });
+    }
+
+    const { tanggal, keterangan, referensi, lines } = body;
+
+    // 4. Validasi field — sama persis dengan POST
+    if (!tanggal) return reply.status(400).send({ error: 'Tanggal wajib diisi' });
+    if (!keterangan || !String(keterangan).trim()) return reply.status(400).send({ error: 'Deskripsi/keterangan wajib diisi' });
+    if (!lines || !Array.isArray(lines) || lines.length < 2) {
+      return reply.status(400).send({ error: 'Minimal 2 baris jurnal' });
+    }
+
+    const [tahunStr, bulanStr, _day] = (tanggal as string).split('-');
+    const tahun = parseInt(tahunStr, 10);
+    const bulan = parseInt(bulanStr, 10);
+    if (isNaN(tahun) || isNaN(bulan) || tahun < 2000 || tahun > 2100 || bulan < 1 || bulan > 12) {
+      return reply.status(400).send({ error: 'Format tanggal tidak valid (YYYY-MM-DD)' });
+    }
+
+    // 5. Validasi per baris — XOR (hanya satu sisi), non-negatif, angka
+    const akunIds = lines.map((l: any) => l.akun_id);
+    for (const l of lines) {
+      const debit = parseFloat(l.debit || '0');
+      const kredit = parseFloat(l.kredit || '0');
+      if (isNaN(debit) || isNaN(kredit)) return reply.status(400).send({ error: 'Debit/kredit harus angka' });
+      if (debit < 0 || kredit < 0) return reply.status(400).send({ error: 'Debit/kredit tidak boleh negatif' });
+      if (debit === 0 && kredit === 0) return reply.status(400).send({ error: 'Setiap baris harus memiliki debit atau kredit' });
+      if (debit > 0 && kredit > 0) return reply.status(400).send({ error: 'Satu baris hanya boleh debit ATAU kredit, tidak keduanya' });
+    }
+
+    // 6. Validasi Math.round debit = kredit
+    const totalDebit = lines.reduce((s: number, l: any) => s + parseFloat(l.debit || '0'), 0);
+    const totalKredit = lines.reduce((s: number, l: any) => s + parseFloat(l.kredit || '0'), 0);
+    if (Math.abs(totalDebit - totalKredit) > 0.01) {
+      return reply.status(400).send({ error: `Total debit (${totalDebit}) tidak sama dengan total kredit (${totalKredit})` });
+    }
+
+    // 7. Validasi akun milik tenant, aktif, postable
+    const akunRows = await pool.query(
+      `SELECT id, kode, ispostable AS "isPostable", isactive AS "isActive" FROM chart_of_accounts
+       WHERE id = ANY($1::uuid[]) AND tenant_id=$2`,
+      [akunIds, a.tenantId]
+    );
+    const validIds = new Set(akunRows.rows.map((r: any) => r.id));
+    for (const akunId of akunIds) {
+      if (!validIds.has(akunId)) return reply.status(400).send({ error: `Akun ${akunId} tidak ditemukan untuk tenant ini` });
+    }
+    for (const row of akunRows.rows) {
+      if (!(row as any).isActive) return reply.status(400).send({ error: `Akun ${(row as any).kode} tidak aktif` });
+      if (!(row as any).isPostable) return reply.status(400).send({ error: `Akun ${(row as any).kode} tidak dapat diposting` });
+    }
+
+    // 8. Atomic: BEGIN → update header → hapus baris lama → insert baris baru → COMMIT
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Re-cek tipe transaksi di dalam transaksi (defense-in-depth terhadap race)
+      const lock = await client.query(
+        `SELECT tipetransaksi AS "tipeTransaksi", islocked AS "isLocked"
+         FROM journal_entries WHERE id=$1 AND tenant_id=$2 FOR UPDATE`,
+        [id, a.tenantId]
+      );
+      if (!lock.rowCount || (lock.rows[0] as any).tipeTransaksi !== 'GENERAL' || (lock.rows[0] as any).isLocked) {
+        await client.query('ROLLBACK');
+        return reply.status(403).send({ error: 'Transaksi tidak dapat diedit', code: 'NOT_GENERAL_OR_LOCKED' });
+      }
+
+      await client.query(
+        `UPDATE journal_entries SET tanggal=$1, bulan=$2, tahun=$3, keterangan=$4, referensi=$5
+         WHERE id=$6 AND tenant_id=$7`,
+        [tanggal, bulan, tahun, keterangan || null, referensi || null, id, a.tenantId]
+      );
+
+      // Hapus semua baris lama, insert baris baru
+      await client.query(`DELETE FROM journal_lines WHERE entry_id=$1`, [id]);
+      for (const l of lines) {
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan)
+           VALUES ($1,$2,$3,$4,$5)`,
+          [id, l.akun_id, String(l.debit || '0'), String(l.kredit || '0'), l.keterangan || null]
+        );
+      }
+
+      await client.query('COMMIT');
+
+      const updated = await pool.query(`SELECT * FROM journal_entries WHERE id=$1`, [id]);
+      const updatedLines = await pool.query(
+        `SELECT * FROM journal_lines WHERE entry_id=$1 ORDER BY created_at`, [id]
+      );
+      return { jurnal: { ...updated.rows[0], lines: updatedLines.rows } };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
+  // DELETE /accounting/jurnal-umum/:id — delete journal entry (GENERAL only, atomic)
+  app.delete('/jurnal-umum/:id', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const { id } = req.params as { id: string };
+
+    // 1. Entry must exist for this tenant
+    const existing = await pool.query(
+      `SELECT id, tipetransaksi AS "tipeTransaksi", islocked AS "isLocked"
+       FROM journal_entries WHERE id=$1 AND tenant_id=$2`,
+      [id, a.tenantId]
+    );
+    if (!existing.rowCount) return reply.status(404).send({ error: 'Jurnal tidak ditemukan' });
+    const entry = existing.rows[0] as any;
+
+    // 2. PAGAR TIPE TRANSAKSI — hanya GENERAL
+    if (entry.tipeTransaksi !== 'GENERAL') {
+      return reply.status(403).send({
+        error: 'Transaksi ini tidak dapat dihapus dari Jurnal Umum',
+        code: 'NOT_GENERAL',
+        message: 'Saldo Awal (OPENING_BALANCE) hanya bisa diubah dari modul Saldo Awal.',
+      });
+    }
+
+    // 3. PAGAR PERIODE TERKUNCI
+    if (entry.isLocked) {
+      return reply.status(403).send({
+        error: 'Jurnal berada di periode yang sudah ditutup',
+        code: 'PERIOD_LOCKED',
+        message: 'Transaksi di bulan yang sudah Tutup Buku tidak dapat dihapus.',
+      });
+    }
+
+    // 4. Atomic: BEGIN → hapus lines → hapus entry → COMMIT
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const lock = await client.query(
+        `SELECT tipetransaksi AS "tipeTransaksi", islocked AS "isLocked"
+         FROM journal_entries WHERE id=$1 AND tenant_id=$2 FOR UPDATE`,
+        [id, a.tenantId]
+      );
+      if (!lock.rowCount || (lock.rows[0] as any).tipeTransaksi !== 'GENERAL' || (lock.rows[0] as any).isLocked) {
+        await client.query('ROLLBACK');
+        return reply.status(403).send({ error: 'Transaksi tidak dapat dihapus', code: 'NOT_GENERAL_OR_LOCKED' });
+      }
+
+      await client.query(`DELETE FROM journal_lines WHERE entry_id=$1`, [id]);
+      await client.query(`DELETE FROM journal_entries WHERE id=$1 AND tenant_id=$2`, [id, a.tenantId]);
+
+      await client.query('COMMIT');
+      return { success: true, deleted: id };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
   // ─── Saldo Awal (Opening Balance) ─────────────────────────────────
 
   // GET /accounting/saldo-awal — akun riil (Gol 1/2/3, level 4) + status + existing values
