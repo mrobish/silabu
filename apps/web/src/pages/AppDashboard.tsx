@@ -92,6 +92,11 @@ export default function AppDashboard() {
               </div>
             )}
           </div>
+          <button onClick={() => setCollapsed(!collapsed)}
+            className="hidden lg:flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+            title={collapsed ? 'Perluas sidebar' : 'Sembunyikan sidebar'}>
+            <Icon d={collapsed ? 'M13 5l7 7-7 7M5 5l7 7-7 7' : 'M11 19l-7-7 7-7M19 19l-7-7 7-7'} className="w-4 h-4" />
+          </button>
           {!collapsed && (
             <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition">
               <Icon d="M6 18L18 6M6 6l12 12" className="w-5 h-5" />
@@ -122,18 +127,13 @@ export default function AppDashboard() {
           ))}
         </nav>
 
-        {/* Collapse toggle */}
-        <button onClick={() => setCollapsed(!collapsed)}
-          className="hidden lg:flex items-center justify-center h-10 border-t border-slate-100 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition text-xs gap-1.5">
-          <Icon d="M11 19l-7-7 7-7m8 14l-7-7 7-7" className={'w-4 h-4 transition-transform duration-300 ' + (collapsed ? 'rotate-180' : '')} />
-          {!collapsed && <span>Sembunyikan</span>}
-        </button>
+
       </aside>
 
       {/* Main */}
       <main className={MAIN_ML + ' min-h-screen transition-all duration-300 ease-in-out'}>
         {/* Header */}
-        <header className="sticky top-0 z-30 h-16 bg-white/80 backdrop-blur-md border-b border-slate-100/60 flex items-center gap-3 px-4 sm:px-6">
+        <header className="sticky top-0 z-50 h-16 bg-white/80 backdrop-blur-md border-b border-slate-100/60 flex items-center gap-3 px-4 sm:px-6">
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-slate-600 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 transition" aria-label="Buka menu">
             <Icon d="M4 6h16M4 12h16M4 18h16" className="w-6 h-6" />
           </button>
@@ -169,7 +169,7 @@ export default function AppDashboard() {
         {/* Content */}
         <div className="p-4 sm:p-6 lg:p-8">
           {page === 'password' ? <PasswordForm /> : (
-            <div className="space-y-6 animate-fade-in">
+            <div className="space-y-8 animate-fade-in">
               {/* Trial banner */}
               {trialEnds && !isTrialExpired && (
                 <div className="p-4 bg-gradient-to-r from-emerald-50 to-cyan-50 border border-emerald-200/60 rounded-2xl text-emerald-800 text-sm flex items-start gap-3 animate-slide-down">
@@ -203,7 +203,7 @@ export default function AppDashboard() {
               </div>
 
               {/* Stat cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 {[
                   { label: 'Total Pemasukan', value: 'Rp0', trend: 0, d: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
                   { label: 'Total Pengeluaran', value: 'Rp0', trend: 0, d: 'M13 17h8m0 0V9m0 8l-8-8-4 4-6-6' },
@@ -221,8 +221,8 @@ export default function AppDashboard() {
                         </span>
                       )}
                     </div>
-                    <p className="text-2xl font-bold text-slate-900">{s.value}</p>
-                    <p className="text-xs text-slate-400 mt-1">{s.label}</p>
+                    <p className="text-3xl font-semibold text-slate-900">{s.value}</p>
+                    <p className="text-sm font-medium text-slate-500 mt-1">{s.label}</p>
                   </div>
                 ))}
               </div>
@@ -235,11 +235,11 @@ export default function AppDashboard() {
                     <p className="text-xs text-slate-400 mt-0.5">Ringkasan pemasukan {'\u0026'} pengeluaran</p>
                   </div>
                   <div className="flex items-center gap-3 text-xs text-slate-500">
-                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Pemasukan</span>
-                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-cyan-500" /> Pengeluaran</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-1 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500" /> Pemasukan</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-1 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500" /> Pengeluaran</span>
                   </div>
                 </div>
-                <div className="h-48 sm:h-56 bg-gradient-to-b from-slate-50 to-white rounded-xl border border-slate-100 flex items-center justify-center">
+                <div className="h-48 sm:h-56 bg-slate-50/50 rounded-xl border border-slate-100 flex items-center justify-center">
                   <div className="flex flex-col items-center gap-2 text-slate-300">
                     <Icon d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" className="w-8 h-8" />
                     <p className="text-sm">Grafik akan tersedia setelah ada data transaksi</p>
