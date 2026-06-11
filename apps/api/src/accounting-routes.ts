@@ -168,25 +168,25 @@ export async function accountingRoutes(app: FastifyInstance) {
   }
 
   // POST /accounting/jurnal-umum — create journal entry
-  app.post('/jurnal-umum', mutationGuard, async (req: FastifyRequest) => {
+  app.post('/jurnal-umum', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
     const body = req.body as any;
-    if (!body) return { error: 'Body request kosong' };
+    if (!body) return reply.status(400).send({ error: 'Body request kosong' });
 
     const { tanggal, keterangan, referensi, lines } = body;
 
     // Validate required fields
-    if (!tanggal) return { error: 'Tanggal wajib diisi' };
-    if (!keterangan || !String(keterangan).trim()) return { error: 'Deskripsi/keterangan wajib diisi' };
+    if (!tanggal) return reply.status(400).send({ error: 'Tanggal wajib diisi' });
+    if (!keterangan || !String(keterangan).trim()) return reply.status(400).send({ error: 'Deskripsi/keterangan wajib diisi' });
     if (!lines || !Array.isArray(lines) || lines.length < 2) {
-      return { error: 'Minimal 2 baris jurnal' };
+      return reply.status(400).send({ error: 'Minimal 2 baris jurnal' });
     }
 
     const [tahunStr, bulanStr, _day] = (tanggal as string).split('-');
     const tahun = parseInt(tahunStr, 10);
     const bulan = parseInt(bulanStr, 10);
     if (isNaN(tahun) || isNaN(bulan) || tahun < 2000 || tahun > 2100 || bulan < 1 || bulan > 12) {
-      return { error: 'Format tanggal tidak valid (YYYY-MM-DD)' };
+      return reply.status(400).send({ error: 'Format tanggal tidak valid (YYYY-MM-DD)' });
     }
 
     // Validate each line
@@ -194,16 +194,17 @@ export async function accountingRoutes(app: FastifyInstance) {
     for (const l of lines) {
       const debit = parseFloat(l.debit || '0');
       const kredit = parseFloat(l.kredit || '0');
-      if (isNaN(debit) || isNaN(kredit)) return { error: 'Debit/kredit harus angka' };
-      if (debit < 0 || kredit < 0) return { error: 'Debit/kredit tidak boleh negatif' };
-      if (debit === 0 && kredit === 0) return { error: 'Setiap baris harus memiliki debit atau kredit' };
+      if (isNaN(debit) || isNaN(kredit)) return reply.status(400).send({ error: 'Debit/kredit harus angka' });
+      if (debit < 0 || kredit < 0) return reply.status(400).send({ error: 'Debit/kredit tidak boleh negatif' });
+      if (debit === 0 && kredit === 0) return reply.status(400).send({ error: 'Setiap baris harus memiliki debit atau kredit' });
+      if (debit > 0 && kredit > 0) return reply.status(400).send({ error: 'Satu baris hanya boleh debit ATAU kredit, tidak keduanya' });
     }
 
     // Validate debit = credit
     const totalDebit = lines.reduce((s: number, l: any) => s + parseFloat(l.debit || '0'), 0);
     const totalKredit = lines.reduce((s: number, l: any) => s + parseFloat(l.kredit || '0'), 0);
     if (Math.abs(totalDebit - totalKredit) > 0.01) {
-      return { error: `Total debit (${totalDebit}) tidak sama dengan total kredit (${totalKredit})` };
+      return reply.status(400).send({ error: `Total debit (${totalDebit}) tidak sama dengan total kredit (${totalKredit})` });
     }
 
     // Validate all akun belong to tenant, are active, and isPostable
@@ -214,11 +215,11 @@ export async function accountingRoutes(app: FastifyInstance) {
     );
     const validIds = new Set(akunRows.rows.map((r: any) => r.id));
     for (const akunId of akunIds) {
-      if (!validIds.has(akunId)) return { error: `Akun ${akunId} tidak ditemukan untuk tenant ini` };
+      if (!validIds.has(akunId)) return reply.status(400).send({ error: `Akun ${akunId} tidak ditemukan untuk tenant ini` });
     }
     for (const row of akunRows.rows) {
-      if (!(row as any).isActive) return { error: `Akun ${(row as any).kode} tidak aktif` };
-      if (!(row as any).isPostable) return { error: `Akun ${(row as any).kode} tidak dapat diposting` };
+      if (!(row as any).isActive) return reply.status(400).send({ error: `Akun ${(row as any).kode} tidak aktif` });
+      if (!(row as any).isPostable) return reply.status(400).send({ error: `Akun ${(row as any).kode} tidak dapat diposting` });
     }
 
     // Generate no_jurnal and ensure period
