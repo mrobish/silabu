@@ -2,7 +2,9 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PasswordForm from './PasswordForm';
 
-type Page = 'dashboard' | 'password' | 'langganan';
+type Page = 'dashboard' | 'password' | 'langganan' | 'profil';
+
+const officeIcon = 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m6-14h.01M9 11h.01M9 15h.01M15 7h.01M15 11h.01M15 15h.01M12 21v-4a1 1 0 011-1h-2a1 1 0 011 1v4z';
 
 type SubscriptionStatus = {
   status?: 'trial' | 'active' | 'expired' | string;
@@ -141,6 +143,316 @@ function LanggananPage() {
   );
 }
 
+function ProfilPage() {
+  const [form, setForm] = useState({
+    nama_bumdes: '',
+    npwp: '',
+    nomor_sertifikat_badan_hukum: '',
+    nomor_perdes_pendirian: '',
+    tahun_berdiri: '',
+    telepon: '',
+    provinsi: '',
+    kabupaten: '',
+    kecamatan: '',
+    desa: '',
+    penasihat: '',
+    direktur: '',
+    sekretaris: '',
+    bendahara: '',
+    pengawas1: '',
+    pengawas2: '',
+  });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    setLoading(true);
+    fetch('/api/tenant/profile', { headers: { Authorization: 'Bearer ' + token } })
+      .then(async r => {
+        const data = await r.json();
+        if (!r.ok || data.error) throw new Error(data.error || 'Gagal memuat profil');
+        const p = data.profile || data;
+        setForm(prev => ({
+          ...prev,
+          nama_bumdes: p.nama_bumdes || '',
+          npwp: p.npwp || '',
+          nomor_sertifikat_badan_hukum: p.nomor_sertifikat_badan_hukum || '',
+          nomor_perdes_pendirian: p.nomor_perdes_pendirian || '',
+          tahun_berdiri: p.tahun_berdiri || '',
+          telepon: p.telepon || '',
+          provinsi: p.provinsi || '',
+          kabupaten: p.kabupaten || '',
+          kecamatan: p.kecamatan || '',
+          desa: p.desa || '',
+          penasihat: p.penasihat || '',
+          direktur: p.direktur || '',
+          sekretaris: p.sekretaris || '',
+          bendahara: p.bendahara || '',
+          pengawas1: p.pengawas1 || '',
+          pengawas2: p.pengawas2 || '',
+        }));
+        if (p.logo_url) setLogoPreview(p.logo_url);
+      })
+      .catch(e => setMessage({ type: 'error', text: e.message || 'Gagal memuat profil' }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function handleChange(key: string, value: string) {
+    setForm(prev => ({ ...prev, [key]: value }));
+  }
+
+  function handleLogoDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    validateAndSetLogo(file);
+  }
+
+  function handleLogoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) validateAndSetLogo(file);
+  }
+
+  function validateAndSetLogo(file: File) {
+    setLogoError('');
+    const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+    if (!allowed.includes(file.type)) {
+      setLogoError('Format file harus PNG, JPG, WEBP, atau SVG');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoError('Ukuran file maksimal 2MB');
+      return;
+    }
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  }
+
+  async function handleUploadLogo() {
+    if (!logoFile) return;
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    setUploading(true);
+    setMessage(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', logoFile);
+      const res = await fetch('/api/tenant/logo', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Gagal upload logo');
+      setLogoFile(null);
+      setMessage({ type: 'success', text: 'Logo berhasil diupload' });
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message || 'Gagal upload logo' });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/tenant/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Gagal menyimpan profil');
+      setMessage({ type: 'success', text: 'Profil berhasil disimpan' });
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message || 'Gagal menyimpan profil' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <div className="rounded-2xl border border-slate-100 bg-white p-8 text-sm text-slate-500 shadow-sm">Memuat profil...</div>;
+
+  const sectionStyle = 'rounded-3xl border border-white/70 bg-white/80 p-6 shadow-sm backdrop-blur-xl';
+  const labelStyle = 'block text-sm font-semibold text-slate-700 mb-1.5';
+  const inputStyle = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none';
+  const gridCols = 'grid grid-cols-1 sm:grid-cols-2 gap-5';
+
+  const required = (label: string) => (
+    <span>{label} <span className="text-red-500">*</span></span>
+  );
+
+  return (
+    <div className="space-y-8 animate-fade-in">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Profil BUM Desa</h1>
+        <p className="mt-1 text-sm text-slate-500">Kelola informasi BUM Desa dan pelaksana operasional.</p>
+      </div>
+
+      {message && (
+        <div className={'rounded-2xl border p-4 text-sm font-medium ' + (message.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700')}>
+          {message.text}
+        </div>
+      )}
+
+      <form onSubmit={handleSave}>
+        {/* Section 1: Info BUM Desa */}
+        <div className={sectionStyle + ' mb-6'}>
+          <div className="flex items-center gap-2 mb-5">
+            <Icon d={officeIcon} className="w-5 h-5 text-emerald-600" />
+            <h2 className="text-lg font-bold text-slate-900">Info BUM Desa</h2>
+          </div>
+
+          <div className="space-y-5">
+            {/* Logo */}
+            <div>
+              <label className={labelStyle}>{required('Logo BUM Desa')}</label>
+              {logoError && <p className="mb-2 text-xs text-red-500">{logoError}</p>}
+              {logoPreview && (
+                <div className="mb-3">
+                  <img src={logoPreview} alt="Logo preview" className="h-24 w-24 rounded-xl border border-slate-200 object-cover shadow-sm" />
+                </div>
+              )}
+              <div
+                onDragOver={e => e.preventDefault()}
+                onDrop={handleLogoDrop}
+                className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/50 p-6 text-center transition hover:border-emerald-400 hover:bg-emerald-50/30 cursor-pointer"
+                onClick={() => document.getElementById('logo-input')?.click()}
+              >
+                <Icon d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" className="w-8 h-8 text-slate-400" />
+                <p className="text-sm font-medium text-slate-500">Seret logo ke sini atau klik untuk upload</p>
+                <p className="text-[11px] text-slate-400">PNG, JPG, WEBP, SVG — maks 2MB</p>
+                <input id="logo-input" type="file" accept=".png,.jpg,.jpeg,.webp,.svg" className="hidden" onChange={handleLogoSelect} />
+              </div>
+              {logoFile && (
+                <button type="button" onClick={handleUploadLogo} disabled={uploading}
+                  className="mt-3 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2 text-sm font-bold text-white shadow-md hover:shadow-lg transition disabled:opacity-60">
+                  {uploading ? 'Mengupload...' : 'Upload Logo'}
+                </button>
+              )}
+            </div>
+
+            <div className={gridCols}>
+              <div className="sm:col-span-2">
+                <label className={labelStyle}>{required('Nama BUM Desa')}</label>
+                <input type="text" className={inputStyle} placeholder="Contoh: BUM Desa Makmur Jaya"
+                  value={form.nama_bumdes} onChange={e => handleChange('nama_bumdes', e.target.value)} required />
+              </div>
+              <div>
+                <label className={labelStyle}>NPWP</label>
+                <input type="text" className={inputStyle} placeholder="00.000.000.0-000.000"
+                  value={form.npwp} onChange={e => handleChange('npwp', e.target.value)} />
+              </div>
+              <div>
+                <label className={labelStyle}>Nomor Sertifikat Badan Hukum</label>
+                <input type="text" className={inputStyle} placeholder="AHU-000000.AA.00.00"
+                  value={form.nomor_sertifikat_badan_hukum} onChange={e => handleChange('nomor_sertifikat_badan_hukum', e.target.value)} />
+              </div>
+              <div>
+                <label className={labelStyle}>Nomor Perdes Pendirian</label>
+                <input type="text" className={inputStyle} placeholder="Contoh: 01/Perdes/2023"
+                  value={form.nomor_perdes_pendirian} onChange={e => handleChange('nomor_perdes_pendirian', e.target.value)} />
+              </div>
+              <div>
+                <label className={labelStyle}>{required('Tahun Berdiri')}</label>
+                <input type="number" className={inputStyle} placeholder="2020"
+                  value={form.tahun_berdiri} onChange={e => handleChange('tahun_berdiri', e.target.value)} required />
+              </div>
+              <div>
+                <label className={labelStyle}>Telepon BUM Desa</label>
+                <input type="tel" className={inputStyle} placeholder="0812-3456-7890"
+                  value={form.telepon} onChange={e => handleChange('telepon', e.target.value)} />
+              </div>
+            </div>
+
+            {/* Wilayah */}
+            <h3 className="text-sm font-bold text-slate-800 mt-2">Wilayah</h3>
+            <div className={gridCols}>
+              <div>
+                <label className={labelStyle}>{required('Provinsi')}</label>
+                <input type="text" className={inputStyle} placeholder="Contoh: Jawa Barat"
+                  value={form.provinsi} onChange={e => handleChange('provinsi', e.target.value)} required />
+              </div>
+              <div>
+                <label className={labelStyle}>{required('Kabupaten')}</label>
+                <input type="text" className={inputStyle} placeholder="Contoh: Kabupaten Garut"
+                  value={form.kabupaten} onChange={e => handleChange('kabupaten', e.target.value)} required />
+              </div>
+              <div>
+                <label className={labelStyle}>{required('Kecamatan')}</label>
+                <input type="text" className={inputStyle} placeholder="Contoh: Kecamatan Cilawu"
+                  value={form.kecamatan} onChange={e => handleChange('kecamatan', e.target.value)} required />
+              </div>
+              <div>
+                <label className={labelStyle}>{required('Desa')}</label>
+                <input type="text" className={inputStyle} placeholder="Contoh: Desa Mekarjaya"
+                  value={form.desa} onChange={e => handleChange('desa', e.target.value)} required />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 2: Pelaksana Operasional */}
+        <div className={sectionStyle}>
+          <div className="flex items-center gap-2 mb-5">
+            <Icon d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" className="w-5 h-5 text-emerald-600" />
+            <h2 className="text-lg font-bold text-slate-900">Pelaksana Operasional</h2>
+          </div>
+
+          <div className={gridCols}>
+            <div>
+              <label className={labelStyle}>{required('Penasihat (Kepala Desa)')}</label>
+              <input type="text" className={inputStyle} placeholder="Nama lengkap penasihat"
+                value={form.penasihat} onChange={e => handleChange('penasihat', e.target.value)} required />
+            </div>
+            <div>
+              <label className={labelStyle}>{required('Direktur')}</label>
+              <input type="text" className={inputStyle} placeholder="Nama lengkap direktur"
+                value={form.direktur} onChange={e => handleChange('direktur', e.target.value)} required />
+            </div>
+            <div>
+              <label className={labelStyle}>{required('Sekretaris')}</label>
+              <input type="text" className={inputStyle} placeholder="Nama lengkap sekretaris"
+                value={form.sekretaris} onChange={e => handleChange('sekretaris', e.target.value)} required />
+            </div>
+            <div>
+              <label className={labelStyle}>{required('Bendahara')}</label>
+              <input type="text" className={inputStyle} placeholder="Nama lengkap bendahara"
+                value={form.bendahara} onChange={e => handleChange('bendahara', e.target.value)} required />
+            </div>
+            <div>
+              <label className={labelStyle}>{required('Pengawas 1')}</label>
+              <input type="text" className={inputStyle} placeholder="Nama lengkap pengawas 1"
+                value={form.pengawas1} onChange={e => handleChange('pengawas1', e.target.value)} required />
+            </div>
+            <div>
+              <label className={labelStyle}>Pengawas 2</label>
+              <input type="text" className={inputStyle} placeholder="Nama lengkap pengawas 2 (opsional)"
+                value={form.pengawas2} onChange={e => handleChange('pengawas2', e.target.value)} />
+              <p className="mt-1 text-[11px] text-slate-400">Opsional, diisi jika ada pengawas kedua</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Save button */}
+        <div className="mt-8 flex justify-end">
+          <button type="submit" disabled={saving}
+            className="rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-8 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl disabled:opacity-60">
+            {saving ? 'Menyimpan...' : 'Simpan Profil'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function AppDashboard() {
   const [user, setUser] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -242,6 +554,15 @@ export default function AppDashboard() {
             {!collapsed && <span>Langganan</span>}
           </button>
 
+          <button onClick={() => { setPage('profil'); setSidebarOpen(false); }}
+            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'profil' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
+            <span className="relative">
+              <Icon d={officeIcon} />
+              {page === 'profil' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
+            </span>
+            {!collapsed && <span>Profil BUM Desa</span>}
+          </button>
+
           {!collapsed && <p className="px-2.5 pt-4 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Keuangan</p>}
           {financeMenus.map((m, i) => (
             <span key={i} className={'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-400 cursor-not-allowed ' + (collapsed ? 'justify-center px-0' : '')}>
@@ -262,7 +583,7 @@ export default function AppDashboard() {
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-slate-600 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 transition" aria-label="Buka menu">
             <Icon d="M4 6h16M4 12h16M4 18h16" className="w-6 h-6" />
           </button>
-          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : 'Dashboard'}</h2>
+          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : page === 'profil' ? 'Profil BUM Desa' : 'Dashboard'}</h2>
           <div className="flex-1" />
           {/* Profile dropdown */}
           <div ref={profileRef} className="relative">
@@ -293,7 +614,7 @@ export default function AppDashboard() {
 
         {/* Content */}
         <div className="p-4 sm:p-6 lg:p-8">
-          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : (
+          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : page === 'profil' ? <ProfilPage /> : (
             <div className="space-y-8 animate-fade-in">
               {/* Trial banner */}
               {trialEnds && !isTrialExpired && (

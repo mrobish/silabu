@@ -163,4 +163,9 @@ export async function initDatabase() {
   // Login lockout columns (idempotent)
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_count integer NOT NULL DEFAULT 0;`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until timestamp;`);
+
+  // Phase 3 — BUM Desa profile columns
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS nomor_sertifikat varchar(128);`);
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS nomor_perdes varchar(128);`);
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS telpon varchar(64);`);
 }
