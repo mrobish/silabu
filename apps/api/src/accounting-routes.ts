@@ -730,4 +730,107 @@ export async function accountingRoutes(app: FastifyInstance) {
       client.release();
     }
   });
+
+  // GET /accounting/buku-besar — General Ledger dengan running balance
+  // Query params: akun_id (required), start_date, end_date (YYYY-MM-DD)
+  app.get('/buku-besar', tenantGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const q = req.query as any;
+    const akunId = q.akun_id as string;
+    if (!akunId) return reply.status(400).send({ error: 'Parameter akun_id wajib diisi' });
+
+    const startDate = q.start_date || null;
+    const endDate = q.end_date || null;
+
+    // 1. Ambil info akun + saldonormal (D/K menentukan formula running balance)
+    const akunRes = await pool.query(
+      `SELECT id, kode, nama, saldonormal AS "saldoNormal", jenisakun AS "jenisAkun"
+       FROM chart_of_accounts WHERE id=$1 AND tenant_id=$2`,
+      [akunId, a.tenantId]
+    );
+    if (!akunRes.rowCount) return reply.status(404).send({ error: 'Akun tidak ditemukan' });
+    const akun = akunRes.rows[0] as any;
+    const isDebitNormal = akun.saldoNormal === 'D'; // Gol 1/5/6 → D; Gol 2/3/4 → K
+
+    // Faktor mutasi: D-normal → +debit-kredit; K-normal → +kredit-debit
+    const mutasiExpr = isDebitNormal
+      ? '(COALESCE(jl.debit,0) - COALESCE(jl.kredit,0))'
+      : '(COALESCE(jl.kredit,0) - COALESCE(jl.debit,0))';
+
+    // 2. Saldo Awal Periode = SEMUA mutasi (OPENING_BALANCE + GENERAL) untuk akun ini
+    //    yang terjadi SEBELUM start_date. (OB-001 tanggalnya = awal periode pembukuan)
+    const saldoAwalParams: any[] = [akunId, a.tenantId];
+    let saldoAwalDateClause = '';
+    if (startDate) {
+      saldoAwalParams.push(startDate);
+      saldoAwalDateClause = ` AND je.tanggal < $${saldoAwalParams.length}`;
+    } else {
+      // tanpa start_date, tidak ada baris saldo awal terpisah
+      saldoAwalDateClause = ' AND FALSE';
+    }
+    const saldoAwalRes = await pool.query(
+      `SELECT COALESCE(SUM(${mutasiExpr}), 0) AS saldo
+       FROM journal_lines jl
+       JOIN journal_entries je ON je.id = jl.entry_id
+       WHERE jl.akun_id = $1 AND je.tenant_id = $2${saldoAwalDateClause}`,
+      saldoAwalParams
+    );
+    const saldoAwal = Number((saldoAwalRes.rows[0] as any).saldo);
+
+    // 3. Mutasi dalam rentang + running balance via window function.
+    //    Running balance = saldoAwal + cumulative sum mutasi (ORDER BY tanggal, created_at)
+    const mutasiParams: any[] = [akunId, a.tenantId];
+    let dateClause = '';
+    if (startDate) {
+      mutasiParams.push(startDate);
+      dateClause += ` AND je.tanggal >= $${mutasiParams.length}`;
+    }
+    if (endDate) {
+      mutasiParams.push(endDate);
+      dateClause += ` AND je.tanggal <= $${mutasiParams.length}`;
+    }
+    mutasiParams.push(saldoAwal);
+    const saldoAwalParamIdx = mutasiParams.length;
+
+    const mutasiRes = await pool.query(
+      `SELECT je.id AS "entryId", je.no_jurnal AS "noJurnal", je.tanggal::text AS tanggal,
+              je.keterangan AS "keteranganEntry", je.referensi,
+              je.tipetransaksi AS "tipeTransaksi",
+              jl.debit, jl.kredit, jl.keterangan AS "keteranganLine",
+              $${saldoAwalParamIdx}::numeric + SUM(${mutasiExpr})
+                OVER (ORDER BY je.tanggal, je.created_at, jl.created_at
+                      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "saldoBerjalan"
+       FROM journal_lines jl
+       JOIN journal_entries je ON je.id = jl.entry_id
+       WHERE jl.akun_id = $1 AND je.tenant_id = $2${dateClause}
+       ORDER BY je.tanggal, je.created_at, jl.created_at`,
+      mutasiParams
+    );
+
+    const mutasi = mutasiRes.rows.map((r: any) => ({
+      entryId: r.entryId,
+      noJurnal: r.noJurnal,
+      tanggal: r.tanggal,
+      referensi: r.referensi || '',
+      keterangan: r.keteranganLine || r.keteranganEntry || '',
+      tipeTransaksi: r.tipeTransaksi,
+      debit: Number(r.debit) || 0,
+      kredit: Number(r.kredit) || 0,
+      saldoBerjalan: Number(r.saldoBerjalan),
+    }));
+
+    const saldoAkhir = mutasi.length ? mutasi[mutasi.length - 1].saldoBerjalan : saldoAwal;
+    const totalDebit = mutasi.reduce((s: number, m: any) => s + m.debit, 0);
+    const totalKredit = mutasi.reduce((s: number, m: any) => s + m.kredit, 0);
+
+    return {
+      akun: { id: akun.id, kode: akun.kode, nama: akun.nama, saldoNormal: akun.saldoNormal },
+      periode: { startDate, endDate },
+      saldoAwal,
+      saldoAkhir,
+      totalDebit,
+      totalKredit,
+      mutasi,
+    };
+  });
 }
