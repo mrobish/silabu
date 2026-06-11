@@ -15,6 +15,7 @@ import ResetPassword from './pages/ResetPassword';
 import AppDashboard from './pages/AppDashboard';
 import SuperAdmin from './pages/SuperAdmin';
 import ChangePassword from './pages/ChangePassword';
+import FAQ from './pages/FAQ';
 
 const router = createBrowserRouter([
   { path: '/', element: <Home /> },
@@ -35,6 +36,7 @@ const router = createBrowserRouter([
   { path: '/app', element: <AppDashboard /> },
   { path: '/super-admin', element: <SuperAdmin /> },
   { path: '/change-password', element: <ChangePassword /> },
+  { path: '/faq', element: <FAQ /> },
 ]);
 
 createRoot(document.getElementById('root')!).render(

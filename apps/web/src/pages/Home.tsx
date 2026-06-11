@@ -16,6 +16,9 @@ export default function Home() {
 
           {/* Desktop nav */}
           <div className="hidden sm:flex items-center gap-3">
+            <Link to="/faq" className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors">
+              FAQ
+            </Link>
             <Link to="/login" className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors">
               Masuk
             </Link>
@@ -33,6 +36,9 @@ export default function Home() {
         {/* Mobile nav */}
         {open && (
           <div className="mobile-menu-enter sm:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2">
+            <Link to="/faq" onClick={() => setOpen(false)} className="block rounded-lg px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
+              FAQ
+            </Link>
             <Link to="/login" onClick={() => setOpen(false)} className="block rounded-lg px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
               Masuk
             </Link>
@@ -135,7 +141,10 @@ export default function Home() {
             <img src="/logo.png" alt="SILABU DIGI" className="h-7 w-auto" />
             <span className="text-xs sm:text-sm text-slate-400">SILABU DIGI</span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-400 text-center">© {new Date().getFullYear()} SILABU DIGI — Sistem Laporan BUM Desa Digital</p>
+          <div className="flex items-center gap-5">
+            <Link to="/faq" className="text-xs sm:text-sm text-slate-400 hover:text-emerald-600 transition-colors">FAQ</Link>
+            <p className="text-xs sm:text-sm text-slate-400 text-center">© {new Date().getFullYear()} SILABU DIGI</p>
+          </div>
         </div>
       </footer>
     </div>
