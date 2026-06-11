@@ -148,7 +148,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     );
     if (usageRes.rowCount) return reply.status(400).send({ error: 'Akun gagal dihapus karena sudah digunakan dalam transaksi.', code: 'IN_USE' });
 
-    await pool.query('DELETE FROM chart_of_accounts WHERE id=$1', [id]);
+    await pool.query('DELETE FROM chart_of_accounts WHERE id=$1 AND tenant_id=$2', [id, a.tenantId]);
     return { message: 'Akun berhasil dihapus' };
   });
 
@@ -1618,8 +1618,8 @@ export async function accountingRoutes(app: FastifyInstance) {
         );
         // Update akumulasi_penyusutan
         await client.query(
-          `UPDATE fixed_assets SET akumulasi_penyusutan = COALESCE(akumulasi_penyusutan, 0) + $1, updated_at = $2 WHERE id = $3`,
-          [aktualSusut, now, as.id]
+          `UPDATE fixed_assets SET akumulasi_penyusutan = COALESCE(akumulasi_penyusutan, 0) + $1, updated_at = $2 WHERE id = $3 AND tenant_id = $4`,
+          [aktualSusut, now, as.id, a.tenantId]
         );
         await client.query('COMMIT');
         results.push({ nama: as.nama, susut, ok: true });
@@ -1700,8 +1700,8 @@ export async function accountingRoutes(app: FastifyInstance) {
             [je.rows[0].id, bebanAcc.rows[0].id, aktualSusut, akumAcc.rows[0].id]
           );
           await client.query(
-            `UPDATE fixed_assets SET akumulasi_penyusutan = akumulasi_penyusutan + $1, updated_at = $2 WHERE id = $3`,
-            [aktualSusut, now, as.id]
+            `UPDATE fixed_assets SET akumulasi_penyusutan = akumulasi_penyusutan + $1, updated_at = $2 WHERE id = $3 AND tenant_id = $4`,
+            [aktualSusut, now, as.id, t.id]
           );
           await client.query('COMMIT');
           allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, susut: aktualSusut });
