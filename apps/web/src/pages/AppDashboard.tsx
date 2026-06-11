@@ -755,13 +755,9 @@ function CoAPage() {
       {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{error}</div>}
 
       {accounts.length === 0 ? (
-        <div className="rounded-3xl border border-white/70 bg-white/80 p-12 shadow-sm backdrop-blur-xl flex flex-col items-center gap-4">
+        <div className="rounded-3xl border border-white/70 bg-white/80 p-12 shadow-sm backdrop-blur-xl flex flex-col items-center gap-3">
           <Icon d={coaIcon} className="w-14 h-14 text-slate-300" />
-          <p className="text-sm text-slate-500 text-center">Belum ada akun. Muat Bagan Akun standar untuk memulai.</p>
-          <button onClick={seedCoA} disabled={seeding}
-            className="rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl disabled:opacity-60">
-            {seeding ? 'Memuat...' : 'Muat CoA Default'}
-          </button>
+          <p className="text-sm text-slate-500 text-center">Menyiapkan bagan akun...</p>
         </div>
       ) : (
         <div className="space-y-4">

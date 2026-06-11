@@ -6,6 +6,7 @@ import { pool } from './db.js';
 import { sendEmail, buildOTPCodeEmail } from './mailer.js';
 import { verifyTurnstile, getSecuritySettings } from './turnstile.js';
 import { getSetting } from './settings-routes.js';
+import { seedDefaultCoa } from './coa-seed.js';
 
 const JWT_SECRET = process.env['JWT_SECRET'] || 'silabu-digi-secret-2026';
 const APP_URL = process.env.APP_URL || 'https://silabu.ondesa.id';
@@ -148,11 +149,22 @@ export async function registerRoutes(app: FastifyInstance) {
       const tenantId = tenantRes.rows[0].id;
       await client.query('UPDATE users SET tenant_id=$1, updated_at=now() WHERE id=$2', [tenantId, user.id]);
       await client.query('COMMIT');
+      client.release();
+
+      // Auto-seed CoA (304 akun Kepmendesa 136) — di luar transaction biar ga nested
+      try {
+        await seedDefaultCoa(tenantId);
+      } catch (seedErr: any) {
+        // Gagal seed → tenant tetap terdaftar, user bisa seed manual di CoA page
+        console.error('CoA seed failed for tenant', tenantId, seedErr);
+      }
+
       return { success: true, message: 'Registrasi berhasil!', tenantId };
     } catch (e: any) {
       await client.query('ROLLBACK');
+      client.release();
       return { error: e.message };
-    } finally { client.release(); }
+    }
   });
 
   // ========== LOGIN ==========
