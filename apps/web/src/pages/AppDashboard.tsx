@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PasswordForm from './PasswordForm';
 
-type Page = 'dashboard' | 'password' | 'langganan' | 'profil';
+type Page = 'dashboard' | 'password' | 'langganan' | 'profil' | 'coa' | 'jurnal';
 
 const officeIcon = 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m6-14h.01M9 11h.01M9 15h.01M15 7h.01M15 11h.01M15 15h.01M12 21v-4a1 1 0 011-1h-2a1 1 0 011 1v4z';
 
@@ -18,7 +18,6 @@ type SubscriptionStatus = {
 
 const financeMenus = [
   { label: 'Buku Kas', soon: true, icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
-  { label: 'Jurnal Umum', soon: true, icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
   { label: 'Laporan', soon: true, icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
 ];
 
@@ -31,6 +30,8 @@ function Icon({ d, className = 'w-5 h-5' }: { d: string; className?: string }) {
 }
 
 const creditCardIcon = 'M3 10h18M7 15h1m4 0h3M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z';
+const coaIcon = 'M4 6.5A2.5 2.5 0 016.5 4H20v14H6.5A2.5 2.5 0 014 15.5v-9zM8 8h8M8 12h8M8 16h5';
+const jurnalIcon = 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 7h6m-6 4h6';
 
 function formatRupiah(value?: number) {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value || 0);
@@ -483,6 +484,350 @@ function ProfilPage() {
   );
 }
 
+type CoAAccount = { id: number; kode: string; nama: string; jenis_akun?: string; jenisAkun?: string; saldo_normal?: string; saldoNormal?: string; is_postable?: boolean; isPostable?: boolean };
+type JournalLine = { akun_id: number; debit: number; kredit: number; keterangan: string };
+type JournalEntry = { id: number; no_jurnal: string; tanggal: string; keterangan: string; total: number; lines?: JournalLine[] };
+
+function CoAPage() {
+  const [accounts, setAccounts] = useState<CoAAccount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filterJenis, setFilterJenis] = useState('');
+  const [error, setError] = useState('');
+
+  function getToken() {
+    return localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
+  }
+
+  async function fetchCoA() {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/accounting/coa', { headers: { Authorization: 'Bearer ' + getToken() } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal memuat CoA');
+      setAccounts(Array.isArray(data) ? data : data.accounts || []);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { fetchCoA(); }, []);
+
+  async function seedCoA() {
+    setSeeding(true);
+    setError('');
+    try {
+      const res = await fetch('/api/accounting/coa/seed', { headers: { Authorization: 'Bearer ' + getToken() } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal memuat CoA default');
+      await fetchCoA();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSeeding(false);
+    }
+  }
+
+  const filtered = accounts.filter(a => {
+    const jenis = a.jenisAkun || a.jenis_akun || '';
+    if (filterJenis && jenis !== filterJenis) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (!a.kode.toLowerCase().includes(q) && !a.nama.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  const jenisList = Array.from(new Set(accounts.map(a => a.jenisAkun || a.jenis_akun || '').filter(Boolean)));
+
+  if (loading) return <div className="rounded-2xl border border-slate-100 bg-white p-8 text-sm text-slate-500 shadow-sm">Memuat Bagan Akun...</div>;
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Bagan Akun (CoA)</h1>
+        <p className="mt-1 text-sm text-slate-500">Daftar seluruh akun akuntansi BUM Desa.</p>
+      </div>
+      {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{error}</div>}
+
+      {accounts.length === 0 ? (
+        <div className="rounded-3xl border border-white/70 bg-white/80 p-12 shadow-sm backdrop-blur-xl flex flex-col items-center gap-4">
+          <Icon d={coaIcon} className="w-14 h-14 text-slate-300" />
+          <p className="text-sm text-slate-500 text-center">Belum ada akun. Muat Bagan Akun standar untuk memulai.</p>
+          <button onClick={seedCoA} disabled={seeding}
+            className="rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl disabled:opacity-60">
+            {seeding ? 'Memuat...' : 'Muat CoA Default'}
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input type="text" placeholder="Cari kode atau nama akun..." value={search} onChange={e => setSearch(e.target.value)}
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none" />
+            <select value={filterJenis} onChange={e => setFilterJenis(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none">
+              <option value="">Semua Jenis</option>
+              {jenisList.map(j => <option key={j} value={j}>{j}</option>)}
+            </select>
+          </div>
+          <div className="rounded-3xl border border-white/70 bg-white/80 shadow-sm backdrop-blur-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-5 py-3.5 font-semibold">Kode</th>
+                    <th className="px-5 py-3.5 font-semibold">Nama Akun</th>
+                    <th className="px-5 py-3.5 font-semibold">Jenis</th>
+                    <th className="px-5 py-3.5 font-semibold">Saldo Normal</th>
+                    <th className="px-5 py-3.5 font-semibold">Posting</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={5} className="px-5 py-8 text-center text-slate-400">Tidak ada akun ditemukan</td></tr>
+                  ) : filtered.map(a => (
+                    <tr key={a.id} className="hover:bg-slate-50/50 transition">
+                      <td className="px-5 py-3 font-mono text-xs font-semibold text-slate-700">{a.kode}</td>
+                      <td className="px-5 py-3 font-medium text-slate-900">{a.nama}</td>
+                      <td className="px-5 py-3">
+                        <span className="inline-flex rounded-full bg-cyan-50 px-2.5 py-0.5 text-[11px] font-bold text-cyan-700">{a.jenisAkun || a.jenis_akun}</span>
+                      </td>
+                      <td className="px-5 py-3 text-slate-600">{a.saldoNormal || a.saldo_normal}</td>
+                      <td className="px-5 py-3">
+                        {(a.isPostable ?? a.is_postable)
+                          ? <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">Ya</span>
+                          : <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500">Induk</span>
+                        }
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <p className="text-xs text-slate-400">{filtered.length} dari {accounts.length} akun</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function JurnalUmumPage() {
+  const [coaAccounts, setCoaAccounts] = useState<CoAAccount[]>([]);
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [tanggal, setTanggal] = useState(() => new Date().toISOString().slice(0, 10));
+  const [keterangan, setKeterangan] = useState('');
+  const [lines, setLines] = useState<{ akun_id: string; debit: string; kredit: string; keterangan: string }[]>([
+    { akun_id: '', debit: '', kredit: '', keterangan: '' },
+    { akun_id: '', debit: '', kredit: '', keterangan: '' },
+  ]);
+  const [showSuccess, setShowSuccess] = useState('');
+
+  function getToken() {
+    return localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
+  }
+
+  useEffect(() => {
+    const t = getToken();
+    Promise.all([
+      fetch('/api/accounting/coa', { headers: { Authorization: 'Bearer ' + t } }).then(r => r.json()),
+      fetch('/api/accounting/jurnal-umum?limit=20', { headers: { Authorization: 'Bearer ' + t } }).then(r => r.json()),
+    ])
+      .then(([coaData, jurnalData]) => {
+        const all: CoAAccount[] = Array.isArray(coaData) ? coaData : coaData.accounts || [];
+        setCoaAccounts(all.filter((a: CoAAccount) => a.isPostable ?? a.is_postable));
+        setEntries(Array.isArray(jurnalData) ? jurnalData : jurnalData.entries || jurnalData.data || []);
+      })
+      .catch(e => setError(e.message || 'Gagal memuat data'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function updateLine(i: number, field: string, val: string) {
+    setLines(prev => prev.map((l, idx) => idx === i ? { ...l, [field]: val } : l));
+  }
+
+  function addLine() {
+    setLines(prev => [...prev, { akun_id: '', debit: '', kredit: '', keterangan: '' }]);
+  }
+
+  function removeLine(i: number) {
+    setLines(prev => prev.filter((_, idx) => idx !== i));
+  }
+
+  const totalDebit = lines.reduce((s, l) => s + (parseFloat(l.debit) || 0), 0);
+  const totalKredit = lines.reduce((s, l) => s + (parseFloat(l.kredit) || 0), 0);
+  const isBalanced = Math.abs(totalDebit - totalKredit) < 0.01;
+  const validLines = lines.filter(l => l.akun_id && (parseFloat(l.debit) > 0 || parseFloat(l.kredit) > 0));
+  const canSubmit = isBalanced && validLines.length >= 2 && !!tanggal && !submitting;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError('');
+    setShowSuccess('');
+    try {
+      const payload = {
+        tanggal,
+        keterangan,
+        lines: validLines.map(l => ({
+          akun_id: Number(l.akun_id),
+          debit: parseFloat(l.debit) || 0,
+          kredit: parseFloat(l.kredit) || 0,
+          keterangan: l.keterangan,
+        })),
+      };
+      const res = await fetch('/api/accounting/jurnal-umum', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan jurnal');
+      const no = data.no_jurnal || data.entry?.no_jurnal || '';
+      setShowSuccess(no ? 'Jurnal berhasil disimpan: ' + no : 'Jurnal berhasil disimpan');
+      setKeterangan('');
+      setLines([{ akun_id: '', debit: '', kredit: '', keterangan: '' }, { akun_id: '', debit: '', kredit: '', keterangan: '' }]);
+      const refreshed = await fetch('/api/accounting/jurnal-umum?limit=20', { headers: { Authorization: 'Bearer ' + getToken() } });
+      const rd = await refreshed.json();
+      setEntries(Array.isArray(rd) ? rd : rd.entries || rd.data || []);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading) return <div className="rounded-2xl border border-slate-100 bg-white p-8 text-sm text-slate-500 shadow-sm">Memuat Jurnal Umum...</div>;
+
+  const inputCls = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none';
+  const selectCls = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none';
+
+  return (
+    <div className="space-y-8 animate-fade-in">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Jurnal Umum</h1>
+        <p className="mt-1 text-sm text-slate-500">Catat transaksi jurnal umum BUM Desa.</p>
+      </div>
+
+      {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{error}</div>}
+      {showSuccess && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">{showSuccess}</div>}
+
+      <form onSubmit={handleSubmit} className="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-sm backdrop-blur-xl space-y-5">
+        <div className="flex items-center gap-2 mb-2">
+          <Icon d={jurnalIcon} className="w-5 h-5 text-emerald-600" />
+          <h2 className="text-lg font-bold text-slate-900">Form Jurnal Baru</h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Tanggal</label>
+            <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className={inputCls} required />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Keterangan</label>
+            <input type="text" value={keterangan} onChange={e => setKeterangan(e.target.value)} placeholder="Keterangan jurnal" className={inputCls} />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-500 uppercase tracking-wide px-1">
+            <div className="col-span-4">Akun</div>
+            <div className="col-span-3">Debit</div>
+            <div className="col-span-3">Kredit</div>
+            <div className="col-span-2">Aksi</div>
+          </div>
+          {lines.map((line, i) => (
+            <div key={i} className="grid grid-cols-12 gap-2 items-start">
+              <div className="col-span-4">
+                <select value={line.akun_id} onChange={e => updateLine(i, 'akun_id', e.target.value)} className={selectCls}>
+                  <option value="">Pilih akun</option>
+                  {coaAccounts.map(a => <option key={a.id} value={a.id}>{a.kode} — {a.nama}</option>)}
+                </select>
+              </div>
+              <div className="col-span-3">
+                <input type="number" step="0.01" min="0" placeholder="0" value={line.debit} onChange={e => updateLine(i, 'debit', e.target.value)} className={inputCls} />
+              </div>
+              <div className="col-span-3">
+                <input type="number" step="0.01" min="0" placeholder="0" value={line.kredit} onChange={e => updateLine(i, 'kredit', e.target.value)} className={inputCls} />
+              </div>
+              <div className="col-span-2 flex gap-1">
+                {lines.length > 2 && (
+                  <button type="button" onClick={() => removeLine(i)}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition text-sm font-bold" title="Hapus baris">
+                    <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" className="w-4 h-4" />
+                  </button>
+                )}
+                {i === lines.length - 1 && (
+                  <button type="button" onClick={addLine}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition text-sm font-bold" title="Tambah baris">
+                    <Icon d="M12 4v16m8-8H4" className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+          <div className="flex gap-6 text-sm">
+            <span>Total Debit: <strong className="text-slate-900">{formatRupiah(totalDebit)}</strong></span>
+            <span>Total Kredit: <strong className="text-slate-900">{formatRupiah(totalKredit)}</strong></span>
+            <span className={isBalanced ? 'text-emerald-600 font-bold' : 'text-red-600 font-bold'}>
+              {isBalanced ? 'Seimbang' : 'Belum Seimbang'}
+            </span>
+          </div>
+          <button type="submit" disabled={!canSubmit}
+            className="rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl disabled:opacity-40 disabled:cursor-not-allowed">
+            {submitting ? 'Menyimpan...' : 'Simpan Jurnal'}
+          </button>
+        </div>
+      </form>
+
+      <div>
+        <h3 className="text-lg font-bold text-slate-900 mb-4">Riwayat Jurnal</h3>
+        {entries.length === 0 ? (
+          <div className="rounded-3xl border border-white/70 bg-white/80 p-8 text-center shadow-sm backdrop-blur-xl">
+            <Icon d={jurnalIcon} className="w-10 h-10 text-slate-300 mx-auto" />
+            <p className="mt-3 text-sm text-slate-400">Belum ada jurnal tercatat</p>
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-white/70 bg-white/80 shadow-sm backdrop-blur-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-5 py-3.5 font-semibold">No. Jurnal</th>
+                    <th className="px-5 py-3.5 font-semibold">Tanggal</th>
+                    <th className="px-5 py-3.5 font-semibold">Keterangan</th>
+                    <th className="px-5 py-3.5 font-semibold text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {entries.map(e => (
+                    <tr key={e.id} className="hover:bg-slate-50/50 transition">
+                      <td className="px-5 py-3 font-mono text-xs font-semibold text-emerald-700">{e.no_jurnal}</td>
+                      <td className="px-5 py-3 text-slate-600">{formatDate(e.tanggal)}</td>
+                      <td className="px-5 py-3 text-slate-900">{e.keterangan || '-'}</td>
+                      <td className="px-5 py-3 text-right font-semibold text-slate-900">{formatRupiah(e.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AppDashboard() {
   const [user, setUser] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -594,6 +939,22 @@ export default function AppDashboard() {
           </button>
 
           {!collapsed && <p className="px-2.5 pt-4 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Keuangan</p>}
+          <button onClick={() => { setPage('coa'); setSidebarOpen(false); }}
+            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'coa' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
+            <span className="relative">
+              <Icon d={coaIcon} />
+              {page === 'coa' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
+            </span>
+            {!collapsed && <span>CoA</span>}
+          </button>
+          <button onClick={() => { setPage('jurnal'); setSidebarOpen(false); }}
+            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'jurnal' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
+            <span className="relative">
+              <Icon d={jurnalIcon} />
+              {page === 'jurnal' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
+            </span>
+            {!collapsed && <span>Jurnal Umum</span>}
+          </button>
           {financeMenus.map((m, i) => (
             <span key={i} className={'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-400 cursor-not-allowed ' + (collapsed ? 'justify-center px-0' : '')}>
               <Icon d={m.icon} className="w-5 h-5 text-slate-300 shrink-0" />
@@ -613,7 +974,7 @@ export default function AppDashboard() {
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-slate-600 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 transition" aria-label="Buka menu">
             <Icon d="M4 6h16M4 12h16M4 18h16" className="w-6 h-6" />
           </button>
-          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : page === 'profil' ? 'Profil BUM Desa' : 'Dashboard'}</h2>
+          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : page === 'profil' ? 'Profil BUM Desa' : page === 'coa' ? 'Bagan Akun (CoA)' : page === 'jurnal' ? 'Jurnal Umum' : 'Dashboard'}</h2>
           <div className="flex-1" />
           {/* Profile dropdown */}
           <div ref={profileRef} className="relative">
@@ -644,7 +1005,7 @@ export default function AppDashboard() {
 
         {/* Content */}
         <div className="p-4 sm:p-6 lg:p-8">
-          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : page === 'profil' ? <ProfilPage /> : (
+          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : page === 'profil' ? <ProfilPage /> : page === 'coa' ? <CoAPage /> : page === 'jurnal' ? <JurnalUmumPage /> : (
             <div className="space-y-8 animate-fade-in">
               {/* Trial banner */}
               {trialEnds && !isTrialExpired && (
