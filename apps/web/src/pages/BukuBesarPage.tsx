@@ -92,7 +92,7 @@ export default function BukuBesarPage() {
       </div>
 
       {/* Filter Card */}
-      <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-xl">
+      <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-xl relative z-10">
         <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
           {/* CoA dropdown */}
           <div className="sm:col-span-2 relative" ref={dropdownRef}>
@@ -263,8 +263,8 @@ export default function BukuBesarPage() {
       )}
 
       {/* Empty state */}
-      {!data && !error && !loading && (
-        <div className="rounded-3xl border border-white/70 bg-white/80 p-10 text-center shadow-sm backdrop-blur-xl">
+      {!data && !loading && (
+        <div className="flex flex-col items-center justify-center py-20 text-slate-300 relative z-0">
           <BookOpen className="w-12 h-12 text-slate-300 mx-auto" />
           <p className="mt-4 text-sm text-slate-400">Pilih akun dan klik <strong>Tampilkan</strong> untuk melihat buku besar.</p>
         </div>
