@@ -1,8 +1,8 @@
-import { useEffect, useState, useRef } from 'react';
+import { Fragment, useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PasswordForm from './PasswordForm';
 
-type Page = 'dashboard' | 'password' | 'langganan' | 'profil' | 'coa' | 'jurnal';
+type Page = 'dashboard' | 'password' | 'langganan' | 'profil' | 'coa' | 'saldo-awal' | 'jurnal';
 
 const officeIcon = 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m6-14h.01M9 11h.01M9 15h.01M15 7h.01M15 11h.01M15 15h.01M12 21v-4a1 1 0 011-1h-2a1 1 0 011 1v4z';
 
@@ -849,6 +849,190 @@ function CoAPage() {
   );
 }
 
+
+function SaldoAwalPage() {
+  const [accounts, setAccounts] = useState<{ id: string; kode: string; nama: string; jenisAkun: string; kelompok: string; saldoNormal: string; level: number }[]>([]);
+  const [rows, setRows] = useState<Record<string, { debit: string; kredit: string }>>({});
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [tanggal, setTanggal] = useState(() => new Date().toISOString().slice(0, 10));
+  const [isSetup, setIsSetup] = useState(false);
+  const [entry, setEntry] = useState<any>(null);
+  const [showSuccess, setShowSuccess] = useState('');
+
+  function getToken() {
+    return localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
+  }
+
+  useEffect(() => {
+    const t = getToken();
+    fetch('/api/accounting/saldo-awal', { headers: { Authorization: 'Bearer ' + t } })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) { setError(data.error); return; }
+        setAccounts(data.accounts || []);
+        setIsSetup(data.isSetup);
+        setEntry(data.entry);
+        const existing: Record<string, { debit: string; kredit: string }> = {};
+        for (const a of (data.accounts || [])) {
+          const line = data.existingLines?.[a.id];
+          existing[a.id] = { debit: line?.debit && line.debit !== '0' ? line.debit : '', kredit: line?.kredit && line.kredit !== '0' ? line.kredit : '' };
+        }
+        setRows(existing);
+      })
+      .catch(e => setError(e.message || 'Gagal memuat data'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function updateRow(id: string, field: 'debit' | 'kredit', val: string) {
+    setRows(prev => {
+      const row = prev[id] || { debit: '', kredit: '' };
+      return { ...prev, [id]: { ...row, [field]: val, ...(field === 'debit' ? { kredit: '' } : { debit: '' }) } };
+    });
+  }
+
+  const cleanRows = Object.entries(rows).filter(([, v]) => (parseFloat(v.debit) || 0) > 0 || (parseFloat(v.kredit) || 0) > 0);
+  const totalDebit = cleanRows.reduce((s, [, v]) => s + (parseFloat(v.debit) || 0), 0);
+  const totalKredit = cleanRows.reduce((s, [, v]) => s + (parseFloat(v.kredit) || 0), 0);
+  const selisih = totalDebit - totalKredit;
+  const isBalanced = Math.abs(selisih) < 0.01 && cleanRows.length > 0;
+
+  const grouped: Record<string, typeof accounts> = {};
+  for (const a of accounts) {
+    const gol = a.kode.charAt(0);
+    (grouped[gol] ??= []).push(a);
+  }
+  const golLabels: Record<string, string> = { '1': 'Aset (Golongan 1)', '2': 'Kewajiban (Golongan 2)', '3': 'Ekuitas (Golongan 3)' };
+
+  async function handleSubmit() {
+    if (!isBalanced || submitting) return;
+    setSubmitting(true);
+    setError('');
+    setShowSuccess('');
+    try {
+      const lines = cleanRows.map(([akun_id, v]) => ({ akun_id, debit: v.debit || '0', kredit: v.kredit || '0' }));
+      const res = await fetch('/api/accounting/saldo-awal', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tanggal, lines }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan saldo awal');
+      setShowSuccess(data.message || 'Saldo awal berhasil disimpan!');
+      setIsSetup(true);
+      setEntry({ noJurnal: data.noJurnal, tanggal });
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleReset() {
+    setSubmitting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/accounting/saldo-awal', { method: 'DELETE', headers: { Authorization: 'Bearer ' + getToken() } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal reset saldo awal');
+      setIsSetup(false);
+      setEntry(null);
+      setRows({});
+      setShowSuccess('Saldo awal berhasil direset. Silakan input ulang.');
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading) return <div className="flex items-center justify-center py-20 text-slate-500"><span className="w-5 h-5 mr-2 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" /> Memuat...</div>;
+
+  const fmt = (n: number) => 'Rp ' + n.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-slate-500">Masukkan sisa saldo akun riil dari kepengurusan sebelumnya. Saldo ini hanya bisa disubmit sekali.</p>
+        {isSetup && (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+              Tersimpan — {entry?.noJurnal || 'OB-001'}
+            </span>
+            <button onClick={handleReset} disabled={submitting} className="px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">Reset</button>
+          </div>
+        )}
+      </div>
+
+      {showSuccess && <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-sm">{showSuccess}</div>}
+      {error && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{error}</div>}
+
+      <label className="block max-w-xs">
+        <span className="text-xs font-medium text-slate-600 mb-1 block">Tanggal Cutoff</span>
+        <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} disabled={isSetup} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 outline-none disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed" />
+      </label>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="text-left px-4 py-3 font-semibold text-slate-600 w-28">Kode</th>
+                <th className="text-left px-4 py-3 font-semibold text-slate-600 min-w-72">Nama Akun</th>
+                <th className="text-right px-4 py-3 font-semibold text-slate-600 w-40">Debit (Rp)</th>
+                <th className="text-right px-4 py-3 font-semibold text-slate-600 w-40">Kredit (Rp)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(grouped).map(([gol, akuns]) => (
+                <Fragment key={gol}>
+                  <tr className="bg-slate-100/70"><td colSpan={4} className="px-4 py-2 font-bold text-slate-700 text-xs uppercase tracking-wide">{golLabels[gol] || `Golongan ${gol}`}</td></tr>
+                  {akuns.map((a, idx) => {
+                    const row = rows[a.id] || { debit: '', kredit: '' };
+                    return (
+                      <tr key={a.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'} hover:bg-emerald-50/30 transition-colors`}>
+                        <td className="px-4 py-2 font-mono text-xs text-slate-500 whitespace-nowrap">{a.kode}</td>
+                        <td className="px-4 py-2 text-slate-800">{a.nama}</td>
+                        <td className="px-2 py-1.5"><input type="number" min="0" step="0.01" placeholder="0" value={row.debit} disabled={isSetup} onChange={e => updateRow(a.id, 'debit', e.target.value)} className="w-full text-right rounded-lg border border-transparent px-2 py-1.5 text-sm focus:border-emerald-400 focus:ring-1 focus:ring-emerald-300 outline-none bg-transparent hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed" /></td>
+                        <td className="px-2 py-1.5"><input type="number" min="0" step="0.01" placeholder="0" value={row.kredit} disabled={isSetup} onChange={e => updateRow(a.id, 'kredit', e.target.value)} className="w-full text-right rounded-lg border border-transparent px-2 py-1.5 text-sm focus:border-emerald-400 focus:ring-1 focus:ring-emerald-300 outline-none bg-transparent hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed" /></td>
+                      </tr>
+                    );
+                  })}
+                                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="border-t-2 border-slate-200 bg-slate-50 px-4 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap gap-6 text-sm">
+              <div><span className="text-slate-500">Total Debit:</span> <span className="font-bold text-slate-800 tabular-nums">{fmt(totalDebit)}</span></div>
+              <div><span className="text-slate-500">Total Kredit:</span> <span className="font-bold text-slate-800 tabular-nums">{fmt(totalKredit)}</span></div>
+              <div><span className="text-slate-500">Selisih:</span> <span className={`font-bold tabular-nums ${Math.abs(selisih) < 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>{fmt(Math.abs(selisih))}</span></div>
+            </div>
+            {!isSetup && <button onClick={handleSubmit} disabled={!isBalanced || submitting} className={'px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm ' + (isBalanced && !submitting ? 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-md active:scale-[0.97]' : 'bg-slate-200 text-slate-400 cursor-not-allowed')}>{submitting ? 'Menyimpan...' : 'Simpan Saldo Awal'}</button>}
+          </div>
+          {!isBalanced && !isSetup && cleanRows.length > 0 && <p className="mt-3 text-xs text-red-600 font-medium">Jurnal tidak balance! Periksa kembali nilai debit dan kredit.</p>}
+          {!isBalanced && !isSetup && cleanRows.length === 0 && <p className="mt-3 text-xs text-slate-400 font-medium">Isi minimal satu akun dengan nilai debit atau kredit untuk mengaktifkan tombol Simpan.</p>}
+        </div>
+      </div>
+
+      <div className="p-4 bg-cyan-50 border border-cyan-200/60 rounded-xl text-sm text-cyan-800">
+        <p className="font-semibold mb-2">Aturan Saldo Awal</p>
+        <ul className="list-disc pl-4 space-y-1">
+          <li>Hanya akun riil (Golongan 1 Aset, 2 Kewajiban, 3 Ekuitas) yang bisa diisi.</li>
+          <li>Akun nominal (Pendapatan dan Beban) tidak ditampilkan karena mulai dari nol.</li>
+          <li>Setiap akun hanya boleh diisi salah satu: debit atau kredit.</li>
+          <li>Total Debit harus sama persis dengan Total Kredit.</li>
+          <li>Saldo awal disimpan sebagai jurnal khusus <code className="bg-cyan-100 px-1 rounded text-xs">OB-001</code>.</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function JurnalUmumPage() {
   const [coaAccounts, setCoaAccounts] = useState<CoAAccount[]>([]);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
@@ -1217,6 +1401,14 @@ export default function AppDashboard() {
             </span>
             {!collapsed && <span>CoA</span>}
           </button>
+          <button onClick={() => { setPage('saldo-awal'); setSidebarOpen(false); }}
+            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'saldo-awal' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
+            <span className="relative">
+              <Icon d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
+              {page === 'saldo-awal' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
+            </span>
+            {!collapsed && <span>Saldo Awal</span>}
+          </button>
           <button onClick={() => { setPage('jurnal'); setSidebarOpen(false); }}
             className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'jurnal' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
             <span className="relative">
@@ -1244,7 +1436,7 @@ export default function AppDashboard() {
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-slate-600 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 transition" aria-label="Buka menu">
             <Icon d="M4 6h16M4 12h16M4 18h16" className="w-6 h-6" />
           </button>
-          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : page === 'profil' ? 'Profil BUM Desa' : page === 'coa' ? 'Bagan Akun (CoA)' : page === 'jurnal' ? 'Jurnal Umum' : 'Dashboard'}</h2>
+          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : page === 'profil' ? 'Profil BUM Desa' : page === 'coa' ? 'Bagan Akun (CoA)' : page === 'saldo-awal' ? 'Setup Saldo Awal' : page === 'jurnal' ? 'Jurnal Umum' : 'Dashboard'}</h2>
           <div className="flex-1" />
           {/* Profile dropdown */}
           <div ref={profileRef} className="relative">
@@ -1275,7 +1467,7 @@ export default function AppDashboard() {
 
         {/* Content */}
         <div className="p-4 sm:p-6 lg:p-8">
-          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : page === 'profil' ? <ProfilPage /> : page === 'coa' ? <CoAPage /> : page === 'jurnal' ? <JurnalUmumPage /> : (
+          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : page === 'profil' ? <ProfilPage /> : page === 'coa' ? <CoAPage /> : page === 'saldo-awal' ? <SaldoAwalPage /> : page === 'jurnal' ? <JurnalUmumPage /> : (
             <div className="space-y-8 animate-fade-in">
               {/* Trial banner */}
               {trialEnds && !isTrialExpired && (

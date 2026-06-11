@@ -358,4 +358,184 @@ export async function accountingRoutes(app: FastifyInstance) {
     );
     return { jurnal: { ...r.rows[0], lines: lines.rows } };
   });
+
+  // ─── Saldo Awal (Opening Balance) ─────────────────────────────────
+
+  // GET /accounting/saldo-awal — akun riil (Gol 1/2/3, level 4) + status + existing values
+  app.get('/saldo-awal', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+
+    // Real accounts only: Golongan 1 (Aset), 2 (Kewajiban), 3 (Ekuitas), level 4, postable, active
+    const akunRes = await pool.query(
+      `SELECT id, kode, nama, jenisakun AS "jenisAkun", kelompok,
+              saldonormal AS "saldoNormal", level
+       FROM chart_of_accounts
+       WHERE tenant_id=$1 AND isactive=true AND ispostable=true AND level=4
+         AND substring(kode,1,1) IN ('1','2','3')
+       ORDER BY kode`,
+      [a.tenantId]
+    );
+
+    // Existing opening-balance journal (OPENING_BALANCE)
+    const obEntry = await pool.query(
+      `SELECT id, no_jurnal AS "noJurnal", tanggal, keterangan, islocked AS "isLocked", created_at AS "createdAt"
+       FROM journal_entries
+       WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE'
+       ORDER BY created_at LIMIT 1`,
+      [a.tenantId]
+    );
+
+    let existingLines: Record<string, { debit: string; kredit: string }> = {};
+    let entry: any = null;
+    if (obEntry.rowCount) {
+      entry = obEntry.rows[0];
+      const linesRes = await pool.query(
+        `SELECT akun_id AS "akunId", debit, kredit FROM journal_lines WHERE entry_id=$1`,
+        [entry.id]
+      );
+      for (const l of linesRes.rows as any[]) {
+        existingLines[l.akunId] = { debit: String(l.debit), kredit: String(l.kredit) };
+      }
+    }
+
+    return {
+      accounts: akunRes.rows,
+      isSetup: !!obEntry.rowCount,
+      entry,
+      existingLines,
+    };
+  });
+
+  // POST /accounting/saldo-awal — simpan saldo awal sebagai jurnal OPENING_BALANCE (sekali per tenant)
+  app.post('/saldo-awal', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const body = req.body as any;
+    if (!body) return reply.status(400).send({ error: 'Body request kosong' });
+
+    const { tanggal, lines } = body;
+    if (!tanggal) return reply.status(400).send({ error: 'Tanggal cutoff wajib diisi' });
+    if (!lines || !Array.isArray(lines) || lines.length === 0) {
+      return reply.status(400).send({ error: 'Tidak ada baris saldo awal' });
+    }
+
+    const [tahunStr, bulanStr] = (tanggal as string).split('-');
+    const tahun = parseInt(tahunStr, 10);
+    const bulan = parseInt(bulanStr, 10);
+    if (isNaN(tahun) || isNaN(bulan) || tahun < 2000 || tahun > 2100 || bulan < 1 || bulan > 12) {
+      return reply.status(400).send({ error: 'Format tanggal tidak valid (YYYY-MM-DD)' });
+    }
+
+    // Block duplicate — opening balance only once per tenant
+    const existing = await pool.query(
+      `SELECT id FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE' LIMIT 1`,
+      [a.tenantId]
+    );
+    if (existing.rowCount) {
+      return reply.status(400).send({ error: 'Saldo awal sudah pernah disimpan. Gunakan reset untuk mengubah.', code: 'ALREADY_SETUP' });
+    }
+
+    // Keep only rows with a non-zero value; validate cents-safe + single side
+    const cleanLines: { akun_id: string; debit: number; kredit: number }[] = [];
+    for (const l of lines) {
+      const debit = Math.round((parseFloat(l.debit || '0') || 0) * 100) / 100;
+      const kredit = Math.round((parseFloat(l.kredit || '0') || 0) * 100) / 100;
+      if (isNaN(debit) || isNaN(kredit)) return reply.status(400).send({ error: 'Debit/kredit harus angka' });
+      if (debit < 0 || kredit < 0) return reply.status(400).send({ error: 'Debit/kredit tidak boleh negatif' });
+      if (debit === 0 && kredit === 0) continue; // skip empty rows
+      if (debit > 0 && kredit > 0) return reply.status(400).send({ error: 'Setiap akun hanya boleh diisi salah satu: debit atau kredit' });
+      cleanLines.push({ akun_id: l.akun_id, debit, kredit });
+    }
+
+    if (cleanLines.length === 0) {
+      return reply.status(400).send({ error: 'Isi minimal satu akun dengan nilai debit atau kredit' });
+    }
+
+    // Balance check (cents-safe)
+    const totalDebitCents = cleanLines.reduce((s, l) => s + Math.round(l.debit * 100), 0);
+    const totalKreditCents = cleanLines.reduce((s, l) => s + Math.round(l.kredit * 100), 0);
+    if (totalDebitCents !== totalKreditCents) {
+      const selisih = (totalDebitCents - totalKreditCents) / 100;
+      return reply.status(400).send({ error: `Jurnal tidak balance. Selisih: ${selisih}`, code: 'NOT_BALANCED', selisih });
+    }
+
+    // Validate all akun: tenant-owned, active, postable, real account (Gol 1/2/3, level 4)
+    const akunIds = cleanLines.map(l => l.akun_id);
+    const akunRows = await pool.query(
+      `SELECT id, kode, ispostable AS "isPostable", isactive AS "isActive", level
+       FROM chart_of_accounts WHERE id = ANY($1::uuid[]) AND tenant_id=$2`,
+      [akunIds, a.tenantId]
+    );
+    const valid = new Map(akunRows.rows.map((r: any) => [r.id, r]));
+    for (const id of akunIds) {
+      const row: any = valid.get(id);
+      if (!row) return reply.status(400).send({ error: `Akun ${id} tidak ditemukan untuk tenant ini` });
+      if (!row.isActive) return reply.status(400).send({ error: `Akun ${row.kode} tidak aktif` });
+      if (!row.isPostable) return reply.status(400).send({ error: `Akun ${row.kode} tidak dapat diposting` });
+      if (row.level !== 4 || !['1', '2', '3'].includes(String(row.kode).charAt(0))) {
+        return reply.status(400).send({ error: `Akun ${row.kode} bukan akun riil (Golongan 1/2/3)` });
+      }
+    }
+
+    await ensurePeriod(a.tenantId!, tahun);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const entryRes = await client.query(
+        `INSERT INTO journal_entries (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, tipetransaksi, isposted, islocked, created_by)
+         VALUES ($1,'OB-001',$2,$3,$4,$5,'OPENING_BALANCE',true,true,$6)
+         RETURNING id, no_jurnal AS "noJurnal", tanggal`,
+        [a.tenantId, tanggal, bulan, tahun, 'Setup Saldo Awal', a.userId]
+      );
+      const entryId = (entryRes.rows[0] as any).id;
+      for (const l of cleanLines) {
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan)
+           VALUES ($1,$2,$3,$4,'Saldo Awal')`,
+          [entryId, l.akun_id, l.debit, l.kredit]
+        );
+      }
+      await client.query('COMMIT');
+      return reply.status(201).send({
+        message: 'Saldo awal berhasil disimpan',
+        entryId,
+        noJurnal: 'OB-001',
+        totalLines: cleanLines.length,
+      });
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return reply.status(500).send({ error: 'Gagal menyimpan saldo awal: ' + e.message });
+    } finally {
+      client.release();
+    }
+  });
+
+  // DELETE /accounting/saldo-awal — reset opening balance (super_admin only)
+  app.delete('/saldo-awal', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+
+    const entries = await pool.query(
+      `SELECT id FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE'`,
+      [a.tenantId]
+    );
+    if (!entries.rowCount) {
+      return reply.status(400).send({ error: 'Belum ada saldo awal untuk direset' });
+    }
+    const ids = entries.rows.map((r: any) => r.id);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // journal_lines cascade-deleted via FK ON DELETE CASCADE, but delete explicitly for clarity
+      await client.query(`DELETE FROM journal_lines WHERE entry_id = ANY($1::uuid[])`, [ids]);
+      await client.query(`DELETE FROM journal_entries WHERE id = ANY($1::uuid[]) AND tenant_id=$2`, [ids, a.tenantId]);
+      await client.query('COMMIT');
+      return { message: 'Saldo awal berhasil direset', deletedEntries: ids.length };
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return reply.status(500).send({ error: 'Gagal reset saldo awal: ' + e.message });
+    } finally {
+      client.release();
+    }
+  });
 }
