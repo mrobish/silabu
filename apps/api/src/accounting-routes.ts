@@ -930,12 +930,13 @@ export async function accountingRoutes(app: FastifyInstance) {
     const endDate = q.end_date || new Date().toISOString().slice(0, 10);
 
     // Agregasi SEMUA mutasi (termasuk OPENING_BALANCE) dari awal hingga end_date.
-    // Saldo akun sesuai saldonormal: D-normal → debit-kredit; K-normal → kredit-debit.
-    // Akumulasi Penyusutan (Gol 1, saldonormal K) otomatis mengurangi Aset Tetap.
+    // FIX: formula by golongan, bukan by saldonormal per akun.
+    //   Gol 1 (Aktiva): debit - kredit → contra-asset (saldonormal K) jadi negatif, otomatis mengurangi.
+    //   Gol 2/3 (Passiva): kredit - debit → contra-liability/contra-equity jadi negatif.
     const rows = await pool.query(
       `SELECT c.kode, c.nama, c.saldonormal AS "saldoNormal",
               COALESCE(SUM(
-                CASE WHEN c.saldonormal = 'D'
+                CASE WHEN LEFT(c.kode,1) = '1'
                      THEN COALESCE(m.debit,0) - COALESCE(m.kredit,0)
                      ELSE COALESCE(m.kredit,0) - COALESCE(m.debit,0)
                 END
@@ -966,7 +967,10 @@ export async function accountingRoutes(app: FastifyInstance) {
 
     // ── AKTIVA (Golongan 1) ──
     const asetLancar = filterBy(a => a.kode.startsWith('1.1'));
-    const asetTetap = filterBy(a => a.kode.startsWith('1.3'));
+    // Aset Tetap: pisah bruto (saldonormal D) vs akumulasi penyusutan (saldonormal K, kode 1.3.07.xx)
+    const asetTetapBruto = filterBy(a => a.kode.startsWith('1.3') && a.saldoNormal === 'D');
+    const asetTetapAkum = filterBy(a => a.kode.startsWith('1.3') && a.saldoNormal === 'K');
+    const nilaiBukuAsetTetap = sumBy(a => a.kode.startsWith('1.3'));
     const asetLainnya = filterBy(a => a.kode.startsWith('1.') && !a.kode.startsWith('1.1') && !a.kode.startsWith('1.3'));
     const totalAset = sumBy(a => a.kode.startsWith('1'));
 
@@ -994,7 +998,11 @@ export async function accountingRoutes(app: FastifyInstance) {
       asOf: endDate,
       aktiva: {
         asetLancar: { detail: asetLancar, subtotal: sumBy(a => a.kode.startsWith('1.1')) },
-        asetTetap: { detail: asetTetap, subtotal: sumBy(a => a.kode.startsWith('1.3')) },
+        asetTetap: {
+          bruto: { akun: asetTetapBruto, subtotal: sumBy(a => a.kode.startsWith('1.3') && a.saldoNormal === 'D') },
+          akumulasi: { akun: asetTetapAkum, subtotal: sumBy(a => a.kode.startsWith('1.3') && a.saldoNormal === 'K') },
+          nilaiBuku: nilaiBukuAsetTetap,
+        },
         asetLainnya: { detail: asetLainnya, subtotal: sumBy(a => a.kode.startsWith('1.') && !a.kode.startsWith('1.1') && !a.kode.startsWith('1.3')) },
         totalAset,
       },

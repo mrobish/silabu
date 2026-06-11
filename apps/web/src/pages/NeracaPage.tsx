@@ -2,9 +2,14 @@ import { useState, useEffect } from 'react';
 import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank } from 'lucide-react';
 
 type Akun = { kode: string; nama: string; saldoNormal: string; saldo: number };
+type AsetTetap = {
+  bruto: { akun: Akun[]; subtotal: number };
+  akumulasi: { akun: Akun[]; subtotal: number };
+  nilaiBuku: number;
+};
 type NeracaData = {
   asOf: string;
-  aktiva: { asetLancar: { detail: Akun[]; subtotal: number }; asetTetap: { detail: Akun[]; subtotal: number }; asetLainnya: { detail: Akun[]; subtotal: number }; totalAset: number };
+  aktiva: { asetLancar: { detail: Akun[]; subtotal: number }; asetTetap: AsetTetap; asetLainnya: { detail: Akun[]; subtotal: number }; totalAset: number };
   passiva: { kewajiban: { jangkaPendek: { detail: Akun[]; subtotal: number }; jangkaPanjang: { detail: Akun[]; subtotal: number }; subtotal: number }; ekuitas: { detail: Akun[]; labaBerjalan: number; subtotal: number }; totalPassiva: number };
   isBalanced: boolean;
   selisih: number;
@@ -152,9 +157,24 @@ export default function NeracaPage() {
               </CategoryCard>
 
               <CategoryCard icon={<TrendingUp size={16} />} title="Aset Tetap" open={expanded.tetap} onToggle={() => toggle('tetap')}>
-                {data.aktiva.asetTetap.detail.filter(a => a.saldo !== 0).length === 0 && <p className="text-xs text-slate-400 italic py-1">Tidak ada aset tetap</p>}
-                {data.aktiva.asetTetap.detail.filter(a => a.saldo !== 0).map(a => <AkunRow key={a.kode} a={a} />)}
-                <SubTotal label="Subtotal Aset Tetap" value={data.aktiva.asetTetap.subtotal} />
+                {data.aktiva.asetTetap.bruto.akun.filter(a => a.saldo !== 0).length === 0 && data.aktiva.asetTetap.akumulasi.akun.filter(a => a.saldo !== 0).length === 0 && <p className="text-xs text-slate-400 italic py-1">Tidak ada aset tetap</p>}
+                {/* Bruto (harga perolehan) */}
+                {data.aktiva.asetTetap.bruto.akun.filter(a => a.saldo !== 0).map(a => <AkunRow key={a.kode} a={a} />)}
+                {data.aktiva.asetTetap.bruto.akun.filter(a => a.saldo !== 0).length > 0 && (
+                  <div className="flex justify-between items-center py-1 text-xs text-slate-500 border-t border-dashed border-slate-150 mt-0.5">
+                    <span className="italic">Total Harga Perolehan</span>
+                    <span className="tabular-nums font-medium">{rupiah(data.aktiva.asetTetap.bruto.subtotal)}</span>
+                  </div>
+                )}
+                {/* Akumulasi Penyusutan — teks merah dalam kurung (pengurang) */}
+                {data.aktiva.asetTetap.akumulasi.akun.filter(a => a.saldo !== 0).map(a => (
+                  <div key={a.kode} className="flex justify-between items-center py-1 text-sm">
+                    <span className="text-red-600"><span className="text-red-300 text-xs">{a.kode}</span> {a.nama}</span>
+                    <span className="tabular-nums font-medium text-red-600">({rupiah(Math.abs(a.saldo))})</span>
+                  </div>
+                ))}
+                {/* Nilai Buku = bruto - akumulasi */}
+                <SubTotal label="Nilai Buku Aset Tetap" value={data.aktiva.asetTetap.nilaiBuku} />
               </CategoryCard>
 
               <CategoryCard icon={<TrendingUp size={16} />} title="Aset Lainnya" open={expanded.lain} onToggle={() => toggle('lain')}>
