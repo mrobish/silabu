@@ -1302,13 +1302,20 @@ function JurnalUmumPage() {
                     onChange={e => {
                       const val = e.target.value;
                       updateLine(i, 'searchTerm', val);
-                      // auto-select if exact match by kode
-                      const match = coaAccounts.find(a => a.kode === val || a.nama.toLowerCase() === val.toLowerCase());
-                      if (match) { updateLine(i, 'akun_id', String(match.id)); }
+                      // If account was selected, clear selection when user edits text
+                      if (line.akun_id) {
+                        const selected = coaAccounts.find(a => String(a.id) === line.akun_id);
+                        const selectedText = selected ? (selected.kode + ' — ' + selected.nama) : '';
+                        if (val !== selectedText) { updateLine(i, 'akun_id', ''); }
+                      } else {
+                        // auto-select if exact match by kode
+                        const match = coaAccounts.find(a => a.kode === val || a.nama.toLowerCase() === val.toLowerCase());
+                        if (match) { updateLine(i, 'akun_id', String(match.id)); }
+                      }
                     }}
                     className={selectCls}
                   />
-                  {line.searchTerm && line.searchTerm.length > 0 && (
+                  {line.searchTerm && line.searchTerm.length > 0 && !line.akun_id && (
                     <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-slate-200 max-h-48 overflow-y-auto">
                       {(() => {
                         const q = line.searchTerm.toLowerCase();
