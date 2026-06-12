@@ -1,26 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Package, Plus, Download, CalendarDots, Calculator, Laptop, Truck, Armchair, Building, Trees, BoxArrowUp, CheckCircle, AlertTriangle, X, Search, Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
-
-function parseTgl(s: string): string {
-  if (!s) return s;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const sep = s.includes('/') ? '/' : '-';
-  const parts = s.split(sep);
-  if (parts.length === 3) {
-    let [d, m, y] = parts;
-    if (d.length <= 2 && m.length <= 2 && y.length === 4) {
-      d = d.padStart(2, '0'); m = m.padStart(2, '0');
-      return `${y}-${m}-${d}`;
-    }
-  }
-  return s;
-}
-function fmtTgl(ymd: string): string {
-  if (!ymd || !ymd.includes('-')) return ymd;
-  const [y, m, d] = ymd.split('-');
-  return `${d}/${m}/${y}`;
-}
+import DatePicker from './DatePicker';
 
 type Aset = {
   id: string; nama: string; kategori: string;
@@ -146,7 +127,7 @@ function AddAssetModal({ open, onClose, onDone }: { open: boolean; onClose: () =
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Tanggal Beli *</label>
-              <input type="text" value={fmtTgl(form.tanggal_perolehan)} onChange={e => setForm(p => ({ ...p, tanggal_perolehan: parseTgl(e.target.value) }))} placeholder="DD/MM/YYYY" className={inputCls} />
+              <DatePicker value={form.tanggal_perolehan} onChange={v => setForm(p => ({ ...p, tanggal_perolehan: v }))} className={inputCls} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Harga Beli *</label>

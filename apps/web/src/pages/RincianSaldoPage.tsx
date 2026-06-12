@@ -3,26 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Printer } from 'lucide-react';
-
-function parseTgl(s: string): string {
-  if (!s) return s;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const sep = s.includes('/') ? '/' : '-';
-  const parts = s.split(sep);
-  if (parts.length === 3) {
-    let [d, m, y] = parts;
-    if (d.length <= 2 && m.length <= 2 && y.length === 4) {
-      d = d.padStart(2, '0'); m = m.padStart(2, '0');
-      return `${y}-${m}-${d}`;
-    }
-  }
-  return s;
-}
-function fmtTgl(ymd: string): string {
-  if (!ymd || !ymd.includes('-')) return ymd;
-  const [y, m, d] = ymd.split('-');
-  return `${d}/${m}/${y}`;
-}
+import DatePicker from './DatePicker';
 import ReportPrintLayout from './ReportPrintLayout';
 
 type CoAOption = { id: string; kode: string; nama: string };
@@ -456,7 +437,7 @@ function AssetsTab({ reconRows }: { reconRows: ReconRow[] }) {
             <option value="">Pilih Akun CoA*</option>
             {coaList.map(a => <option key={a.id} value={a.id}>{a.kode} — {a.nama}</option>)}
           </select>
-          <input type="text" placeholder="DD/MM/YYYY" value={fmtTgl(form.tanggalPerolehan)} onChange={e => setForm({...form, tanggalPerolehan: parseTgl(e.target.value)})}
+          <DatePicker value={form.tanggalPerolehan} onChange={v => setForm({...form, tanggalPerolehan: v})}
             className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition" />
           <input type="number" placeholder="Harga Perolehan" value={form.hargaPerolehan} onChange={e => setForm({...form, hargaPerolehan: e.target.value})}
             className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition" />

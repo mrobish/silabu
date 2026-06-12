@@ -3,30 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import PasswordForm from './PasswordForm';
 import RincianSaldoPage from './RincianSaldoPage';
 import BukuBesarPage from './BukuBesarPage';
-
-// Date helper for DD/MM/YYYY text input
-function parseTgl(s: string): string {
-  if (!s) return s;
-  // Already YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  // DD/MM/YYYY or DD-MM-YYYY
-  const sep = s.includes('/') ? '/' : '-';
-  const parts = s.split(sep);
-  if (parts.length === 3) {
-    let [d, m, y] = parts;
-    if (d.length <= 2 && m.length <= 2 && y.length === 4) {
-      d = d.padStart(2, '0');
-      m = m.padStart(2, '0');
-      return `${y}-${m}-${d}`;
-    }
-  }
-  return s; // passthrough — let backend validate
-}
-function fmtTgl(ymd: string): string {
-  if (!ymd || !ymd.includes('-')) return ymd;
-  const [y, m, d] = ymd.split('-');
-  return `${d}/${m}/${y}`;
-}
+import DatePicker from './DatePicker';
 import LabaRugiPage from './LabaRugiPage';
 import NeracaPage from './NeracaPage';
 import NeracaSaldoPage from './NeracaSaldoPage';
@@ -1005,7 +982,7 @@ function SaldoAwalPage() {
 
       <label className="block max-w-xs">
         <span className="text-xs font-medium text-slate-600 mb-1 block">Tanggal Cutoff</span>
-        <input type="text" value={fmtTgl(tanggal)} onChange={e => setTanggal(parseTgl(e.target.value))} placeholder="DD/MM/YYYY" disabled={isSetup} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 outline-none disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed" />
+        <DatePicker value={tanggal} onChange={setTanggal} disabled={isSetup} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 outline-none disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed" />
       </label>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -1271,7 +1248,7 @@ function JurnalUmumPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Tanggal</label>
-            <input type="text" value={fmtTgl(tanggal)} onChange={e => setTanggal(parseTgl(e.target.value))} placeholder="DD/MM/YYYY" className={inputCls} required />
+            <DatePicker value={tanggal} onChange={setTanggal} className={inputCls} required />
           </div>
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Keterangan <span className="text-red-400">*</span></label>
