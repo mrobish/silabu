@@ -1297,7 +1297,7 @@ export async function accountingRoutes(app: FastifyInstance) {
       // Pendanaan: Gol 2, 3
       const g = r.kode[0];
       const sub2 = r.kode.slice(0, 3);
-      if (sub2 === '1.3') {
+      if (sub2 === '1.3' || sub2 === '1.2') {
         inv.push(item);
       } else if (g === '2' || g === '3') {
         dana.push(item);
