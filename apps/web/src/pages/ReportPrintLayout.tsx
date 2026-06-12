@@ -171,7 +171,7 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
               {/* Branding footer */}
               <div className="print-branding">
                 <img src="/logo.png" alt="" />
-                <p>Dicetak dengan <strong>SILABU DIGI</strong> — Sistem Akuntansi BUM Desa · silabudigi.ondesa.id</p>
+                <p>Dicetak dengan <strong>SILABU DIGI</strong> — Sistem Akuntansi BUM Desa</p>
               </div>
             </div>
           </div>
