@@ -55,17 +55,68 @@ function ReconBadge({ rows, tabId }: { rows: ReconRow[]; tabId: TabId }) {
   const prefixes: Record<TabId, string[]> = {
     'persediaan': ['1.1.05'],
     'hutang-piutang': ['1.1.03', '2.1.01'],
-    'aset-tetap': ['1.2', '1.3'],
+    'aset-tetap': ['1.3.01', '1.3.02', '1.3.03', '1.3.04', '1.3.05', '1.3.06', '1.3.07', '1.3.99'],
     'modal': ['3'],
   };
   const relevant = rows.filter(r => prefixes[tabId].some(p => r.kode.startsWith(p)));
   if (!relevant.length) return null;
 
+  // For aset-tetap: show separate validation for Harga Perolehan (1.3.01-06,99) and Akum. Penyusutan (1.3.07)
+  if (tabId === 'aset-tetap') {
+    const asetRows = relevant.filter(r => r.kode.startsWith('1.3.01') || r.kode.startsWith('1.3.02') || 
+      r.kode.startsWith('1.3.03') || r.kode.startsWith('1.3.04') || r.kode.startsWith('1.3.05') || 
+      r.kode.startsWith('1.3.06') || r.kode.startsWith('1.3.99'));
+    const akumRows = relevant.filter(r => r.kode.startsWith('1.3.07'));
+    
+    const asetMatched = asetRows.length > 0 && asetRows.every(r => Math.abs(r.selisih) < 1);
+    const akumMatched = akumRows.length > 0 && akumRows.every(r => Math.abs(r.selisih) < 1);
+    const allMatched = asetMatched && akumMatched;
+    
+    const totalAsetGlobal = asetRows.reduce((s, r) => s + r.globalValue, 0);
+    const totalAsetRincian = asetRows.reduce((s, r) => s + r.rincianValue, 0);
+    const totalAkumGlobal = akumRows.reduce((s, r) => s + r.globalValue, 0);
+    const totalAkumRincian = akumRows.reduce((s, r) => s + r.rincianValue, 0);
+    
+    return (
+      <div className={'flex flex-col gap-3 p-4 rounded-2xl border text-sm ' +
+        (allMatched ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800')}>
+        <div className="flex items-center gap-2">
+          <svg className={'w-5 h-5 shrink-0 ' + (allMatched ? 'text-emerald-500' : 'text-red-500')} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={allMatched
+              ? 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'
+              : 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z'} />
+          </svg>
+          <p className="font-semibold">{allMatched ? 'Rincian Selaras' : 'Selisih Terdeteksi'}</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+          <div className={'p-2 rounded-lg ' + (asetMatched ? 'bg-emerald-100/50' : 'bg-red-100/50')}>
+            <p className="font-semibold mb-1">Aset Tetap (Harga Perolehan)</p>
+            <p className="opacity-80">
+              Buku Besar: {fmt(totalAsetGlobal)} &bull; Rincian: {fmt(totalAsetRincian)}
+            </p>
+            {!asetMatched && asetRows.length > 0 && (
+              <p className="text-red-600 font-bold mt-1">Selisih: {fmt(Math.abs(totalAsetGlobal - totalAsetRincian))}</p>
+            )}
+          </div>
+          <div className={'p-2 rounded-lg ' + (akumMatched ? 'bg-emerald-100/50' : 'bg-red-100/50')}>
+            <p className="font-semibold mb-1">Akum. Penyusutan</p>
+            <p className="opacity-80">
+              Buku Besar: {fmt(totalAkumGlobal)} &bull; Rincian: {fmt(totalAkumRincian)}
+            </p>
+            {!akumMatched && akumRows.length > 0 && (
+              <p className="text-red-600 font-bold mt-1">Selisih: {fmt(Math.abs(totalAkumGlobal - totalAkumRincian))}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Default badge for other tabs
   const totalGlobal = relevant.reduce((s, r) => s + r.globalValue, 0);
   const totalRincian = relevant.reduce((s, r) => s + r.rincianValue, 0);
   const totalSelisih = totalGlobal - totalRincian;
   const matched = Math.abs(totalSelisih) < 1;
-  const label = TAB_LABELS[tabId];
 
   return (
     <div className={'flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 rounded-2xl border text-sm ' +
@@ -375,8 +426,7 @@ function AssetsTab({ reconRows }: { reconRows: ReconRow[] }) {
     const [aData, cData] = await Promise.all([aRes.json(), cRes.json()]);
     setAssets((aData.assets || []).map((r: any) => ({ ...r, hargaPerolehan: Number(r.hargaPerolehan), akumulasiPenyusutan: Number(r.akumulasiPenyusutan), nilaiBukuAwal: Number(r.nilaiBukuAwal), umurManfaatBulan: Number(r.umurManfaatBulan || 0) })));
     setCoaList((Array.isArray(cData) ? cData : cData.coa || [])
-      .filter((a: any) => a.isActive && a.isPostable !== false &&
-        (a.kode?.startsWith('1.2') || a.kode?.startsWith('1.3')))
+      .filter((a: any) => a.isActive && a.isPostable !== false && a.kode?.startsWith('1.3'))
       .map((a: any) => ({ id: a.id, kode: a.kode, nama: a.nama })));
     setLoading(false);
   }, []);
@@ -446,7 +496,14 @@ function AssetsTab({ reconRows }: { reconRows: ReconRow[] }) {
           <input type="number" placeholder="Umur Manfaat (bulan)" value={form.umurManfaatBulan} onChange={e => setForm({...form, umurManfaatBulan: e.target.value})}
             className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition" />
         </div>
-        <div className="mt-3 text-xs text-slate-400">Nilai Buku Awal = Harga Perolehan − Akumulasi Penyusutan (auto)</div>
+        <div className="mt-3 p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-800">
+          <p className="font-semibold mb-1">💡 Cara Pengisian Aset Tetap:</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            <li><strong>Harga Perolehan</strong> → dicocokkan dengan Saldo Awal akun Aset Tetap (1.2.x) di menu Saldo Awal</li>
+            <li><strong>Akumulasi Penyusutan</strong> → dicocokkan dengan Saldo Awal akun Akum. Penyusutan (1.3.x) di menu Saldo Awal</li>
+            <li>Nilai Buku = Harga Perolehan − Akumulasi Penyusutan (info saja, bukan untuk validasi)</li>
+          </ul>
+        </div>
         <div className="mt-3 flex gap-2">
           <button onClick={save} disabled={!saveable}
             className={'rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-all shadow-sm ' +
@@ -486,7 +543,9 @@ function AssetsTab({ reconRows }: { reconRows: ReconRow[] }) {
                   </tr>
                 ))}
                 <tr className="border-t-2 border-slate-200 bg-slate-50/50 font-bold">
-                  <td colSpan={5} className="px-4 py-3 text-right text-slate-700">Total Nilai Buku:</td>
+                  <td colSpan={3} className="px-4 py-3 text-right text-slate-700">Total:</td>
+                  <td className="px-4 py-3 text-right text-emerald-800">{fmt(assets.reduce((s, a) => s + Number(a.hargaPerolehan), 0))}</td>
+                  <td className="px-4 py-3 text-right text-red-700">{fmt(assets.reduce((s, a) => s + Number(a.akumulasiPenyusutan), 0))}</td>
                   <td className="px-4 py-3 text-right text-emerald-800">{fmt(assets.reduce((s, a) => s + Number(a.nilaiBukuAwal), 0))}</td>
                   <td />
                 </tr>

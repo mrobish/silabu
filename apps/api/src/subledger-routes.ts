@@ -17,7 +17,11 @@ const SUBLEDGER_MAP: { prefixes: string[]; table: string; field: string; label: 
     where: "tipe='pelanggan' AND saldo_awal_tipe='debit'" },
   { prefixes: ['2.1.01'], table: 'contacts', field: 'saldo_awal', label: 'Utang',
     where: "tipe='supplier' AND saldo_awal_tipe='kredit'" },
-  { prefixes: ['1.2', '1.3'], table: 'fixed_assets', field: 'nilai_buku_awal', label: 'Aset Tetap' },
+  // Aset Tetap (1.3.x, kecuali 1.3.07 Akum Penyusutan) = Harga Perolehan (debit)
+  { prefixes: ['1.3.01', '1.3.02', '1.3.03', '1.3.04', '1.3.05', '1.3.06', '1.3.99'],
+    table: 'fixed_assets', field: 'harga_perolehan', label: 'Aset Tetap' },
+  // Akumulasi Penyusutan (1.3.07.x) = Akumulasi Penyusutan (kredit, contra-aset)
+  { prefixes: ['1.3.07'], table: 'fixed_assets', field: 'akumulasi_penyusutan', label: 'Akum. Penyusutan' },
   { prefixes: ['3'], table: 'equity_details', field: 'saldo_awal', label: 'Modal / Ekuitas' },
 ];
 
@@ -286,20 +290,47 @@ export async function subledgerRoutes(app: FastifyInstance) {
     const subledgerAccounts = new Map<string, { kode: string; nama: string; label: string; rincianValue: number; detailCount: number }>();
 
     for (const entry of SUBLEDGER_MAP) {
-      let sql = `SELECT akun_id, COALESCE(SUM(${entry.field}), 0) AS total, COUNT(*) AS cnt
-                  FROM ${entry.table}
-                  WHERE tenant_id=$1`;
-      const params: any[] = [a.tenantId];
-      if (entry.where) {
-        sql += ` AND ${entry.where}`;
+      // First, find all CoA accounts matching the prefixes
+      const prefixConditions = entry.prefixes.map((p, i) => `c.kode LIKE $${i + 2}`).join(' OR ');
+      const prefixParams = entry.prefixes.map(p => p + '%');
+      
+      const coaSql = `SELECT c.id FROM chart_of_accounts c WHERE c.tenant_id = $1 AND c.isactive = true AND (${prefixConditions})`;
+      const coaRes = await pool.query(coaSql, [a.tenantId, ...prefixParams]);
+      const matchingAkunIds = coaRes.rows.map((r: any) => r.id);
+      
+      if (matchingAkunIds.length === 0) continue;
+      
+      // For Akum. Penyusutan (1.3.07.x): sum akumulasi_penyusutan from ALL fixed_assets
+      // because harga_perolehan and akumulasi_penyusutan are stored in the same row
+      // but linked to different CoA accounts (aset tetap vs akum penyusutan)
+      const isAkumPenyusutan = entry.prefixes.some(p => p.startsWith('1.3.07'));
+      
+      let sql: string;
+      let params: any[];
+      
+      if (isAkumPenyusutan && entry.table === 'fixed_assets') {
+        // Sum akumulasi_penyusutan from ALL fixed_assets for this tenant
+        sql = `SELECT $2::uuid AS akun_id, COALESCE(SUM(${entry.field}), 0) AS total, COUNT(*) AS cnt
+               FROM ${entry.table}
+               WHERE tenant_id=$1`;
+        params = [a.tenantId, matchingAkunIds[0]]; // Use first matching akun_id as placeholder
+      } else {
+        // Normal: sum from fixed_assets WHERE akun_id matches
+        sql = `SELECT akun_id, COALESCE(SUM(${entry.field}), 0) AS total, COUNT(*) AS cnt
+               FROM ${entry.table}
+               WHERE tenant_id=$1 AND akun_id = ANY($2)`;
+        params = [a.tenantId, matchingAkunIds];
+        if (entry.where) {
+          sql += ` AND ${entry.where}`;
+        }
+        sql += ' GROUP BY akun_id';
       }
-      sql += ' GROUP BY akun_id';
+      
       const sumRes = await pool.query(sql, params);
 
       for (const row of sumRes.rows as any[]) {
         const existing = subledgerAccounts.get(row.akun_id);
         if (existing) {
-          // Same account might match multiple entries (e.g., contacts for both piutang & utang)
           existing.rincianValue += Number(row.total);
           existing.detailCount += Number(row.cnt);
         } else {
