@@ -98,6 +98,48 @@ export async function adminRoutes(app: FastifyInstance) {
     return { success: true, message: 'Belum ada data transaksi untuk dibersihkan' };
   });
 
+  // POST /tenants/:id/reset-transactions — reset all transactional data for a tenant
+  // Scope: journal_entries, journal_lines, fixed_assets, financial_periods, equity_details
+  // Safe: chart_of_accounts, users, tenants profile, contacts, payments stay intact
+  app.post('/tenants/:id/reset-transactions', async (req: FastifyRequest) => {
+    const { id } = req.params as { id: string };
+
+    // Verify tenant exists
+    const tRes = await pool.query('SELECT id, nama_bumdes FROM tenants WHERE id=$1', [id]);
+    if (!tRes.rowCount) return { error: 'Tenant tidak ditemukan' };
+    const tenantNama = tRes.rows[0].nama_bumdes;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Delete in FK-safe order (child tables first)
+      await client.query('DELETE FROM journal_lines WHERE entry_id IN (SELECT id FROM journal_entries WHERE tenant_id=$1)', [id]);
+      await client.query('DELETE FROM journal_entries WHERE tenant_id=$1', [id]);
+      await client.query('DELETE FROM fixed_assets WHERE tenant_id=$1', [id]);
+      await client.query('DELETE FROM financial_periods WHERE tenant_id=$1', [id]);
+      await client.query('DELETE FROM equity_details WHERE tenant_id=$1', [id]);
+      await client.query('DELETE FROM inventory_items WHERE tenant_id=$1', [id]);
+
+      // Reset CoA seeded accounts to clean state (keep structure, zero out)
+      // CoA itself stays — this is the key safety guarantee
+
+      await client.query('COMMIT');
+
+      return {
+        success: true,
+        message: `Semua data transaksi tenant "${tenantNama}" berhasil di-reset. CoA, profil, dan akun user tetap aman.`,
+        deleted: ['journal_lines', 'journal_entries', 'fixed_assets', 'financial_periods', 'equity_details', 'inventory_items'],
+        preserved: ['chart_of_accounts', 'users', 'tenants', 'contacts', 'payments'],
+      };
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return { error: e.message };
+    } finally {
+      client.release();
+    }
+  });
+
   // POST /users/:id/deactivate — toggle user active
   app.post('/users/:id/deactivate', async (req: FastifyRequest) => {
     const { id } = req.params as { id: string };
