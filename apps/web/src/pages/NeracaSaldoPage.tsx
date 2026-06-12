@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useAccountingYears } from './useAccountingYears';
 import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, ListOrdered } from 'lucide-react';
 
@@ -113,45 +113,41 @@ export default function NeracaSaldoPage() {
             </p>
           </div>
 
-          {/* Table — CSS Grid for pixel-perfect column alignment on all devices */}
+          {/* Table — single CSS Grid for header + data + total = guaranteed alignment */}
           <div className="rounded-3xl border border-white/70 bg-white/80 p-2 shadow-sm backdrop-blur-xl overflow-x-auto">
-            <div className="min-w-[480px]">
+            <div className="grid min-w-[480px]" style={{ gridTemplateColumns: '90px 1fr 120px 120px' }}>
               {/* Header row */}
-              <div className="grid" style={{ gridTemplateColumns: '90px 1fr 120px 120px' }}>
-                <div className="py-3 px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">Kode</div>
-                <div className="py-3 px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">Nama Akun</div>
-                <div className="py-3 px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 text-right">Debit</div>
-                <div className="py-3 px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 text-right">Kredit</div>
-              </div>
+              <div className="py-3 px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">Kode</div>
+              <div className="py-3 px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">Nama Akun</div>
+              <div className="py-3 px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 text-right">Debit</div>
+              <div className="py-3 px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 text-right">Kredit</div>
 
               {/* Data groups */}
               {glCodes.map(g => hasAny(g) && (
-                <div key={g}>
-                  {/* Section header — full-width button */}
-                  <button onClick={() => toggle(g)}
-                    className={'w-full flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider ' + GL_COLOR[g] + ' hover:bg-slate-50 transition-colors'}>
+                <Fragment key={g}>
+                  {/* Section header — spans all 4 columns */}
+                  <button onClick={() => toggle(g)} style={{ gridColumn: 'span 4' }}
+                    className={'flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider ' + GL_COLOR[g] + ' hover:bg-slate-50 transition-colors'}>
                     {expanded[g] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     {GL_LABEL[g]}
                   </button>
 
-                  {/* Account rows — each a CSS grid with identical column template */}
+                  {/* Account rows */}
                   {expanded[g] && grouped[g].map(a => (
-                    <div key={a.kode} className="grid border-b border-slate-50 last:border-0" style={{ gridTemplateColumns: '90px 1fr 120px 120px' }}>
-                      <div className="py-1.5 px-3 text-[11px] text-slate-400 font-mono truncate">{a.kode}</div>
-                      <div className="py-1.5 px-3 text-sm text-slate-700 truncate">{a.nama}</div>
-                      <div className="py-1.5 px-3 text-right tabular-nums text-slate-700 whitespace-nowrap">{a.debit > 0 ? rupiah(a.debit) : ''}</div>
-                      <div className="py-1.5 px-3 text-right tabular-nums text-slate-700 whitespace-nowrap">{a.kredit > 0 ? rupiah(a.kredit) : ''}</div>
-                    </div>
+                    <Fragment key={a.kode}>
+                      <div className="py-1.5 px-3 text-[11px] text-slate-400 font-mono truncate border-b border-slate-50 last:border-0">{a.kode}</div>
+                      <div className="py-1.5 px-3 text-sm text-slate-700 truncate border-b border-slate-50 last:border-0">{a.nama}</div>
+                      <div className="py-1.5 px-3 text-right tabular-nums text-slate-700 whitespace-nowrap border-b border-slate-50 last:border-0">{a.debit > 0 ? rupiah(a.debit) : ''}</div>
+                      <div className="py-1.5 px-3 text-right tabular-nums text-slate-700 whitespace-nowrap border-b border-slate-50 last:border-0">{a.kredit > 0 ? rupiah(a.kredit) : ''}</div>
+                    </Fragment>
                   ))}
-                </div>
+                </Fragment>
               ))}
 
               {/* Total row */}
-              <div className="grid border-t-2 border-slate-200 bg-slate-50" style={{ gridTemplateColumns: '90px 1fr 120px 120px' }}>
-                <div className="py-3 px-3 text-sm font-bold text-slate-800" style={{ gridColumn: 'span 2' }}>TOTAL</div>
-                <div className="py-3 px-3 text-right text-sm font-bold text-emerald-700 tabular-nums">{rupiah(data.totalDebit)}</div>
-                <div className="py-3 px-3 text-right text-sm font-bold text-emerald-700 tabular-nums">{rupiah(data.totalKredit)}</div>
-              </div>
+              <div className="col-span-2 py-3 px-3 text-sm font-bold text-slate-800 border-t-2 border-slate-200 bg-slate-50">TOTAL</div>
+              <div className="py-3 px-3 text-right text-sm font-bold text-emerald-700 tabular-nums border-t-2 border-slate-200 bg-slate-50">{rupiah(data.totalDebit)}</div>
+              <div className="py-3 px-3 text-right text-sm font-bold text-emerald-700 tabular-nums border-t-2 border-slate-200 bg-slate-50">{rupiah(data.totalKredit)}</div>
             </div>
           </div>
 
