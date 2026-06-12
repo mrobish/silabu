@@ -1196,6 +1196,31 @@ function JurnalUmumPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<JournalEntry | null>(null);
   const [confirmText, setConfirmText] = useState('');
+  const [quickAction, setQuickAction] = useState<'penerimaan' | 'pengeluaran' | null>(null);
+
+  function applyQuickAction(type: 'penerimaan' | 'pengeluaran') {
+    const kas = coaAccounts.find(a => a.kode === '1.1.01.01') || coaAccounts.find(a => a.kode?.startsWith('1.1.01'));
+    if (!kas) { setError('Akun Kas (1.1.01.01) tidak ditemukan di CoA'); return; }
+    setEditingId(null);
+    setError('');
+    setShowSuccess('');
+    setKeterangan('');
+    setReferensi('');
+    setTanggal(new Date().toISOString().slice(0, 10));
+    setLines([
+      { akun_id: String(kas.id), debit: '', kredit: '', keterangan: '', searchTerm: kas.kode + ' — ' + kas.nama },
+      { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' },
+    ]);
+    setQuickAction(type);
+  }
+
+  function cancelQuickAction() {
+    setQuickAction(null);
+    setLines([
+      { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' },
+      { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' },
+    ]);
+  }
 
   function getToken() {
     return localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
@@ -1283,6 +1308,7 @@ function JurnalUmumPage() {
       const no = data.no_jurnal || data.entry?.no_jurnal || data.jurnal?.no_jurnal || '';
       setShowSuccess(editingId ? ('Jurnal berhasil diperbarui' + (no ? ': ' + no : '')) : (no ? 'Jurnal berhasil disimpan: ' + no : 'Jurnal berhasil disimpan'));
       setEditingId(null);
+      setQuickAction(null);
       setKeterangan('');
       setReferensi('');
       setLines([{ akun_id: '', debit: '', kredit: '', keterangan: '' }, { akun_id: '', debit: '', kredit: '', keterangan: '' }]);
@@ -1332,6 +1358,7 @@ function JurnalUmumPage() {
 
   function cancelEdit() {
     setEditingId(null);
+    setQuickAction(null);
     setError('');
     setKeterangan('');
     setReferensi('');
@@ -1376,6 +1403,37 @@ function JurnalUmumPage() {
         <p className="mt-1 text-sm text-slate-500">Catat transaksi jurnal umum BUM Desa.</p>
       </div>
 
+      {/* Quick Action Buttons */}
+      {!editingId && (
+        <div className="flex flex-wrap gap-3">
+          {!quickAction ? (
+            <>
+              <button type="button" onClick={() => applyQuickAction('penerimaan')}
+                className="group flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-50 to-cyan-50 border border-emerald-200 px-5 py-3 text-sm font-bold text-emerald-700 transition hover:from-emerald-100 hover:to-cyan-100 hover:border-emerald-300 hover:shadow-md active:scale-[0.97]">
+                <svg className="w-5 h-5 text-emerald-600 transition group-hover:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                Penerimaan Kas
+              </button>
+              <button type="button" onClick={() => applyQuickAction('pengeluaran')}
+                className="group flex items-center gap-2 rounded-2xl bg-gradient-to-r from-rose-50 to-orange-50 border border-rose-200 px-5 py-3 text-sm font-bold text-rose-700 transition hover:from-rose-100 hover:to-orange-100 hover:border-rose-300 hover:shadow-md active:scale-[0.97]">
+                <svg className="w-5 h-5 text-rose-600 transition group-hover:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12h-15" /></svg>
+                Pengeluaran Kas
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center gap-3">
+              <span className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold ${quickAction === 'penerimaan' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d={quickAction === 'penerimaan' ? 'M12 4.5v15m7.5-7.5h-15' : 'M19.5 12h-15'} /></svg>
+                {quickAction === 'penerimaan' ? 'Penerimaan Kas — Debit: Kas' : 'Pengeluaran Kas — Kredit: Kas'}
+              </span>
+              <button type="button" onClick={cancelQuickAction}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
+                ✕ Batal
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{error}</div>}
       {showSuccess && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">{showSuccess}</div>}
 
@@ -1412,10 +1470,16 @@ function JurnalUmumPage() {
               <div className="col-span-4">
                 {/* Account picker: searchable dropdown */}
                 <div className="relative">
+                  {quickAction && i === 0 && (
+                    <div className="absolute left-2 top-1/2 -translate-y-1/2 z-10">
+                      <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                    </div>
+                  )}
                   <input
                     type="text"
                     placeholder="Cari akun..."
                     value={line.searchTerm || ''}
+                    disabled={!!(quickAction && i === 0)}
                     onChange={e => {
                       const val = e.target.value;
                       updateLine(i, 'searchTerm', val);
@@ -1430,7 +1494,7 @@ function JurnalUmumPage() {
                         if (match) { updateLine(i, 'akun_id', String(match.id)); }
                       }
                     }}
-                    className={selectCls}
+                    className={selectCls + (quickAction && i === 0 ? ' pl-8 bg-slate-50 text-slate-600 cursor-not-allowed opacity-80' : '')}
                   />
                   {line.searchTerm && line.searchTerm.length > 0 && !line.akun_id && (
                     <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-slate-200 max-h-48 overflow-y-auto">
@@ -1460,13 +1524,13 @@ function JurnalUmumPage() {
                 </div>
               </div>
               <div className="col-span-3">
-                <input type="text" inputMode="numeric" placeholder="0" value={line.debit} onChange={e => updateLine(i, 'debit', e.target.value)} className={inputCls} />
+                <input type="text" inputMode="numeric" placeholder="0" value={line.debit} disabled={!!(quickAction === 'pengeluaran' && i === 0)} onChange={e => updateLine(i, 'debit', e.target.value)} className={inputCls + (quickAction === 'pengeluaran' && i === 0 ? ' bg-slate-100 text-slate-400 cursor-not-allowed' : '')} />
               </div>
               <div className="col-span-3">
-                <input type="text" inputMode="numeric" placeholder="0" value={line.kredit} onChange={e => updateLine(i, 'kredit', e.target.value)} className={inputCls} />
+                <input type="text" inputMode="numeric" placeholder="0" value={line.kredit} disabled={!!(quickAction === 'penerimaan' && i === 0)} onChange={e => updateLine(i, 'kredit', e.target.value)} className={inputCls + (quickAction === 'penerimaan' && i === 0 ? ' bg-slate-100 text-slate-400 cursor-not-allowed' : '')} />
               </div>
               <div className="col-span-2 flex gap-1">
-                {lines.length > 2 && (
+                {lines.length > 2 && !(quickAction && i === 0) && (
                   <button type="button" onClick={() => removeLine(i)}
                     className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition text-sm font-bold" title="Hapus baris">
                     <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" className="w-4 h-4" />
