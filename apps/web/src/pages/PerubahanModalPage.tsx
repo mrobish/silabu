@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAccountingYears } from './useAccountingYears';
 import { Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 
@@ -31,6 +32,7 @@ function formatRupiah(v?: number) {
 
 export default function PerubahanModalPage() {
   const currentYear = new Date().getFullYear();
+  const years = useAccountingYears();
   const [tahun, setTahun] = useState(currentYear);
   const [bulan, setBulan] = useState(0); // 0 = Semua Tahun
   const [data, setData] = useState<PerubahanModalData | null>(null);
@@ -72,7 +74,7 @@ export default function PerubahanModalPage() {
           </select>
           <select value={tahun} onChange={e => setTahun(Number(e.target.value))}
             className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-emerald-400">
-            {[currentYear, currentYear - 1, currentYear - 2].map(y => (
+            {years.map(y => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>

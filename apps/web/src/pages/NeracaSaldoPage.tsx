@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAccountingYears } from './useAccountingYears';
 import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, ListOrdered } from 'lucide-react';
 
 type Akun = { kode: string; nama: string; saldoNormal: string; debit: number; kredit: number };
@@ -20,6 +21,7 @@ function rupiah(n: number) {
 
 export default function NeracaSaldoPage() {
   const now = new Date();
+  const years = useAccountingYears();
   const [bulan, setBulan] = useState(now.getMonth() + 1);
   const [tahun, setTahun] = useState(now.getFullYear());
   const lastDay = new Date(tahun, bulan, 0).getDate();
@@ -82,7 +84,7 @@ export default function NeracaSaldoPage() {
                 {['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
               </select>
               <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className="w-24 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-700 bg-white/60 focus:outline-none focus:ring-2 focus:ring-emerald-400">
-                {[now.getFullYear(), now.getFullYear()-1, now.getFullYear()-2].map(y => <option key={y} value={y}>{y}</option>)}
+                {years.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
           </div>

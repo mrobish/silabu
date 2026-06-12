@@ -26,6 +26,7 @@ const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli
 // ─── Component ───────────────────────────────────────────────
 export default function BukuBesarPage() {
   const now = new Date();
+  const years = useAccountingYears();
   const [coaList, setCoaList] = useState<CoAAccount[]>([]);
   const [akunId, setAkunId] = useState('');
   const [search, setSearch] = useState('');
@@ -174,7 +175,7 @@ export default function BukuBesarPage() {
           <div className={filterMode === 'bulanan' ? 'sm:col-span-2' : 'sm:col-span-2'}>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Tahun</label>
             <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className={inputCls}>
-              {Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i).map(y => <option key={y} value={y}>{y}</option>)}
+              {years.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
 

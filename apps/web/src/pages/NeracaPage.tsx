@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAccountingYears } from './useAccountingYears';
 import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, FileDown, Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 
@@ -77,6 +78,7 @@ function BalanceBanner({ isBalanced, totalAset, totalPassiva, selisih }: { isBal
 
 export default function NeracaPage() {
   const now = new Date();
+  const years = useAccountingYears();
   const [bulan, setBulan] = useState(now.getMonth() + 1);
   const [tahun, setTahun] = useState(now.getFullYear());
   const lastDay = new Date(tahun, bulan, 0).getDate();
@@ -137,7 +139,7 @@ export default function NeracaPage() {
                 {['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
               </select>
               <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className={inputCls + ' max-w-[100px]'}>
-                {[now.getFullYear(), now.getFullYear()-1, now.getFullYear()-2].map(y => <option key={y} value={y}>{y}</option>)}
+                {years.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
           </div>

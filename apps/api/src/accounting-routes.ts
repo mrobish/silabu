@@ -74,6 +74,29 @@ export async function accountingRoutes(app: FastifyInstance) {
     return { seeded: (r.rows[0] as any).cnt, message: 'Chart of accounts berhasil disimpan' };
   });
 
+  // GET /accounting/years — available years from financial_periods + journal entries
+  app.get('/years', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    // Get years from financial_periods
+    const fp = await pool.query(
+      'SELECT DISTINCT tahun FROM financial_periods WHERE tenant_id=$1',
+      [a.tenantId]
+    );
+    // Get years from journal_entries
+    const je = await pool.query(
+      'SELECT DISTINCT tahun FROM journal_entries WHERE tenant_id=$1',
+      [a.tenantId]
+    );
+    // Merge + deduplicate + add current year
+    const currentYear = new Date().getFullYear();
+    const yearSet = new Set<number>();
+    yearSet.add(currentYear);
+    for (const r of fp.rows) yearSet.add((r as any).tahun);
+    for (const r of je.rows) yearSet.add((r as any).tahun);
+    const years = Array.from(yearSet).sort((a, b) => b - a); // descending
+    return { years };
+  });
+
   // ─── Jurnal Umum ─────────────────────────────────────────────────
 
   // POST /accounting/coa — create sub-akun (Level 4) under a parent (Level 3)

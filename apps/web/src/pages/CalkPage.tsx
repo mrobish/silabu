@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useAccountingYears } from './useAccountingYears';
 import { FileText, Loader2, CheckCircle, ChevronDown, ChevronRight, Printer } from 'lucide-react';
 
 const rupiah = (n: number) => {
@@ -55,6 +56,7 @@ function Section({ title, n, children }: { title: string; n: number; children: R
 
 export default function CalkPage() {
   const now = new Date();
+  const years = useAccountingYears();
   const [bulan, setBulan] = useState(now.getMonth() + 1);
   const [tahun, setTahun] = useState(now.getFullYear());
   const lastDay = new Date(tahun, bulan, 0).getDate();
@@ -123,7 +125,7 @@ export default function CalkPage() {
                 {['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
               </select>
               <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className="w-24 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition">
-                {[now.getFullYear(), now.getFullYear()-1, now.getFullYear()-2].map(y => <option key={y} value={y}>{y}</option>)}
+                {years.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
           </div>
