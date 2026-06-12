@@ -886,7 +886,7 @@ function CoAPage() {
 
 function SaldoAwalPage() {
   const [accounts, setAccounts] = useState<{ id: string; kode: string; nama: string; jenisAkun: string; kelompok: string; saldoNormal: string; level: number }[]>([]);
-  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [rows, setRows] = useState<Record<string, { debit: string; kredit: string }>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -908,54 +908,24 @@ function SaldoAwalPage() {
         setAccounts(data.accounts || []);
         setIsSetup(data.isSetup);
         setEntry(data.entry);
-        const existing: Record<string, string> = {};
+        const existing: Record<string, { debit: string; kredit: string }> = {};
         for (const a of (data.accounts || [])) {
           const line = data.existingLines?.[a.id];
-          const debit = line?.debit && line.debit !== '0' ? line.debit : '';
-          const kredit = line?.kredit && line.kredit !== '0' ? line.kredit : '';
-          existing[a.id] = formatNumberString(debit || kredit);
+          existing[a.id] = { debit: line?.debit && line.debit !== '0' ? line.debit : '', kredit: line?.kredit && line.kredit !== '0' ? line.kredit : '' };
         }
-        setAmounts(existing);
+        setRows(existing);
       })
       .catch(e => setError(e.message || 'Gagal memuat data'))
       .finally(() => setLoading(false));
   }, []);
 
-  // Currency formatting helpers
-  function formatNumberString(raw: string): string {
-    if (!raw) return '';
-    const digits = raw.replace(/\D/g, '');
-    if (!digits) return '';
-    return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  function updateRow(id: string, field: 'debit' | 'kredit', val: string) {
+    setRows(prev => {
+      const row = prev[id] || { debit: '', kredit: '' };
+      return { ...prev, [id]: { ...row, [field]: val, ...(field === 'debit' ? { kredit: '' } : { debit: '' }) } };
+    });
   }
 
-  function parseFormatted(val: string): string {
-    const digits = val.replace(/\D/g, '');
-    return digits || '0';
-  }
-
-  function handleAmountChange(id: string, displayVal: string) {
-    const formatted = formatNumberString(displayVal);
-    setAmounts(prev => ({ ...prev, [id]: formatted }));
-  }
-
-  // Build debit/kredit rows from amounts + saldoNormal auto-mapping
-  function buildRows(): Record<string, { debit: string; kredit: string }> {
-    const rows: Record<string, { debit: string; kredit: string }> = {};
-    for (const a of accounts) {
-      const raw = parseFormatted(amounts[a.id] || '');
-      const num = parseFloat(raw) || 0;
-      if (num <= 0) continue;
-      if (a.saldoNormal === 'D') {
-        rows[a.id] = { debit: raw, kredit: '0' };
-      } else {
-        rows[a.id] = { debit: '0', kredit: raw };
-      }
-    }
-    return rows;
-  }
-
-  const rows = buildRows();
   const cleanRows = Object.entries(rows).filter(([, v]) => (parseFloat(v.debit) || 0) > 0 || (parseFloat(v.kredit) || 0) > 0);
   const totalDebit = cleanRows.reduce((s, [, v]) => s + (parseFloat(v.debit) || 0), 0);
   const totalKredit = cleanRows.reduce((s, [, v]) => s + (parseFloat(v.kredit) || 0), 0);
@@ -1002,7 +972,7 @@ function SaldoAwalPage() {
       if (!res.ok) throw new Error(data.error || 'Gagal reset saldo awal');
       setIsSetup(false);
       setEntry(null);
-      setAmounts({});
+      setRows({});
       setShowSuccess('Saldo awal berhasil direset. Silakan input ulang.');
     } catch (e: any) {
       setError(e.message);
@@ -1018,12 +988,12 @@ function SaldoAwalPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-slate-500">Masukkan sisa saldo akun riil dari kepengurusan sebelumnya. Cukup ketik nominal, sistem otomatis menempatkan di kolom Debit atau Kredit sesuai Saldo Normal akun.</p>
+        <p className="text-sm text-slate-500">Masukkan sisa saldo akun riil dari kepengurusan sebelumnya. Saldo ini hanya bisa disubmit sekali.</p>
         {isSetup && (
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-              Tersimpan - {entry?.noJurnal || 'OB-001'}
+              Tersimpan — {entry?.noJurnal || 'OB-001'}
             </span>
             <button onClick={handleReset} disabled={submitting} className="px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">Reset</button>
           </div>
@@ -1044,9 +1014,9 @@ function SaldoAwalPage() {
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="text-left px-4 py-3 font-semibold text-slate-600 w-28">Kode</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600 min-w-60">Nama Akun</th>
-                <th className="text-center px-2 py-3 font-semibold text-slate-600 w-16">Normal</th>
-                <th className="text-right px-4 py-3 font-semibold text-slate-600 w-48">Nominal (Rp)</th>
+                <th className="text-left px-4 py-3 font-semibold text-slate-600 min-w-72">Nama Akun</th>
+                <th className="text-right px-4 py-3 font-semibold text-slate-600 w-40">Debit (Rp)</th>
+                <th className="text-right px-4 py-3 font-semibold text-slate-600 w-40">Kredit (Rp)</th>
               </tr>
             </thead>
             <tbody>
@@ -1054,17 +1024,17 @@ function SaldoAwalPage() {
                 <Fragment key={gol}>
                   <tr className="bg-slate-100/70"><td colSpan={4} className="px-4 py-2 font-bold text-slate-700 text-xs uppercase tracking-wide">{golLabels[gol] || `Golongan ${gol}`}</td></tr>
                   {akuns.map((a, idx) => {
-                    const displayVal = amounts[a.id] || '';
+                    const row = rows[a.id] || { debit: '', kredit: '' };
                     return (
                       <tr key={a.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'} hover:bg-emerald-50/30 transition-colors`}>
                         <td className="px-4 py-2 font-mono text-xs text-slate-500 whitespace-nowrap">{a.kode}</td>
                         <td className="px-4 py-2 text-slate-800">{a.nama}</td>
-                        <td className="px-2 py-2 text-center"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${a.saldoNormal === 'D' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>{a.saldoNormal === 'D' ? 'Debit' : 'Kredit'}</span></td>
-                        <td className="px-3 py-1.5"><input type="text" inputMode="numeric" placeholder="0" value={displayVal} disabled={isSetup} onChange={e => handleAmountChange(a.id, e.target.value)} className="w-full text-right rounded-lg border border-transparent px-2 py-1.5 text-sm tabular-nums focus:border-emerald-400 focus:ring-1 focus:ring-emerald-300 outline-none bg-transparent hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed" /></td>
+                        <td className="px-2 py-1.5"><input type="number" min="0" step="0.01" placeholder="0" value={row.debit} disabled={isSetup} onChange={e => updateRow(a.id, 'debit', e.target.value)} className="w-full text-right rounded-lg border border-transparent px-2 py-1.5 text-sm focus:border-emerald-400 focus:ring-1 focus:ring-emerald-300 outline-none bg-transparent hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed" /></td>
+                        <td className="px-2 py-1.5"><input type="number" min="0" step="0.01" placeholder="0" value={row.kredit} disabled={isSetup} onChange={e => updateRow(a.id, 'kredit', e.target.value)} className="w-full text-right rounded-lg border border-transparent px-2 py-1.5 text-sm focus:border-emerald-400 focus:ring-1 focus:ring-emerald-300 outline-none bg-transparent hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed" /></td>
                       </tr>
                     );
                   })}
-                </Fragment>
+                                </Fragment>
               ))}
             </tbody>
           </table>
@@ -1078,8 +1048,8 @@ function SaldoAwalPage() {
             </div>
             {!isSetup && <button onClick={handleSubmit} disabled={!isBalanced || submitting} className={'px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm ' + (isBalanced && !submitting ? 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-md active:scale-[0.97]' : 'bg-slate-200 text-slate-400 cursor-not-allowed')}>{submitting ? 'Menyimpan...' : 'Simpan Saldo Awal'}</button>}
           </div>
-          {!isBalanced && !isSetup && cleanRows.length > 0 && <p className="mt-3 text-xs text-red-600 font-medium">Jurnal tidak balance! Periksa kembali nominal yang dimasukkan.</p>}
-          {!isBalanced && !isSetup && cleanRows.length === 0 && <p className="mt-3 text-xs text-slate-400 font-medium">Isi minimal satu akun dengan nominal untuk mengaktifkan tombol Simpan.</p>}
+          {!isBalanced && !isSetup && cleanRows.length > 0 && <p className="mt-3 text-xs text-red-600 font-medium">Jurnal tidak balance! Periksa kembali nilai debit dan kredit.</p>}
+          {!isBalanced && !isSetup && cleanRows.length === 0 && <p className="mt-3 text-xs text-slate-400 font-medium">Isi minimal satu akun dengan nilai debit atau kredit untuk mengaktifkan tombol Simpan.</p>}
         </div>
       </div>
 
@@ -1088,9 +1058,7 @@ function SaldoAwalPage() {
         <ul className="list-disc pl-4 space-y-1">
           <li>Hanya akun riil (Golongan 1 Aset, 2 Kewajiban, 3 Ekuitas) yang bisa diisi.</li>
           <li>Akun nominal (Pendapatan dan Beban) tidak ditampilkan karena mulai dari nol.</li>
-          <li>Sistem otomatis menempatkan nominal ke kolom Debit atau Kredit sesuai Saldo Normal akun.</li>
-          <li>Kode awal 1.x (Aset) = Debit, kecuali Akumulasi Penyusutan (1.3.x) = Kredit.</li>
-          <li>Kode awal 2.x (Kewajiban), 3.x (Ekuitas) = Kredit, kecuali Prive = Debit.</li>
+          <li>Setiap akun hanya boleh diisi salah satu: debit atau kredit.</li>
           <li>Total Debit harus sama persis dengan Total Kredit.</li>
           <li>Saldo awal disimpan sebagai jurnal khusus <code className="bg-cyan-100 px-1 rounded text-xs">OB-001</code>.</li>
         </ul>
