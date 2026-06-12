@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, ChevronDown, ChevronRight, DollarSign, Calendar, BarChart4, Receipt, Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
+import DateRangePicker from './DateRangePicker';
 
 type AkunSaldo = { kode: string; nama: string; saldoNormal: string; saldo: number };
 type LabaRugiData = {
@@ -112,13 +113,13 @@ export default function LabaRugiPage() {
       {/* Filter */}
       <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-xl">
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Dari Tanggal</label>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Sampai Tanggal</label>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} />
+          <div className="sm:col-span-2">
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onStartChange={setStartDate}
+              onEndChange={setEndDate}
+            />
           </div>
           <div>
             <button type="button" onClick={fetchData} disabled={loading}

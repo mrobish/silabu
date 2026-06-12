@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowUpRight, ArrowDownRight, DollarSign, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, Calendar, ChevronDown, ChevronRight, Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
+import DateRangePicker from './DateRangePicker';
 
 type FlowItem = { kode: string; nama: string; masuk: number; keluar: number; net: number };
 type Aktivitas = { detail: FlowItem[]; totalMasuk: number; totalKeluar: number; net: number };
@@ -115,13 +116,13 @@ export default function ArusKasPage() {
       {/* Filter */}
       <div className={`${br} p-5 relative z-10`}>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Dari Tanggal</label>
-            <input type="date" value={start} onChange={e => setStart(e.target.value)} className={inputCls} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Sampai Tanggal</label>
-            <input type="date" value={end} onChange={e => setEnd(e.target.value)} className={inputCls} />
+          <div className="sm:col-span-2">
+            <DateRangePicker
+              startDate={start}
+              endDate={end}
+              onStartChange={setStart}
+              onEndChange={setEnd}
+            />
           </div>
           <div className="flex gap-2 sm:col-span-2">
             <button type="button" onClick={fetchD} disabled={loading}

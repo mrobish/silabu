@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useAccountingYears } from './useAccountingYears';
 import { Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
+import DateRangePicker from './DateRangePicker';
 
 type MutasiItem = { kode: string; nama: string; debit: number; kredit: number };
 
@@ -31,24 +31,29 @@ function formatRupiah(v?: number) {
 }
 
 export default function PerubahanModalPage() {
-  const currentYear = new Date().getFullYear();
-  const years = useAccountingYears();
-  const [tahun, setTahun] = useState(currentYear);
-  const [bulan, setBulan] = useState(0); // 0 = Semua Tahun
+  const now = new Date();
+  const y = now.getFullYear();
+  const [startDate, setStartDate] = useState(`${y}-01-01`);
+  const [endDate, setEndDate] = useState(`${y}-12-31`);
   const [data, setData] = useState<PerubahanModalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [printOpen, setPrintOpen] = useState(false);
 
+  const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const fmtIdDate = (d: string) => { const p = d.split('-'); return `${parseInt(p[2])} ${MONTHS_ID[parseInt(p[1]) - 1]} ${p[0]}`; };
+  const periodLabel = `Periode: ${fmtIdDate(startDate)} s.d ${fmtIdDate(endDate)}`;
+  const tahun = new Date(endDate + 'T00:00:00').getFullYear();
+
   useEffect(() => {
     const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
     setLoading(true); setError('');
-    fetch(`/api/accounting/perubahan-modal?tahun=${tahun}`, { headers: { Authorization: 'Bearer ' + token } })
+    fetch(`/api/accounting/perubahan-modal?start_date=${startDate}&end_date=${endDate}`, { headers: { Authorization: 'Bearer ' + token } })
       .then(r => r.json())
       .then(d => { if (d.error) throw new Error(d.error); setData(d); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [tahun]);
+  }, [startDate, endDate]);
 
   const R = ({ v, bold }: { v: number; bold?: boolean }) => (
     <td className={'px-4 py-3 text-right tabular-nums ' + (bold ? 'font-bold text-slate-900' : 'text-slate-700')}>
@@ -65,23 +70,24 @@ export default function PerubahanModalPage() {
           <p className="text-sm text-slate-500 mt-0.5">Modal Awal + Tambahan + Laba Bersih − Prive = Modal Akhir</p>
         </div>
         <div className="flex items-center gap-3">
-          <select value={bulan} onChange={e => setBulan(Number(e.target.value))}
-            className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-emerald-400">
-            <option value={0}>Semua Tahun</option>
-            {['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].map((m, i) => (
-              <option key={i+1} value={i+1}>{m}</option>
-            ))}
-          </select>
-          <select value={tahun} onChange={e => setTahun(Number(e.target.value))}
-            className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-emerald-400">
-            {years.map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
           <button onClick={() => setPrintOpen(true)}
             className="rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow-lg transition-all">
             <Printer size={14} className="inline-block -mt-0.5 mr-1" /> Cetak
           </button>
+        </div>
+      </div>
+
+      {/* Filter */}
+      <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-xl relative z-10">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+          <div className="sm:col-span-2">
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onStartChange={setStartDate}
+              onEndChange={setEndDate}
+            />
+          </div>
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { BookOpen, Calendar, FileText, DollarSign, Search, ChevronDown, X } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
-import { useAccountingYears } from './useAccountingYears';
+import DateRangePicker from './DateRangePicker';
 
 // ─── Types ───────────────────────────────────────────────────
 interface CoAAccount { id: string; kode: string; nama: string; isPostable?: boolean; is_postable?: boolean; level?: number; }
@@ -23,35 +23,27 @@ const rupiahPrint = (n: number) => n.toLocaleString('id-ID', { minimumFractionDi
 const fmtDate = (d: string) => { try { return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return d; } };
 const fmtDateShort = (d: string) => { try { return new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }); } catch { return d; } };
 const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+const fmtIdDate = (d: string) => { const p = d.split('-'); return `${parseInt(p[2])} ${MONTHS_ID[parseInt(p[1]) - 1]} ${p[0]}`; };
 
 // ─── Component ───────────────────────────────────────────────
 export default function BukuBesarPage() {
   const now = new Date();
-  const years = useAccountingYears();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
   const [coaList, setCoaList] = useState<CoAAccount[]>([]);
   const [akunId, setAkunId] = useState('');
   const [search, setSearch] = useState('');
   const [openSearch, setOpenSearch] = useState(false);
-  const [filterMode, setFilterMode] = useState<'bulanan' | 'tahunan'>('bulanan');
-  const [bulan, setBulan] = useState(now.getMonth() + 1);
-  const [tahun, setTahun] = useState(now.getFullYear());
+  const [startDate, setStartDate] = useState(`${y}-${m}-01`);
+  const [endDate, setEndDate] = useState(`${y}-${m}-${String(lastDay).padStart(2, '0')}`);
   const [data, setData] = useState<BukuBesarData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [printOpen, setPrintOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Compute startDate / endDate from filter
-  const startDate = filterMode === 'bulanan'
-    ? `${tahun}-${String(bulan).padStart(2, '0')}-01`
-    : `${tahun}-01-01`;
-  const endDate = filterMode === 'bulanan'
-    ? `${tahun}-${String(bulan).padStart(2, '0')}-${String(new Date(tahun, bulan, 0).getDate()).padStart(2, '0')}`
-    : `${tahun}-12-31`;
-
-  const periodLabel = filterMode === 'bulanan'
-    ? `Periode: ${MONTHS_ID[bulan - 1]} ${tahun}`
-    : `Tahun: ${tahun}`;
+  const periodLabel = `Periode: ${fmtIdDate(startDate)} s.d ${fmtIdDate(endDate)}`;
 
   useEffect(() => {
     fetch('/api/accounting/coa', { headers: { Authorization: 'Bearer ' + token() } })
@@ -147,37 +139,14 @@ export default function BukuBesarPage() {
             )}
           </div>
 
-          {/* Filter Mode Toggle */}
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Filter</label>
-            <div className="flex rounded-xl border border-slate-200 overflow-hidden">
-              <button type="button" onClick={() => setFilterMode('bulanan')}
-                className={'flex-1 px-3 py-2.5 text-xs font-bold transition ' + (filterMode === 'bulanan' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50')}>
-                Bulanan
-              </button>
-              <button type="button" onClick={() => setFilterMode('tahunan')}
-                className={'flex-1 px-3 py-2.5 text-xs font-bold transition ' + (filterMode === 'tahunan' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50')}>
-                Tahunan
-              </button>
-            </div>
-          </div>
-
-          {/* Month (only when bulanan) */}
-          {filterMode === 'bulanan' && (
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Bulan</label>
-              <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className={inputCls}>
-                {MONTHS_ID.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-              </select>
-            </div>
-          )}
-
-          {/* Year */}
-          <div className={filterMode === 'bulanan' ? 'sm:col-span-2' : 'sm:col-span-2'}>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Tahun</label>
-            <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className={inputCls}>
-              {years.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
+          {/* Date Range Picker */}
+          <div className="sm:col-span-5">
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onStartChange={setStartDate}
+              onEndChange={setEndDate}
+            />
           </div>
 
           {/* Action buttons */}

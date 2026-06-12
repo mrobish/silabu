@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useAccountingYears } from './useAccountingYears';
 import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, FileDown, Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
+import DateRangePicker from './DateRangePicker';
 
 type Akun = { kode: string; nama: string; saldoNormal: string; saldo: number };
 type AsetTetap = {
@@ -78,11 +78,11 @@ function BalanceBanner({ isBalanced, totalAset, totalPassiva, selisih }: { isBal
 
 export default function NeracaPage() {
   const now = new Date();
-  const years = useAccountingYears();
-  const [bulan, setBulan] = useState(now.getMonth() + 1);
-  const [tahun, setTahun] = useState(now.getFullYear());
-  const lastDay = new Date(tahun, bulan, 0).getDate();
-  const endDate = `${tahun}-${String(bulan).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+  const [startDate, setStartDate] = useState(`${y}-${m}-01`);
+  const [endDate, setEndDate] = useState(`${y}-${m}-${String(lastDay).padStart(2, '0')}`);
   const [data, setData] = useState<NeracaData | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ lancar: true, tetap: true, lain: true, kewajiban: true, ekuitas: true });
@@ -129,19 +129,16 @@ export default function NeracaPage() {
         </div>
       </div>
 
-      {/* Filter: End date only */}
+      {/* Filter: Date range picker */}
       <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-xl relative z-10">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
           <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Periode Laporan</label>
-            <div className="flex gap-2">
-              <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className={inputCls + ' max-w-[160px]'}>
-                {['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
-              </select>
-              <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className={inputCls + ' max-w-[100px]'}>
-                {years.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onStartChange={setStartDate}
+              onEndChange={setEndDate}
+            />
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={fetchData} disabled={loading}
