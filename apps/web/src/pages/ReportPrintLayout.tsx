@@ -97,15 +97,15 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
         <div ref={printRef} className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
           style={{ width: '100%', maxWidth: landscape ? '297mm' : '210mm', maxHeight: '92vh' }}>
           {/* Toolbar */}
-          <div className="no-print flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
+          <div className="no-print flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 sm:px-6 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
             <h3 className="text-sm font-semibold text-slate-700">Cetak {title}</h3>
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
               <button onClick={() => window.print()}
-                className="rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2 text-sm font-bold text-white shadow-md hover:shadow-lg transition-all">
+                className="flex-1 sm:flex-none rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-4 py-2 text-sm font-bold text-white shadow-md hover:shadow-lg transition-all whitespace-nowrap">
                 🖨 Cetak / Simpan PDF
               </button>
               <button onClick={onClose}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-all">
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-all whitespace-nowrap">
                 ✕ Tutup
               </button>
             </div>
