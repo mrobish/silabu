@@ -1199,8 +1199,9 @@ function JurnalUmumPage() {
   const [quickAction, setQuickAction] = useState<'penerimaan' | 'pengeluaran' | null>(null);
 
   function applyQuickAction(type: 'penerimaan' | 'pengeluaran') {
-    const kas = coaAccounts.find(a => a.kode === '1.1.01.01') || coaAccounts.find(a => a.kode?.startsWith('1.1.01'));
-    if (!kas) { setError('Akun Kas (1.1.01.01) tidak ditemukan di CoA'); return; }
+    // Check that Kas & Bank accounts exist in CoA
+    const kasBank = coaAccounts.filter(a => a.kode?.startsWith('1.1.01') || a.kode?.startsWith('1.1.02'));
+    if (kasBank.length === 0) { setError('Akun Kas/Bank (1.1.01/1.1.02) tidak ditemukan di CoA'); return; }
     setEditingId(null);
     setError('');
     setShowSuccess('');
@@ -1208,7 +1209,7 @@ function JurnalUmumPage() {
     setReferensi('');
     setTanggal(new Date().toISOString().slice(0, 10));
     setLines([
-      { akun_id: String(kas.id), debit: '', kredit: '', keterangan: '', searchTerm: kas.kode + ' — ' + kas.nama },
+      { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' },
       { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' },
     ]);
     setQuickAction(type);
@@ -1423,7 +1424,7 @@ function JurnalUmumPage() {
             <div className="flex items-center gap-3">
               <span className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold ${quickAction === 'penerimaan' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d={quickAction === 'penerimaan' ? 'M12 4.5v15m7.5-7.5h-15' : 'M19.5 12h-15'} /></svg>
-                {quickAction === 'penerimaan' ? 'Penerimaan Kas — Debit: Kas' : 'Pengeluaran Kas — Kredit: Kas'}
+                {quickAction === 'penerimaan' ? 'Penerimaan Kas — Debit: Kas/Bank' : 'Pengeluaran Kas — Kredit: Kas/Bank'}
               </span>
               <button type="button" onClick={cancelQuickAction}
                 className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
@@ -1470,16 +1471,10 @@ function JurnalUmumPage() {
               <div className="col-span-4">
                 {/* Account picker: searchable dropdown */}
                 <div className="relative">
-                  {quickAction && i === 0 && (
-                    <div className="absolute left-2 top-1/2 -translate-y-1/2 z-10">
-                      <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
-                    </div>
-                  )}
                   <input
                     type="text"
-                    placeholder="Cari akun..."
+                    placeholder={quickAction && i === 0 ? 'Pilih Kas/Bank...' : 'Cari akun...'}
                     value={line.searchTerm || ''}
-                    disabled={!!(quickAction && i === 0)}
                     onChange={e => {
                       const val = e.target.value;
                       updateLine(i, 'searchTerm', val);
@@ -1494,15 +1489,20 @@ function JurnalUmumPage() {
                         if (match) { updateLine(i, 'akun_id', String(match.id)); }
                       }
                     }}
-                    className={selectCls + (quickAction && i === 0 ? ' pl-8 bg-slate-50 text-slate-600 cursor-not-allowed opacity-80' : '')}
+                    className={selectCls}
                   />
-                  {line.searchTerm && line.searchTerm.length > 0 && !line.akun_id && (
+                  {/* Show dropdown: when typing (normal), or when quickAction row 0 hasn't picked yet */}
+                  {((line.searchTerm && line.searchTerm.length > 0 && !line.akun_id) || (quickAction && i === 0 && !line.akun_id)) && (
                     <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-slate-200 max-h-48 overflow-y-auto">
                       {(() => {
-                        const q = line.searchTerm.toLowerCase();
-                        const matches = coaAccounts.filter(a => a.kode.includes(q) || a.nama.toLowerCase().includes(q));
+                        const q = (line.searchTerm || '').toLowerCase();
+                        // Quick Action row 0: filter to Kas & Bank only (1.1.01 / 1.1.02)
+                        const pool = quickAction && i === 0
+                          ? coaAccounts.filter(a => a.kode?.startsWith('1.1.01') || a.kode?.startsWith('1.1.02'))
+                          : coaAccounts;
+                        const matches = q ? pool.filter(a => a.kode.includes(q) || a.nama.toLowerCase().includes(q)) : pool;
                         if (matches.length === 0) {
-                          return <p className="px-3 py-2 text-sm text-slate-400 italic">Akun tidak ditemukan</p>;
+                          return <p className="px-3 py-2 text-sm text-slate-400 italic">{quickAction && i === 0 ? 'Akun Kas/Bank tidak ditemukan' : 'Akun tidak ditemukan'}</p>;
                         }
                         return matches.map(a => (
                           <button
