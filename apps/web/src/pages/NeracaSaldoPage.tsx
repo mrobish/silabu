@@ -115,38 +115,36 @@ export default function NeracaSaldoPage() {
 
           {/* Table */}
           <div className="rounded-3xl border border-white/70 bg-white/80 p-2 shadow-sm backdrop-blur-xl overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
               <thead>
                 <tr className="border-b border-slate-100 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  <th className="text-left py-3 px-3 w-[100px]">Kode</th>
-                  <th className="text-left py-3 px-3">Nama Akun</th>
-                  <th className="text-right py-3 px-3 w-[140px]">Debit</th>
-                  <th className="text-right py-3 px-3 w-[140px]">Kredit</th>
+                  <th className="text-left py-3 px-3" style={{ width: '22%' }}>Kode</th>
+                  <th className="text-left py-3 px-3" style={{ width: '34%' }}>Nama Akun</th>
+                  <th className="text-right py-3 px-3" style={{ width: '22%' }}>Debit</th>
+                  <th className="text-right py-3 px-3" style={{ width: '22%' }}>Kredit</th>
                 </tr>
               </thead>
               <tbody>
                 {glCodes.map(g => hasAny(g) && (
-                  <tr key={g} className="border-0">
-                    <td colSpan={4} className="p-0">
-                      <button onClick={() => toggle(g)}
-                        className={'w-full flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider ' + GL_COLOR[g] + ' hover:bg-slate-50 transition-colors'}>
-                        {expanded[g] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        {GL_LABEL[g]}
-                      </button>
-                      {expanded[g] && (
-                        <div>
-                          {grouped[g].map(a => (
-                            <tr key={a.kode} className="border-b border-slate-50 last:border-0">
-                              <td className="py-1.5 px-3 text-[11px] text-slate-400 font-mono">{a.kode}</td>
-                              <td className="py-1.5 px-3 text-sm text-slate-700">{a.nama}</td>
-                              <td className="py-1.5 px-3 text-right tabular-nums text-slate-700">{a.debit > 0 ? rupiah(a.debit) : ''}</td>
-                              <td className="py-1.5 px-3 text-right tabular-nums text-slate-700">{a.kredit > 0 ? rupiah(a.kredit) : ''}</td>
-                            </tr>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
+                  <tbody key={g}>
+                    <tr className="border-0">
+                      <td colSpan={4} className="p-0">
+                        <button onClick={() => toggle(g)}
+                          className={'w-full flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider ' + GL_COLOR[g] + ' hover:bg-slate-50 transition-colors'}>
+                          {expanded[g] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          {GL_LABEL[g]}
+                        </button>
+                      </td>
+                    </tr>
+                    {expanded[g] && grouped[g].map(a => (
+                      <tr key={a.kode} className="border-b border-slate-50 last:border-0">
+                        <td className="py-1.5 px-3 text-[11px] text-slate-400 font-mono truncate">{a.kode}</td>
+                        <td className="py-1.5 px-3 text-sm text-slate-700 truncate">{a.nama}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums text-slate-700 whitespace-nowrap">{a.debit > 0 ? rupiah(a.debit) : ''}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums text-slate-700 whitespace-nowrap">{a.kredit > 0 ? rupiah(a.kredit) : ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
                 ))}
                 {/* TOTAL row */}
                 <tr className="border-t-2 border-slate-200 bg-slate-50">
