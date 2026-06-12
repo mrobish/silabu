@@ -20,15 +20,20 @@ async function checkPeriodLock(tenantId: string, tahun: number): Promise<void> {
 export async function accountingRoutes(app: FastifyInstance) {
   // ─── Chart of Accounts ────────────────────────────────────────────
 
-  // GET /accounting/coa — list active accounts for tenant
+  // GET /accounting/coa — list accounts for tenant (supports ?includeInactive=true for CoA management page)
   app.get('/coa', tenantGuard, async (req: FastifyRequest) => {
     const a = (req as any).auth as AuthPayload;
+    const q = req.query as any;
+    const includeInactive = q.includeInactive === 'true';
+    const whereClause = includeInactive
+      ? 'WHERE tenant_id=$1'
+      : 'WHERE tenant_id=$1 AND isActive=true';
     const r = await pool.query(
       `SELECT id, tenant_id AS "tenantId", kode, nama, jenisakun AS "jenisAkun",
               kelompok, saldonormal AS "saldoNormal", ispostable AS "isPostable",
               parent_id AS "parentId", is_seeded AS "isSeeded", is_system_default AS "isSystemDefault", isactive AS "isActive", level
        FROM chart_of_accounts
-       WHERE tenant_id=$1 AND isActive=true
+       ${whereClause}
        ORDER BY kode`,
       [a.tenantId]
     );
@@ -150,6 +155,73 @@ export async function accountingRoutes(app: FastifyInstance) {
 
     await pool.query('DELETE FROM chart_of_accounts WHERE id=$1 AND tenant_id=$2', [id, a.tenantId]);
     return { message: 'Akun berhasil dihapus' };
+  });
+
+  // PUT /accounting/coa/:id — edit nama akun (Level 4 only)
+  app.put('/coa/:id', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const { id } = req.params as { id: string };
+    const body = req.body as any;
+    if (!body || !body.nama?.trim()) return reply.status(400).send({ error: 'Nama akun wajib diisi' });
+
+    const akunRes = await pool.query(
+      `SELECT id, kode, nama, level, tenant_id FROM chart_of_accounts WHERE id=$1 AND tenant_id=$2`,
+      [id, a.tenantId]
+    );
+    if (!akunRes.rowCount) return reply.status(404).send({ error: 'Akun tidak ditemukan' });
+    const akun = akunRes.rows[0] as any;
+
+    // Only Level 4 (sub-akun transaksi) can be renamed
+    if (akun.level < 4) return reply.status(403).send({ error: 'Hanya sub-akun (Level 4) yang dapat diubah namanya. Akun induk (Level 1–3) dilindungi.' });
+
+    const newNama = body.nama.trim();
+    if (newNama === akun.nama) return { akun: { ...akun, nama: newNama }, message: 'Nama tidak berubah' };
+
+    await pool.query(
+      'UPDATE chart_of_accounts SET nama=$1 WHERE id=$2 AND tenant_id=$3',
+      [newNama, id, a.tenantId]
+    );
+
+    return { akun: { id: akun.id, kode: akun.kode, nama: newNama }, message: 'Nama akun berhasil diperbarui' };
+  });
+
+  // PATCH /accounting/coa/:id/toggle — toggle isActive (enable/disable akun)
+  app.patch('/coa/:id/toggle', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const { id } = req.params as { id: string };
+
+    const akunRes = await pool.query(
+      `SELECT id, kode, nama, isactive AS "isActive", level, tenant_id FROM chart_of_accounts WHERE id=$1 AND tenant_id=$2`,
+      [id, a.tenantId]
+    );
+    if (!akunRes.rowCount) return reply.status(404).send({ error: 'Akun tidak ditemukan' });
+    const akun = akunRes.rows[0] as any;
+
+    // Safety: if disabling, check if account has non-zero balance in any journal
+    if (akun.isActive) {
+      const balanceRes = await pool.query(
+        `SELECT COALESCE(SUM(jl.debit),0)::numeric AS total_debit, COALESCE(SUM(jl.kredit),0)::numeric AS total_kredit
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id = jl.entry_id
+         WHERE jl.akun_id=$1 AND je.tenant_id=$2`,
+        [id, a.tenantId]
+      );
+      const bal = balanceRes.rows[0] as any;
+      const netBalance = parseFloat(bal.total_debit) - parseFloat(bal.total_kredit);
+      // Allow disable even with balance (user may want to hide unused accounts)
+      // But warn if there's activity
+    }
+
+    const newActive = !akun.isActive;
+    await pool.query(
+      'UPDATE chart_of_accounts SET isactive=$1 WHERE id=$2 AND tenant_id=$3',
+      [newActive, id, a.tenantId]
+    );
+
+    return {
+      akun: { id: akun.id, kode: akun.kode, nama: akun.nama, isActive: newActive },
+      message: newActive ? `Akun "${akun.nama}" diaktifkan` : `Akun "${akun.nama}" dinonaktifkan`
+    };
   });
 
   // Generate next no_jurnal like JU-2026-06-0001

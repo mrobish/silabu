@@ -556,6 +556,12 @@ function CoAPage() {
   const [addError, setAddError] = useState('');
   const [deleteModal, setDeleteModal] = useState<CoAAccount | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [editModal, setEditModal] = useState<CoAAccount | null>(null);
+  const [editNama, setEditNama] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [toggling, setToggling] = useState<string | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
 
   function getToken() {
     return localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
@@ -570,7 +576,7 @@ function CoAPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/accounting/coa', { headers: { Authorization: 'Bearer ' + getToken() } });
+      const res = await fetch('/api/accounting/coa?includeInactive=true', { headers: { Authorization: 'Bearer ' + getToken() } });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal memuat CoA');
       setAccounts(Array.isArray(data) ? data : data.coa || data.accounts || []);
@@ -644,8 +650,52 @@ function CoAPage() {
     }
   }
 
+  async function handleEditName() {
+    if (!editModal || !editNama.trim()) return;
+    setEditing(true);
+    setEditError('');
+    try {
+      const res = await fetch(`/api/accounting/coa/${editModal.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
+        body: JSON.stringify({ nama: editNama.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mengubah nama akun');
+      setEditModal(null);
+      setEditNama('');
+      showToast('success', data.message || 'Nama akun berhasil diperbarui');
+      await fetchCoA();
+    } catch (e: any) {
+      setEditError(e.message);
+    } finally {
+      setEditing(false);
+    }
+  }
+
+  async function handleToggle(account: CoAAccount) {
+    setToggling(String(account.id));
+    try {
+      const res = await fetch(`/api/accounting/coa/${account.id}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: 'Bearer ' + getToken() },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mengubah status akun');
+      showToast('success', data.message || 'Status akun berhasil diubah');
+      await fetchCoA();
+    } catch (e: any) {
+      showToast('error', e.message);
+    } finally {
+      setToggling(null);
+    }
+  }
+
   const filtered = accounts
     .filter(a => {
+      // Hide inactive accounts unless "Show Inactive" is toggled
+      const isActive = a.isActive ?? true;
+      if (!showInactive && !isActive) return false;
       const jenis = a.jenisAkun || a.jenis_akun || '';
       if (filterJenis && jenis !== filterJenis) return false;
       if (search) {
@@ -776,6 +826,45 @@ function CoAPage() {
         </div>
       )}
 
+      {/* Edit Name Modal — Level 4 only */}
+      {editModal && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => { setEditModal(null); setEditNama(''); setEditError(''); }}>
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-6 space-y-5 animate-fade-in" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Ubah Nama Akun</h3>
+              <button onClick={() => { setEditModal(null); setEditNama(''); setEditError(''); }} className="text-slate-400 hover:text-slate-600 transition"><Icon d={closeIconPath} className="w-5 h-5" /></button>
+            </div>
+            <div className="space-y-4">
+              <div className="rounded-xl bg-slate-50 border border-slate-100 px-4 py-3">
+                <p className="text-xs text-slate-400 mb-0.5">Kode Akun</p>
+                <p className="text-sm font-mono font-bold text-slate-700">{editModal.kode}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Nama Akun <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={editNama}
+                  onChange={e => { setEditNama(e.target.value); setEditError(''); }}
+                  placeholder="Masukkan nama akun baru"
+                  autoFocus
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                  onKeyDown={e => { if (e.key === 'Enter') handleEditName(); }}
+                />
+              </div>
+              <p className="text-xs text-slate-400">Nama lama: <span className="font-medium text-slate-500">{editModal.nama}</span></p>
+              {editError && <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-700">{editError}</div>}
+            </div>
+            <div className="flex justify-end gap-3 pt-1">
+              <button onClick={() => { setEditModal(null); setEditNama(''); setEditError(''); }} className="rounded-xl px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">Batal</button>
+              <button onClick={handleEditName} disabled={editing || !editNama.trim() || editNama.trim() === editModal.nama}
+                className="rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
+                {editing ? 'Menyimpan...' : 'Simpan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Bagan Akun (CoA)</h1>
@@ -800,7 +889,7 @@ function CoAPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
             <input type="text" placeholder="Cari kode atau nama akun..." value={search} onChange={e => setSearch(e.target.value)}
               className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none" />
             <select value={filterJenis} onChange={e => setFilterJenis(e.target.value)}
@@ -808,25 +897,32 @@ function CoAPage() {
               <option value="">Semua Jenis</option>
               {jenisList.map(j => <option key={j} value={j}>{j}</option>)}
             </select>
+            <label className="inline-flex items-center gap-2 cursor-pointer select-none px-2 py-1">
+              <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/20" />
+              <span className="text-sm text-slate-500">Tampilkan Nonaktif</span>
+            </label>
           </div>
           <div className="rounded-3xl border border-white/70 bg-white/80 shadow-sm backdrop-blur-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
                   <tr>
-                    <th className="px-5 py-3.5 font-semibold w-[45%]">Kode / Nama Akun</th>
+                    <th className="px-5 py-3.5 font-semibold w-[38%]">Kode / Nama Akun</th>
                     <th className="px-5 py-3.5 font-semibold">Jenis</th>
                     <th className="px-5 py-3.5 font-semibold">Saldo Normal</th>
                     <th className="px-5 py-3.5 font-semibold">Posting</th>
+                    <th className="px-5 py-3.5 font-semibold text-center">Status</th>
                     <th className="px-5 py-3.5 font-semibold text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={5} className="px-5 py-8 text-center text-slate-400">Tidak ada akun ditemukan</td></tr>
+                    <tr><td colSpan={6} className="px-5 py-8 text-center text-slate-400">Tidak ada akun ditemukan</td></tr>
                   ) : filtered.map(a => {
                     const lv = getLevel(a);
                     const seeded = isAccountSeeded(a);
+                    const isActive = a.isActive ?? true;
                     const indentPx = Math.max(0, (lv - 1) * 24);
                     const isLvl1 = lv === 1;
                     const isLvl2 = lv === 2;
@@ -834,7 +930,7 @@ function CoAPage() {
                     const isLvl4 = lv >= 4;
 
                     return (
-                      <tr key={a.id} className="hover:bg-slate-50/50 transition group">
+                      <tr key={a.id} className={`hover:bg-slate-50/50 transition group ${!isActive ? 'opacity-50' : ''}`}>
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-2" style={{ paddingLeft: indentPx }}>
                             {/* Tree connector lines */}
@@ -849,6 +945,9 @@ function CoAPage() {
                                 <span className={`truncate ${
                                   isLvl1 ? 'font-bold text-slate-900 text-[15px] uppercase tracking-wide' : isLvl2 ? 'font-semibold text-slate-800' : isLvl3 ? 'font-medium text-slate-700' : 'text-slate-600'
                                 }`}>{a.nama}</span>
+                                {!isActive && (
+                                  <span className="inline-flex rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-500 border border-red-100">Nonaktif</span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -863,8 +962,29 @@ function CoAPage() {
                             : <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500">Induk</span>
                           }
                         </td>
+                        <td className="px-5 py-3 text-center">
+                          {/* Toggle switch */}
+                          <button
+                            onClick={() => handleToggle(a)}
+                            disabled={toggling === String(a.id)}
+                            title={isActive ? 'Nonaktifkan akun' : 'Aktifkan akun'}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${isActive ? 'bg-emerald-500' : 'bg-slate-300'} ${toggling === String(a.id) ? 'opacity-50' : 'cursor-pointer'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200 ${isActive ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </td>
                         <td className="px-5 py-3 text-right">
                           <div className="flex items-center justify-end gap-1">
+                            {/* Edit button for ALL Level 4 accounts (both seeded and custom) */}
+                            {isLvl4 && (
+                              <button
+                                onClick={() => { setEditModal(a); setEditNama(a.nama); setEditError(''); }}
+                                title="Ubah Nama Akun"
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-emerald-600 hover:bg-emerald-100 active:bg-emerald-200 transition-colors"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                              </button>
+                            )}
                             {/* Hapus button for user-created Level 4 accounts */}
                             {isLvl4 && !seeded && (
                               <button
@@ -875,11 +995,11 @@ function CoAPage() {
                                 <Icon d={trashIconPath} className="w-4 h-4" />
                               </button>
                             )}
-                            {/* Lock badge for system master accounts */}
-                            {isLvl4 && seeded && (
-                              <span title="Akun bawaan sistem — tidak dapat diubah/dihapus" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-400">
+                            {/* Lock badge for system master accounts Level 1-3 */}
+                            {!isLvl4 && (
+                              <span title="Akun induk — nama tidak dapat diubah" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-400">
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                                Sistem
+                                Induk
                               </span>
                             )}
                           </div>
@@ -891,7 +1011,7 @@ function CoAPage() {
               </table>
             </div>
           </div>
-          <p className="text-xs text-slate-400">{filtered.length} dari {accounts.length} akun</p>
+          <p className="text-xs text-slate-400">{filtered.length} dari {accounts.length} akun{accounts.filter(a => !(a.isActive ?? true)).length > 0 ? ` (${accounts.filter(a => !(a.isActive ?? true)).length} nonaktif)` : ''}</p>
         </div>
       )}
     </div>
