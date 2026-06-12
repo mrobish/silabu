@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Package, Plus, Download, CalendarDots, Calculator, Laptop, Truck, Armchair, Building, Trees, BoxArrowUp, CheckCircle, AlertTriangle, X, Search, Printer } from 'lucide-react';
+import { Package, Plus, Download, Calendar, Calculator, Laptop, Truck, Armchair, Building, Trees, ArrowUp, CheckCircle, AlertTriangle, X, Search, Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DatePicker from './DatePicker';
 
@@ -18,7 +18,7 @@ const inputCls = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2
 const br = 'rounded-2xl border border-white/70 bg-white/80 backdrop-blur-xl shadow-sm';
 
 const KATEGORI_ICON: Record<string, string> = {
-  Kendaraan: 'Truck', Komputer: 'Laptop', Meubelair: 'Armchair', Bangunan: 'Building', Tanah: 'Trees', Lainnya: 'BoxArrowUp',
+  Kendaraan: 'Truck', Komputer: 'Laptop', Meubelair: 'Armchair', Bangunan: 'Building', Tanah: 'Trees', Lainnya: 'ArrowUp',
 };
 const KATEGORI_BG: Record<string, string> = {
   Kendaraan: 'from-amber-500/20 to-orange-500/20 text-amber-600',

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 
 // ─── Types ───────────────────────────────────────────────────
 type CoAAccount = {
@@ -166,7 +166,7 @@ function highlightMatch(text: string, query: string): React.ReactNode {
 }
 
 // ─── Component ───────────────────────────────────────────────
-export default function JurnalUmumPage({ setPage }: { setPage: (p: string) => void }) {
+export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void }) {
   const [coaAccounts, setCoaAccounts] = useState<CoAAccount[]>([]);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -850,7 +850,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: string) => vo
                 const isDropTarget = dropIndex === i;
 
                 return (
-                  <React.Fragment key={row.id}>
+                  <Fragment key={row.id}>
                     {/* Insert row button between rows */}
                     {i > 0 && rows.length < 50 && (
                       <div className="flex justify-center h-0 -my-0.5 relative z-10 group">
@@ -1026,7 +1026,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: string) => vo
                         </div>
                       </div>
                     </div>
-                  </React.Fragment>
+                  </Fragment>
                 );
               })}
             </div>
