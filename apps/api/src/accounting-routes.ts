@@ -1111,8 +1111,8 @@ export async function accountingRoutes(app: FastifyInstance) {
     const a = (req as any).auth as AuthPayload;
     const q = req.query as any;
     const tahun = Number(q.tahun) || new Date().getFullYear();
-    const startDate = `${tahun}-01-01`;
-    const endDate = `${tahun}-12-31`;
+    const startDate = q.start_date || `${tahun}-01-01`;
+    const endDate = q.end_date || `${tahun}-12-31`;
 
     // 1. Laba Bersih dari computeLabaRugi (SUMBER TUNGGAL — anti mismatch)
     const lr = await computeLabaRugi(a.tenantId as string, startDate, endDate);

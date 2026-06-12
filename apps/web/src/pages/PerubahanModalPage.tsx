@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 
 type MutasiItem = { kode: string; nama: string; debit: number; kredit: number };
@@ -31,6 +32,7 @@ function formatRupiah(v?: number) {
 export default function PerubahanModalPage() {
   const currentYear = new Date().getFullYear();
   const [tahun, setTahun] = useState(currentYear);
+  const [bulan, setBulan] = useState(0); // 0 = Semua Tahun
   const [data, setData] = useState<PerubahanModalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -61,6 +63,13 @@ export default function PerubahanModalPage() {
           <p className="text-sm text-slate-500 mt-0.5">Modal Awal + Tambahan + Laba Bersih − Prive = Modal Akhir</p>
         </div>
         <div className="flex items-center gap-3">
+          <select value={bulan} onChange={e => setBulan(Number(e.target.value))}
+            className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-emerald-400">
+            <option value={0}>Semua Tahun</option>
+            {['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].map((m, i) => (
+              <option key={i+1} value={i+1}>{m}</option>
+            ))}
+          </select>
           <select value={tahun} onChange={e => setTahun(Number(e.target.value))}
             className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-emerald-400">
             {[currentYear, currentYear - 1, currentYear - 2].map(y => (
@@ -69,7 +78,7 @@ export default function PerubahanModalPage() {
           </select>
           <button onClick={() => setPrintOpen(true)}
             className="rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow-lg transition-all">
-            Export PDF
+            <Printer size={14} className="inline-block -mt-0.5 mr-1" /> Cetak
           </button>
         </div>
       </div>

@@ -54,7 +54,11 @@ function Section({ title, n, children }: { title: string; n: number; children: R
 }
 
 export default function CalkPage() {
-  const [end, setEnd] = useState(new Date().toISOString().slice(0, 10));
+  const now = new Date();
+  const [bulan, setBulan] = useState(now.getMonth() + 1);
+  const [tahun, setTahun] = useState(now.getFullYear());
+  const lastDay = new Date(tahun, bulan, 0).getDate();
+  const end = `${tahun}-${String(bulan).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
   const [narasi, setNarasi] = useState(DEFAULT_NARRATIVE);
   const [data, setData] = useState<CalkData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -113,11 +117,15 @@ export default function CalkPage() {
       <div className={br + ' p-5 relative z-10 print:hidden'}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Tanggal</label>
-            <input
-              type="date" value={end} onChange={e => setEnd(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition"
-            />
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Periode</label>
+            <div className="flex gap-2">
+              <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className="flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition">
+                {['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
+              </select>
+              <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className="w-24 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition">
+                {[now.getFullYear(), now.getFullYear()-1, now.getFullYear()-2].map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
           </div>
           <div className="sm:col-span-2">
             <button

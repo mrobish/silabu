@@ -76,7 +76,11 @@ function BalanceBanner({ isBalanced, totalAset, totalPassiva, selisih }: { isBal
 }
 
 export default function NeracaPage() {
-  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const now = new Date();
+  const [bulan, setBulan] = useState(now.getMonth() + 1);
+  const [tahun, setTahun] = useState(now.getFullYear());
+  const lastDay = new Date(tahun, bulan, 0).getDate();
+  const endDate = `${tahun}-${String(bulan).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
   const [data, setData] = useState<NeracaData | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ lancar: true, tetap: true, lain: true, kewajiban: true, ekuitas: true });
@@ -127,8 +131,15 @@ export default function NeracaPage() {
       <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-xl relative z-10">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
           <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Tanggal Tutup Buku (As of Date)</label>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls + ' max-w-xs'} />
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Periode Laporan</label>
+            <div className="flex gap-2">
+              <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className={inputCls + ' max-w-[160px]'}>
+                {['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
+              </select>
+              <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className={inputCls + ' max-w-[100px]'}>
+                {[now.getFullYear(), now.getFullYear()-1, now.getFullYear()-2].map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={fetchData} disabled={loading}

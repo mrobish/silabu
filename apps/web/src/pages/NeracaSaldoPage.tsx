@@ -19,7 +19,11 @@ function rupiah(n: number) {
 }
 
 export default function NeracaSaldoPage() {
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const now = new Date();
+  const [bulan, setBulan] = useState(now.getMonth() + 1);
+  const [tahun, setTahun] = useState(now.getFullYear());
+  const lastDay = new Date(tahun, bulan, 0).getDate();
+  const endDate = `${tahun}-${String(bulan).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
   const [data, setData] = useState<TBData | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ '1': true, '2': true, '3': true, '4': false, '5': false, '6': false, '7': false });
@@ -73,8 +77,14 @@ export default function NeracaSaldoPage() {
             <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
               <Calendar size={13} /> Tanggal
             </label>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-700 bg-white/60 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+            <div className="flex gap-2">
+              <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-700 bg-white/60 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                {['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
+              </select>
+              <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className="w-24 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-700 bg-white/60 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                {[now.getFullYear(), now.getFullYear()-1, now.getFullYear()-2].map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
           </div>
           <button onClick={fetchData} disabled={loading}
             className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-cyan-600 text-white text-sm font-semibold rounded-xl hover:shadow-md hover:shadow-emerald-200 transition-all disabled:opacity-50">
