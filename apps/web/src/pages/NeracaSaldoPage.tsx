@@ -113,47 +113,46 @@ export default function NeracaSaldoPage() {
             </p>
           </div>
 
-          {/* Table */}
+          {/* Table — CSS Grid for pixel-perfect column alignment on all devices */}
           <div className="rounded-3xl border border-white/70 bg-white/80 p-2 shadow-sm backdrop-blur-xl overflow-x-auto">
-            <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
-              <thead>
-                <tr className="border-b border-slate-100 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  <th className="text-left py-3 px-3" style={{ width: '22%' }}>Kode</th>
-                  <th className="text-left py-3 px-3" style={{ width: '34%' }}>Nama Akun</th>
-                  <th className="text-right py-3 px-3" style={{ width: '22%' }}>Debit</th>
-                  <th className="text-right py-3 px-3" style={{ width: '22%' }}>Kredit</th>
-                </tr>
-              </thead>
+            <div className="min-w-[480px]">
+              {/* Header row */}
+              <div className="grid" style={{ gridTemplateColumns: '90px 1fr 120px 120px' }}>
+                <div className="py-3 px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">Kode</div>
+                <div className="py-3 px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">Nama Akun</div>
+                <div className="py-3 px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 text-right">Debit</div>
+                <div className="py-3 px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 text-right">Kredit</div>
+              </div>
+
+              {/* Data groups */}
               {glCodes.map(g => hasAny(g) && (
-                  <tbody key={g}>
-                    <tr className="border-0">
-                      <td colSpan={4} className="p-0">
-                        <button onClick={() => toggle(g)}
-                          className={'w-full flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider ' + GL_COLOR[g] + ' hover:bg-slate-50 transition-colors'}>
-                          {expanded[g] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                          {GL_LABEL[g]}
-                        </button>
-                      </td>
-                    </tr>
-                    {expanded[g] && grouped[g].map(a => (
-                      <tr key={a.kode} className="border-b border-slate-50 last:border-0">
-                        <td className="py-1.5 px-3 text-[11px] text-slate-400 font-mono truncate">{a.kode}</td>
-                        <td className="py-1.5 px-3 text-sm text-slate-700 truncate">{a.nama}</td>
-                        <td className="py-1.5 px-3 text-right tabular-nums text-slate-700 whitespace-nowrap">{a.debit > 0 ? rupiah(a.debit) : ''}</td>
-                        <td className="py-1.5 px-3 text-right tabular-nums text-slate-700 whitespace-nowrap">{a.kredit > 0 ? rupiah(a.kredit) : ''}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                ))}
-                {/* TOTAL row */}
-                <tfoot>
-                <tr className="border-t-2 border-slate-200 bg-slate-50">
-                  <td colSpan={2} className="py-3 px-3 text-sm font-bold text-slate-800">TOTAL</td>
-                  <td className="py-3 px-3 text-right text-sm font-bold text-emerald-700 tabular-nums">{rupiah(data.totalDebit)}</td>
-                  <td className="py-3 px-3 text-right text-sm font-bold text-emerald-700 tabular-nums">{rupiah(data.totalKredit)}</td>
-                </tr>
-                </tfoot>
-            </table>
+                <div key={g}>
+                  {/* Section header — full-width button */}
+                  <button onClick={() => toggle(g)}
+                    className={'w-full flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider ' + GL_COLOR[g] + ' hover:bg-slate-50 transition-colors'}>
+                    {expanded[g] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    {GL_LABEL[g]}
+                  </button>
+
+                  {/* Account rows — each a CSS grid with identical column template */}
+                  {expanded[g] && grouped[g].map(a => (
+                    <div key={a.kode} className="grid border-b border-slate-50 last:border-0" style={{ gridTemplateColumns: '90px 1fr 120px 120px' }}>
+                      <div className="py-1.5 px-3 text-[11px] text-slate-400 font-mono truncate">{a.kode}</div>
+                      <div className="py-1.5 px-3 text-sm text-slate-700 truncate">{a.nama}</div>
+                      <div className="py-1.5 px-3 text-right tabular-nums text-slate-700 whitespace-nowrap">{a.debit > 0 ? rupiah(a.debit) : ''}</div>
+                      <div className="py-1.5 px-3 text-right tabular-nums text-slate-700 whitespace-nowrap">{a.kredit > 0 ? rupiah(a.kredit) : ''}</div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+
+              {/* Total row */}
+              <div className="grid border-t-2 border-slate-200 bg-slate-50" style={{ gridTemplateColumns: '90px 1fr 120px 120px' }}>
+                <div className="col-span-2 py-3 px-3 text-sm font-bold text-slate-800">TOTAL</div>
+                <div className="py-3 px-3 text-right text-sm font-bold text-emerald-700 tabular-nums">{rupiah(data.totalDebit)}</div>
+                <div className="py-3 px-3 text-right text-sm font-bold text-emerald-700 tabular-nums">{rupiah(data.totalKredit)}</div>
+              </div>
+            </div>
           </div>
 
           <p className="text-[11px] text-slate-400 text-center">
