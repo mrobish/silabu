@@ -149,9 +149,9 @@ function LanggananPage() {
           <h3 className="font-bold text-slate-900">Riwayat Pembayaran</h3>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="text-xs uppercase tracking-wide text-slate-400"><tr><th className="py-3">Reference</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+              <thead className="text-xs uppercase tracking-wide text-slate-400"><tr><th className="py-3">Reference</th><th>Amount</th><th>Status</th><th>Date</th><th></th></tr></thead>
               <tbody className="divide-y divide-slate-100">
-                {payments.map((p, i) => <tr key={i} className="text-slate-600"><td className="py-3 font-mono text-xs">{p.reference || '-'}</td><td>{formatRupiah(p.amount)}</td><td><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold">{p.status || '-'}</span></td><td>{formatDate(p.paid_at || p.created_at || p.date)}</td></tr>)}
+                {payments.map((p, i) => <tr key={i} className="text-slate-600"><td className="py-3 font-mono text-xs">{p.reference || '-'}</td><td>{formatRupiah(p.amount)}</td><td><span className={'rounded-full px-2 py-1 text-xs font-semibold ' + (p.status === 'PAID' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600')}>{p.status || '-'}</span></td><td>{formatDate(p.paid_at || p.created_at || p.date)}</td><td>{p.status === 'PAID' && p.id && <a href={'/invoice/' + p.id} target="_blank" rel="noopener" className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"><svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>Bukti Bayar</a>}</td></tr>)}
               </tbody>
             </table>
           </div>

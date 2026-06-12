@@ -151,4 +151,57 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
     return reply.send({ success: true });
   });
+
+  // GET /subscription/invoice/:paymentId — invoice data for PDF (bumdes own tenant only)
+  app.get('/subscription/invoice/:paymentId', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const { paymentId } = req.params as { paymentId: string };
+
+    const payR = await pool.query(
+      `SELECT p.id, p.merchant_ref, p.reference, p.amount, p.fee, p.total_amount,
+              p.status, p.paid_at, p.created_at, p.checkout_url,
+              t.nama_bumdes, t.provinsi, t.kabupaten, t.kecamatan, t.desa,
+              t.nama_direktur, t.nama_bendahara, t.npwp
+       FROM payments p JOIN tenants t ON t.id = p.tenant_id
+       WHERE p.id = $1 AND p.tenant_id = $2`,
+      [paymentId, a.tenantId]
+    );
+    if (!payR.rowCount) return { error: 'Invoice tidak ditemukan' };
+    const inv = payR.rows[0];
+    if (inv.status !== 'PAID') return { error: 'Invoice belum dibayar' };
+
+    return {
+      invoice: {
+        id: inv.id,
+        merchant_ref: inv.merchant_ref,
+        reference: inv.reference,
+        amount: inv.amount,
+        fee: inv.fee,
+        total_amount: inv.total_amount,
+        status: inv.status,
+        paid_at: inv.paid_at,
+        created_at: inv.created_at,
+        tenant: {
+          nama_bumdes: inv.nama_bumdes,
+          provinsi: inv.provinsi,
+          kabupaten: inv.kabupaten,
+          kecamatan: inv.kecamatan,
+          desa: inv.desa,
+          nama_direktur: inv.nama_direktur,
+          nama_bendahara: inv.nama_bendahara,
+          npwp: inv.npwp,
+        },
+        vendor: {
+          nama: 'CV. Microtech Riset Tasela',
+          alamat: 'Kabupaten Tasikmalaya, Jawa Barat',
+          email: 'admin@ondesa.id',
+        },
+        product: {
+          name: 'Langganan SILABU DIGI — Sistem Akuntansi BUM Desa',
+          period: '1 Tahun',
+          price: 1000000,
+        },
+      },
+    };
+  });
 }
