@@ -59,6 +59,19 @@ function formatDate(value?: string) {
   return new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(value));
 }
 
+// Shared currency input helpers (SaldoAwal + JurnalUmum)
+function formatCurrencyDisplay(raw: string): string {
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+function parseCurrencyInput(displayVal: string): number {
+  const digits = displayVal.replace(/\D/g, '');
+  return parseFloat(digits) || 0;
+}
+
 function LanggananPage() {
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1207,10 +1220,15 @@ function JurnalUmumPage() {
     setLines(prev => {
       let next = prev.map((l, idx) => {
         if (idx !== i) return l;
-        const updated = { ...l, [field]: val };
+        // Format debit/kredit as currency display (titik separator)
+        let storeVal = val;
+        if (field === 'debit' || field === 'kredit') {
+          storeVal = formatCurrencyDisplay(val);
+        }
+        const updated = { ...l, [field]: storeVal };
         // Single-side rule: filling debit clears kredit, and vice versa
-        if (field === 'debit' && parseFloat(val) > 0) updated.kredit = '';
-        if (field === 'kredit' && parseFloat(val) > 0) updated.debit = '';
+        if (field === 'debit' && parseCurrencyInput(val) > 0) updated.kredit = '';
+        if (field === 'kredit' && parseCurrencyInput(val) > 0) updated.debit = '';
         return updated;
       });
       // Auto-add an empty row when the LAST row starts getting filled
@@ -1231,10 +1249,10 @@ function JurnalUmumPage() {
     setLines(prev => prev.filter((_, idx) => idx !== i));
   }
 
-  const totalDebit = lines.reduce((s, l) => s + (parseFloat(l.debit) || 0), 0);
-  const totalKredit = lines.reduce((s, l) => s + (parseFloat(l.kredit) || 0), 0);
+  const totalDebit = lines.reduce((s, l) => s + parseCurrencyInput(l.debit), 0);
+  const totalKredit = lines.reduce((s, l) => s + parseCurrencyInput(l.kredit), 0);
   const isBalanced = Math.abs(totalDebit - totalKredit) < 0.01;
-  const validLines = lines.filter(l => l.akun_id && (parseFloat(l.debit) > 0 || parseFloat(l.kredit) > 0));
+  const validLines = lines.filter(l => l.akun_id && (parseCurrencyInput(l.debit) > 0 || parseCurrencyInput(l.kredit) > 0));
   const canSubmit = isBalanced && validLines.length >= 2 && !!tanggal && !!keterangan.trim() && !submitting;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -1250,8 +1268,8 @@ function JurnalUmumPage() {
         referensi: referensi.trim() || undefined,
         lines: validLines.map(l => ({
           akun_id: l.akun_id,
-          debit: parseFloat(l.debit) || 0,
-          kredit: parseFloat(l.kredit) || 0,
+          debit: parseCurrencyInput(l.debit),
+          kredit: parseCurrencyInput(l.kredit),
           keterangan: l.keterangan,
         })),
       };
@@ -1297,8 +1315,8 @@ function JurnalUmumPage() {
       setReferensi(j.referensi || '');
       const loadedLines = (j.lines || []).map((l: any) => ({
         akun_id: l.akunId || l.akun_id || '',
-        debit: Number(l.debit) > 0 ? String(Number(l.debit)) : '',
-        kredit: Number(l.kredit) > 0 ? String(Number(l.kredit)) : '',
+        debit: Number(l.debit) > 0 ? formatCurrencyDisplay(String(Number(l.debit))) : '',
+        kredit: Number(l.kredit) > 0 ? formatCurrencyDisplay(String(Number(l.kredit))) : '',
         keterangan: l.keterangan || '',
         searchTerm: '',
       }));
@@ -1442,10 +1460,10 @@ function JurnalUmumPage() {
                 </div>
               </div>
               <div className="col-span-3">
-                <input type="number" step="0.01" min="0" placeholder="0" value={line.debit} onChange={e => updateLine(i, 'debit', e.target.value)} className={inputCls} />
+                <input type="text" inputMode="numeric" placeholder="0" value={line.debit} onChange={e => updateLine(i, 'debit', e.target.value)} className={inputCls} />
               </div>
               <div className="col-span-3">
-                <input type="number" step="0.01" min="0" placeholder="0" value={line.kredit} onChange={e => updateLine(i, 'kredit', e.target.value)} className={inputCls} />
+                <input type="text" inputMode="numeric" placeholder="0" value={line.kredit} onChange={e => updateLine(i, 'kredit', e.target.value)} className={inputCls} />
               </div>
               <div className="col-span-2 flex gap-1">
                 {lines.length > 2 && (
