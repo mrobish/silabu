@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { BookOpen, Calendar, FileText, DollarSign, Search, ChevronDown, X } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
+import { useAccountingYears } from './useAccountingYears';
 
 // ─── Types ───────────────────────────────────────────────────
 interface CoAAccount { id: string; kode: string; nama: string; isPostable?: boolean; is_postable?: boolean; level?: number; }
