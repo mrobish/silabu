@@ -50,29 +50,55 @@ export default function Home() {
       </nav>
 
       {/* Hero */}
-      <section className="mx-auto max-w-4xl px-4 sm:px-6 pt-20 sm:pt-28 pb-16 sm:pb-24 text-center">
-        <div className="animate-fade-up inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 mb-8 text-xs sm:text-sm font-medium text-emerald-700">
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          Sesuai Kepmendes 136/2022
+      <section className="mx-auto max-w-5xl px-4 sm:px-6 pt-16 sm:pt-24 pb-16 sm:pb-24">
+        <div className="grid md:grid-cols-2 gap-10 md:gap-12 items-center">
+          {/* Left — text */}
+          <div className="text-center md:text-left">
+            <div className="animate-fade-up inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 mb-6 text-xs sm:text-sm font-medium text-emerald-700">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              Sesuai Kepmendes 136/2022
+            </div>
+            <h1 className="animate-fade-up stagger-1 text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 leading-[1.15] mb-5 sm:mb-6">
+              Laporan Keuangan{' '}
+              <span className="bg-gradient-to-r from-emerald-600 to-cyan-600 bg-clip-text text-transparent">
+                BUM Desa
+              </span>
+              <br /> Jadi Mudah
+            </h1>
+            <p className="animate-fade-up stagger-2 text-base sm:text-lg text-slate-500 max-w-md mx-auto md:mx-0 mb-8 sm:mb-10 leading-relaxed">
+              Catat transaksi, jurnal otomatis, dan cetak laporan keuangan resmi — semua dalam satu aplikasi.
+            </p>
+            <Link
+              to="/register"
+              viewTransition
+              className="animate-fade-up stagger-3 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-8 py-4 text-base sm:text-lg font-semibold text-white shadow-lg hover:shadow-xl hover:shadow-cyan-500/30 hover:translate-y-[-1px] transition-all"
+            >
+              Mulai Sekarang
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+            </Link>
+          </div>
+
+          {/* Right — hero image */}
+          <div className="animate-fade-up stagger-2 relative">
+            <div className="absolute -inset-4 bg-gradient-to-br from-emerald-200/30 to-cyan-200/30 rounded-3xl blur-2xl" aria-hidden="true" />
+            <img
+              src="/hero-accounting.jpg"
+              alt="Workspace akuntansi — kalkulator dan keyboard untuk mengelola keuangan"
+              className="relative rounded-2xl shadow-xl shadow-slate-200/60 border border-slate-100 w-full h-auto object-cover aspect-[4/3]"
+              loading="eager"
+            />
+            {/* Floating badge */}
+            <div className="absolute -bottom-3 -left-3 sm:-bottom-4 sm:-left-4 bg-white rounded-xl shadow-lg border border-slate-100 px-4 py-3 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
+                <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-900">Jurnal Otomatis</p>
+                <p className="text-xs text-slate-500">Double-entry sekali input</p>
+              </div>
+            </div>
+          </div>
         </div>
-        <h1 className="animate-fade-up stagger-1 text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 leading-[1.15] mb-5 sm:mb-6">
-          Laporan Keuangan{' '}
-          <span className="bg-gradient-to-r from-emerald-600 to-cyan-600 bg-clip-text text-transparent">
-            BUM Desa
-          </span>
-          <br className="hidden sm:block" /> Jadi Mudah
-        </h1>
-        <p className="animate-fade-up stagger-2 text-base sm:text-lg text-slate-500 max-w-xl mx-auto mb-9 sm:mb-10 leading-relaxed">
-          Catat transaksi, jurnal otomatis, dan cetak laporan keuangan resmi — semua dalam satu aplikasi.
-        </p>
-        <Link
-          to="/register"
-          viewTransition
-          className="animate-fade-up stagger-3 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-8 py-4 text-base sm:text-lg font-semibold text-white shadow-lg hover:shadow-xl hover:shadow-cyan-500/30 hover:translate-y-[-1px] transition-all"
-        >
-          Mulai Sekarang
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
-        </Link>
       </section>
 
       {/* Features — 3 inti */}
