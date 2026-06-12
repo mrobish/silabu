@@ -78,6 +78,18 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
           font-weight: 500; text-align: center; width: auto; max-width: 280px;
           border-bottom: 1px dashed #94a3b8; padding-bottom: 1px;
         }
+        .print-branding {
+          margin-top: 20px;
+          padding-top: 8px;
+          border-top: 1px solid #e2e8f0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+        }
+        .print-branding img { width: 14px; height: 14px; opacity: 0.35; }
+        .print-branding p { font-size: 8px; color: #94a3b8; letter-spacing: 0.03em; }
+        .print-branding strong { color: #64748b; font-weight: 600; }
       `}</style>
 
       <div className="no-print fixed inset-0 z-[9999] flex items-center justify-center p-4"
@@ -154,6 +166,12 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
                       value={namaBendahara} onChange={e => setNamaBendahara(e.target.value)} />
                   </div>
                 </div>
+              </div>
+
+              {/* Branding footer */}
+              <div className="print-branding">
+                <img src="/logo.png" alt="" />
+                <p>Dicetak dengan <strong>SILABU DIGI</strong> — Sistem Akuntansi BUM Desa · silabudigi.ondesa.id</p>
               </div>
             </div>
           </div>
