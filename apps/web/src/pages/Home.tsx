@@ -19,7 +19,7 @@ export default function Home() {
             <Link to="/faq" className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors">
               FAQ
             </Link>
-            <Link to="/login" className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors">
+            <Link to="/login" className="rounded-lg border-2 border-emerald-600 px-5 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 hover:shadow-sm transition-all">
               Masuk
             </Link>
             <Link to="/register" viewTransition className="rounded-lg bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow-lg hover:shadow-cyan-500/25 transition-all">
@@ -39,7 +39,7 @@ export default function Home() {
             <Link to="/faq" onClick={() => setOpen(false)} className="block text-center rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50/50 transition-all">
               FAQ
             </Link>
-            <Link to="/login" onClick={() => setOpen(false)} className="block text-center rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 hover:border-cyan-300 hover:text-cyan-700 hover:bg-cyan-50/50 transition-all">
+            <Link to="/login" onClick={() => setOpen(false)} className="block text-center rounded-xl border-2 border-emerald-600 px-4 py-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 transition-all">
               Masuk
             </Link>
             <Link to="/register" onClick={() => setOpen(false)} className="block text-center rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:shadow-md transition-all">
