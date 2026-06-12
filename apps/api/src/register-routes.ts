@@ -159,7 +159,14 @@ export async function registerRoutes(app: FastifyInstance) {
         console.error('CoA seed failed for tenant', tenantId, seedErr);
       }
 
-      return { success: true, message: 'Registrasi berhasil!', tenantId };
+      // Generate JWT so user is auto-logged in after registration
+      const updatedUser = { id: user.id, email: e, role: 'bumdes', tenant_id: tenantId };
+      const accessToken = sign(updatedUser);
+      return {
+        success: true, message: 'Registrasi berhasil!', tenantId,
+        accessToken,
+        user: { id: user.id, email: e, nama_lengkap: user.nama_lengkap || '', role: 'bumdes', tenantId },
+      };
     } catch (e: any) {
       await client.query('ROLLBACK');
       client.release();

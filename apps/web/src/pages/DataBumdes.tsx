@@ -29,8 +29,13 @@ export default function DataBumdes() {
       });
       const data = await res.json();
       if (data.error) { setError(data.error); return; }
+      // Auto-login: store token and go to dashboard
+      if (data.accessToken) {
+        localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('user', JSON.stringify(data.user));
+      }
       setSuccess(true);
-      setTimeout(() => navigate('/login'), 2500);
+      setTimeout(() => navigate('/app'), 1500);
     } catch { setError('Terjadi kesalahan'); } finally { setLoading(false); }
   }
 
@@ -50,7 +55,7 @@ export default function DataBumdes() {
             <svg className="h-8 w-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
           </div>
           <h1 className="text-2xl font-bold text-slate-900">Registrasi Berhasil!</h1>
-          <p className="text-sm text-slate-500 mt-2">Akun BUM Desa Anda sudah aktif. Mengalihkan ke halaman login...</p>
+          <p className="text-sm text-slate-500 mt-2">Akun BUM Desa Anda sudah aktif. Mengalihkan ke dashboard...</p>
         </div>
       </div>
     );
