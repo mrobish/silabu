@@ -32,7 +32,7 @@ type Equity = {
 type ReconRow = {
   akunId: string; kode: string; namaAkun: string; subledgerType: string;
   globalValue: number; rincianValue: number; selisih: number;
-  detailCount: number; status: 'MATCHED' | 'UNMATCHED' | 'NO_SUBLEDGER';
+  detailCount: number; status: 'MATCHED' | 'UNMATCHED';
 };
 
 const TABS = ['persediaan', 'hutang-piutang', 'aset-tetap', 'modal'] as const;
@@ -682,14 +682,19 @@ export default function RincianSaldoPage() {
       )}
 
       {/* Print Modal */}
-      <ReportPrintLayout title="BUKU KAS" isOpen={printOpen} onClose={() => setPrintOpen(false)}>
+      <ReportPrintLayout title="RINCIAN SALDO" isOpen={printOpen} onClose={() => setPrintOpen(false)}>
         {reconRows.length > 0 && (
           <div className="text-[11px]">
+            <div className="mb-3 flex gap-4 text-[10px]">
+              <span>✓ Cocok: {reconRows.filter(r => r.status === 'MATCHED').length}</span>
+              <span>✗ Selisih: {reconRows.filter(r => r.status === 'UNMATCHED').length}</span>
+              <span>Total Akun: {reconRows.length}</span>
+            </div>
             <table className="w-full border-collapse">
               <thead>
-                <tr className="border-b border-slate-800">
+                <tr className="border-b-2 border-slate-800">
                   <th className="text-left py-1 pr-2 font-bold">No</th>
-                  <th className="text-left py-1 pr-2 font-bold">Kode Akun</th>
+                  <th className="text-left py-1 pr-2 font-bold">Kode</th>
                   <th className="text-left py-1 pr-2 font-bold">Nama Akun</th>
                   <th className="text-left py-1 pr-2 font-bold">Tipe</th>
                   <th className="text-right py-1 pr-2 font-bold">Buku Besar</th>
@@ -702,17 +707,24 @@ export default function RincianSaldoPage() {
                 {reconRows.map((r, i) => (
                   <tr key={r.akunId} className="border-b border-slate-200">
                     <td className="py-1 pr-2 text-slate-600">{i + 1}</td>
-                    <td className="py-1 pr-2 text-slate-600">{r.kode}</td>
+                    <td className="py-1 pr-2 text-slate-600 tabular-nums">{r.kode}</td>
                     <td className="py-1 pr-2 text-slate-800">{r.namaAkun}</td>
                     <td className="py-1 pr-2 text-slate-600">{r.subledgerType}</td>
                     <td className="py-1 pr-2 text-right tabular-nums">{fmt(r.globalValue)}</td>
                     <td className="py-1 pr-2 text-right tabular-nums">{fmt(r.rincianValue)}</td>
-                    <td className={`py-1 pr-2 text-right tabular-nums ${Math.abs(r.selisih) < 1 ? '' : 'text-red-600'}`}>{fmt(r.selisih)}</td>
+                    <td className={`py-1 pr-2 text-right tabular-nums ${Math.abs(r.selisih) < 1 ? '' : 'text-red-600 font-bold'}`}>{fmt(r.selisih)}</td>
                     <td className="py-1 text-center">
-                      <span className={r.status === 'MATCHED' ? 'text-emerald-600' : 'text-red-600'}>{r.status === 'MATCHED' ? '✓ Cocok' : '✗ Tidak Cocok'}</span>
+                      <span className={r.status === 'MATCHED' ? 'text-emerald-600' : 'text-red-600 font-bold'}>{r.status === 'MATCHED' ? '✓' : '✗'}</span>
                     </td>
                   </tr>
                 ))}
+                <tr className="border-t-2 border-slate-800 font-bold">
+                  <td colSpan={4} className="py-1 pr-2 text-right">Total</td>
+                  <td className="py-1 pr-2 text-right tabular-nums">{fmt(reconRows.reduce((s, r) => s + r.globalValue, 0))}</td>
+                  <td className="py-1 pr-2 text-right tabular-nums">{fmt(reconRows.reduce((s, r) => s + r.rincianValue, 0))}</td>
+                  <td className="py-1 pr-2 text-right tabular-nums">{fmt(reconRows.reduce((s, r) => s + r.selisih, 0))}</td>
+                  <td />
+                </tr>
               </tbody>
             </table>
           </div>

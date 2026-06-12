@@ -282,61 +282,93 @@ export async function subledgerRoutes(app: FastifyInstance) {
   app.get('/rincian-saldo/reconciliation', tenantGuard, async (req: FastifyRequest) => {
     const a = getToken(req);
 
-    // 1. Get opening balance entry
-    const obEntry = await pool.query(
-      `SELECT id FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE' LIMIT 1`,
-      [a.tenantId]
-    );
-    if (!obEntry.rowCount) return { accounts: [] };
+    // 1. Collect ALL accounts that have subledger data (inventory, contacts, assets, equity)
+    const subledgerAccounts = new Map<string, { kode: string; nama: string; label: string; rincianValue: number; detailCount: number }>();
 
-    // 2. Get all lines from opening balance
-    const linesRes = await pool.query(
-      `SELECT jl.akun_id, jl.debit, jl.kredit, c.kode, c.nama, c.nama AS "namaAkun"
-       FROM journal_lines jl
-       JOIN chart_of_accounts c ON c.id = jl.akun_id
-       WHERE jl.entry_id = $1
-       ORDER BY c.kode`,
-      [obEntry.rows[0].id]
-    );
-
-    // 3. For each account, calculate subledger total
-    const results: any[] = [];
-    for (const line of linesRes.rows as any[]) {
-      const globalValue = Number(line.debit) > 0 ? Number(line.debit) : Number(line.kredit);
-      const subledgerMatch = getSubledgerForKode(line.kode as string);
-
-      let rincianValue = 0;
-      let detailCount = 0;
-      let label = '';
-
-      if (subledgerMatch) {
-        label = subledgerMatch.label;
-        let sql = `SELECT COALESCE(SUM(${subledgerMatch.field}), 0) AS total, COUNT(*) AS cnt
-                    FROM ${subledgerMatch.table}
-                    WHERE tenant_id=$1 AND akun_id=$2`;
-        const whereClause = (subledgerMatch as any).where;
-        if (whereClause) {
-          sql += ` AND ${whereClause}`;
-        }
-        const sumRes = await pool.query(sql, [a.tenantId, line.akun_id]);
-        rincianValue = Number(sumRes.rows[0].total);
-        detailCount = Number(sumRes.rows[0].cnt);
+    for (const entry of SUBLEDGER_MAP) {
+      let sql = `SELECT akun_id, COALESCE(SUM(${entry.field}), 0) AS total, COUNT(*) AS cnt
+                  FROM ${entry.table}
+                  WHERE tenant_id=$1`;
+      const params: any[] = [a.tenantId];
+      if (entry.where) {
+        sql += ` AND ${entry.where}`;
       }
+      sql += ' GROUP BY akun_id';
+      const sumRes = await pool.query(sql, params);
 
-      const selisih = globalValue - rincianValue;
+      for (const row of sumRes.rows as any[]) {
+        const existing = subledgerAccounts.get(row.akun_id);
+        if (existing) {
+          // Same account might match multiple entries (e.g., contacts for both piutang & utang)
+          existing.rincianValue += Number(row.total);
+          existing.detailCount += Number(row.cnt);
+        } else {
+          subledgerAccounts.set(row.akun_id, {
+            kode: '', nama: '', label: entry.label,
+            rincianValue: Number(row.total), detailCount: Number(row.cnt),
+          });
+        }
+      }
+    }
+
+    if (subledgerAccounts.size === 0) return { accounts: [] };
+
+    // 2. Get CoA info for these accounts
+    const akunIds = [...subledgerAccounts.keys()];
+    const coaRes = await pool.query(
+      `SELECT id, kode, nama FROM chart_of_accounts WHERE id = ANY($1)`,
+      [akunIds]
+    );
+    for (const coa of coaRes.rows as any[]) {
+      const entry = subledgerAccounts.get(coa.id);
+      if (entry) { entry.kode = coa.kode; entry.nama = coa.nama; }
+    }
+
+    // 3. Get current balance from ALL journal lines (not just opening balance)
+    // globalValue = SUM(debit) - SUM(kredit) per akun → then take absolute as "balance"
+    const balanceRes = await pool.query(
+      `SELECT jl.akun_id,
+              COALESCE(SUM(jl.debit), 0) AS total_debit,
+              COALESCE(SUM(jl.kredit), 0) AS total_kredit
+       FROM journal_lines jl
+       JOIN journal_entries je ON je.id = jl.entry_id
+       WHERE je.tenant_id = $1 AND jl.akun_id = ANY($2)
+       GROUP BY jl.akun_id`,
+      [a.tenantId, akunIds]
+    );
+
+    const balanceMap = new Map<string, { debit: number; kredit: number }>();
+    for (const row of balanceRes.rows as any[]) {
+      balanceMap.set(row.akun_id, { debit: Number(row.total_debit), kredit: Number(row.total_kredit) });
+    }
+
+    // 4. Build reconciliation results
+    const results: any[] = [];
+    for (const [akunId, info] of subledgerAccounts) {
+      const bal = balanceMap.get(akunId);
+      // For subledger comparison, use the balance side that matches saldo normal
+      // Assets (1.x) = debit side, Liabilities (2.x)/Equity (3.x) = kredit side
+      const kodePrefix = info.kode.charAt(0);
+      let globalValue = 0;
+      if (bal) {
+        // net balance = debit - kredit; for assets positive=debit, for liabilities/equity positive=kredit
+        globalValue = kodePrefix === '1' ? bal.debit - bal.kredit : bal.kredit - bal.debit;
+      }
+      const selisih = globalValue - info.rincianValue;
       results.push({
-        akunId: line.akun_id,
-        kode: line.kode,
-        namaAkun: line.nama,
-        subledgerType: label,
+        akunId,
+        kode: info.kode,
+        namaAkun: info.nama,
+        subledgerType: info.label,
         globalValue,
-        rincianValue,
+        rincianValue: info.rincianValue,
         selisih,
-        detailCount,
-        status: label ? (Math.abs(selisih) < 1 ? 'MATCHED' : 'UNMATCHED') : 'NO_SUBLEDGER',
+        detailCount: info.detailCount,
+        status: Math.abs(selisih) < 1 ? 'MATCHED' : 'UNMATCHED',
       });
     }
 
+    results.sort((a: any, b: any) => a.kode.localeCompare(b.kode));
     return { accounts: results };
   });
 }
