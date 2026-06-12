@@ -117,7 +117,7 @@ function LanggananPage() {
   const isExpired = status === 'expired';
   const daysLeft = Math.max(0, subscription?.daysLeft ?? 0);
   const price = subscription?.price || 1000000;
-  const progress = status === 'trial' ? Math.max(0, Math.min(100, (daysLeft / 14) * 100)) : isActive ? 100 : 0;
+  const progress = isActive ? Math.max(0, Math.min(100, (daysLeft / 365) * 100)) : status === 'trial' ? Math.max(0, Math.min(100, (daysLeft / 14) * 100)) : 0;
   const payments = subscription?.payments || [];
 
   return (
@@ -141,11 +141,12 @@ function LanggananPage() {
             </div>
             <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-600 px-6 py-5 text-white shadow-lg shadow-emerald-500/20">
               <p className="text-xs font-semibold uppercase tracking-wider text-white/70">Hari tersisa</p>
-              <p className="mt-1 text-5xl font-black">{isActive ? '-' : daysLeft}</p>
+              <p className="mt-1 text-5xl font-black">{daysLeft}</p>
+              <p className="text-xs text-white/70 mt-1">{status === 'trial' ? 'masa trial' : isActive ? 'langganan aktif' : 'berakhir'}</p>
             </div>
           </div>
           <div className="mt-7">
-            <div className="mb-2 flex justify-between text-xs font-semibold text-slate-500"><span>Progress trial</span><span>{Math.round(progress)}%</span></div>
+            <div className="mb-2 flex justify-between text-xs font-semibold text-slate-500"><span>{isActive ? 'Sisa langganan' : 'Progress trial'}</span><span>{Math.round(progress)}%</span></div>
             <div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all" style={{ width: progress + '%' }} /></div>
           </div>
         </div>
