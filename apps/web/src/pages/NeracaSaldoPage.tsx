@@ -148,7 +148,7 @@ export default function NeracaSaldoPage() {
 
               {/* Total row */}
               <div className="grid border-t-2 border-slate-200 bg-slate-50" style={{ gridTemplateColumns: '90px 1fr 120px 120px' }}>
-                <div className="col-span-2 py-3 px-3 text-sm font-bold text-slate-800">TOTAL</div>
+                <div className="py-3 px-3 text-sm font-bold text-slate-800" style={{ gridColumn: 'span 2' }}>TOTAL</div>
                 <div className="py-3 px-3 text-right text-sm font-bold text-emerald-700 tabular-nums">{rupiah(data.totalDebit)}</div>
                 <div className="py-3 px-3 text-right text-sm font-bold text-emerald-700 tabular-nums">{rupiah(data.totalKredit)}</div>
               </div>
