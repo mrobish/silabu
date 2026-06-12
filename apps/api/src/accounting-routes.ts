@@ -937,6 +937,70 @@ export async function accountingRoutes(app: FastifyInstance) {
     return computeLabaRugi(a.tenantId as string, q.start_date || null, q.end_date || null);
   });
 
+  // ── GET /accounting/dashboard-summary — ringkasan untuk dashboard ──
+  app.get('/dashboard-summary', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const tenantId = a.tenantId as string;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const yearStart = `${currentYear}-01-01`;
+    const today = now.toISOString().slice(0, 10);
+
+    // 1. Laba Rugi tahun berjalan
+    const lr = await computeLabaRugi(tenantId, yearStart, today);
+    const totalPemasukan = lr.pendapatanOperasional.subtotal + lr.nonOperasional.pendapatanLain.subtotal;
+    const totalPengeluaran = lr.hpp.subtotal + lr.bebanOperasional.subtotal + lr.nonOperasional.bebanLain.subtotal + lr.pajak.subtotal;
+
+    // 2. Saldo Kas (Gol 1.1.01) dari neraca
+    const kasRows = await pool.query(
+      `SELECT COALESCE(SUM(
+         CASE WHEN c.saldonormal = 'D'
+              THEN COALESCE(m.debit,0) - COALESCE(m.kredit,0)
+              ELSE COALESCE(m.kredit,0) - COALESCE(m.debit,0)
+         END
+       ), 0) AS saldo
+       FROM chart_of_accounts c
+       LEFT JOIN (
+         SELECT jl.akun_id, jl.debit, jl.kredit
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id = jl.entry_id AND je.tenant_id = $1
+       ) m ON m.akun_id = c.id
+       WHERE c.tenant_id = $1 AND c.ispostable = true AND c.kode LIKE '1.1.01%'`,
+      [tenantId]
+    );
+    const saldoKas = Number(kasRows.rows[0]?.saldo || 0);
+
+    // 3. Jumlah transaksi bulan ini
+    const txCount = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM journal_entries
+       WHERE tenant_id=$1 AND tipetransaksi <> 'OPENING_BALANCE'
+         AND tanggal >= $2 AND tanggal <= $3`,
+      [tenantId, `${currentYear}-${String(now.getMonth()+1).padStart(2,'0')}-01`, today]
+    );
+
+    // 4. Data bulanan (Jan–Des) untuk chart — pemasukan vs pengeluaran per bulan
+    const monthly: Array<{ month: string; pemasukan: number; pengeluaran: number }> = [];
+    for (let m = 1; m <= 12; m++) {
+      const ms = `${currentYear}-${String(m).padStart(2,'0')}-01`;
+      const me = new Date(currentYear, m, 0).toISOString().slice(0, 10);
+      const mLR = await computeLabaRugi(tenantId, ms, me);
+      monthly.push({
+        month: ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'][m-1],
+        pemasukan: mLR.pendapatanOperasional.subtotal + mLR.nonOperasional.pendapatanLain.subtotal,
+        pengeluaran: mLR.hpp.subtotal + mLR.bebanOperasional.subtotal + mLR.nonOperasional.bebanLain.subtotal + mLR.pajak.subtotal,
+      });
+    }
+
+    return {
+      totalPemasukan,
+      totalPengeluaran,
+      saldoKas,
+      labaBersih: lr.labaBersih,
+      transaksiBulanIni: txCount.rows[0]?.count || 0,
+      monthly,
+    };
+  });
+
   // GET /accounting/neraca — Laporan Neraca / Balance Sheet (snapshot as-of end_date)
   // Query param: end_date (YYYY-MM-DD). Default hari ini.
   // Aset (Gol 1) = Kewajiban (Gol 2) + Ekuitas (Gol 3) + Laba Berjalan.

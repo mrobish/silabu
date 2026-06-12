@@ -1470,6 +1470,7 @@ export default function AppDashboard() {
   const [confirmLogout, setConfirmLogout] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const [dashData, setDashData] = useState<{ totalPemasukan: number; totalPengeluaran: number; saldoKas: number; labaBersih: number; transaksiBulanIni: number; monthly: Array<{ month: string; pemasukan: number; pengeluaran: number }> } | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('user') || sessionStorage.getItem('user');
@@ -1494,6 +1495,16 @@ export default function AppDashboard() {
     if (profileOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [profileOpen]);
+
+  // Fetch dashboard summary when page is dashboard
+  useEffect(() => {
+    if (page !== 'dashboard' || !user) return;
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    fetch('/api/accounting/dashboard-summary', { headers: { Authorization: 'Bearer ' + token } })
+      .then(r => r.json())
+      .then(d => { if (!d.error) setDashData(d); })
+      .catch(() => {});
+  }, [page, user]);
 
   if (!user) return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -1720,11 +1731,12 @@ export default function AppDashboard() {
               {/* Stat cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 {[
-                  { label: 'Total Pemasukan', value: 'Rp0', trend: 0, d: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
-                  { label: 'Total Pengeluaran', value: 'Rp0', trend: 0, d: 'M13 17h8m0 0V9m0 8l-8-8-4 4-6-6' },
-                  { label: 'Saldo Kas', value: 'Rp0', trend: 0, d: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+                  { label: 'Total Pemasukan', value: formatRupiah(dashData?.totalPemasukan || 0), trend: 0, d: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6', page: 'laba-rugi' as Page },
+                  { label: 'Total Pengeluaran', value: formatRupiah(dashData?.totalPengeluaran || 0), trend: 0, d: 'M13 17h8m0 0V9m0 8l-8-8-4 4-6-6', page: 'laba-rugi' as Page },
+                  { label: 'Saldo Kas', value: formatRupiah(dashData?.saldoKas || 0), trend: 0, d: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', page: 'neraca' as Page },
                 ].map((s, i) => (
-                  <div key={i} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group">
+                  <button key={i} onClick={() => setPage(s.page)}
+                    className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group text-left cursor-pointer">
                     <div className="flex items-center justify-between mb-3">
                       <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-50 to-cyan-50 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
                         <Icon d={s.d} className="w-5 h-5 text-emerald-600" />
@@ -1736,48 +1748,85 @@ export default function AppDashboard() {
                         </span>
                       )}
                     </div>
-                    <p className="text-3xl font-semibold text-slate-900">{s.value}</p>
+                    <p className="text-3xl font-semibold text-slate-900 tabular-nums">{s.value}</p>
                     <p className="text-sm font-medium text-slate-500 mt-1">{s.label}</p>
-                  </div>
+                  </button>
                 ))}
               </div>
 
-              {/* Chart placeholder */}
+              {/* Chart — Pemasukan vs Pengeluaran per bulan */}
               <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="font-bold text-slate-900">Grafik Keuangan</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">Ringkasan pemasukan {'\u0026'} pengeluaran</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Ringkasan pemasukan {'\u0026'} pengeluaran {new Date().getFullYear()}</p>
                   </div>
                   <div className="flex items-center gap-3 text-xs text-slate-500">
                     <span className="flex items-center gap-1.5"><span className="w-3 h-1 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500" /> Pemasukan</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-1 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500" /> Pengeluaran</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-1 rounded-full bg-gradient-to-r from-red-400 to-rose-500" /> Pengeluaran</span>
                   </div>
                 </div>
-                <div className="h-48 sm:h-56 bg-slate-50/50 rounded-xl border border-slate-100 flex items-center justify-center">
-                  <div className="flex flex-col items-center gap-2 text-slate-300">
-                    <Icon d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" className="w-8 h-8" />
-                    <p className="text-sm">Grafik akan tersedia setelah ada data transaksi</p>
+                {dashData && dashData.monthly.some(m => m.pemasukan > 0 || m.pengeluaran > 0) ? (
+                  <div className="h-48 sm:h-56 flex items-end gap-1 sm:gap-2 px-2">
+                    {dashData.monthly.map((m, i) => {
+                      const maxVal = Math.max(...dashData.monthly.map(x => Math.max(x.pemasukan, x.pengeluaran)), 1);
+                      const pH = (m.pemasukan / maxVal) * 100;
+                      const eH = (m.pengeluaran / maxVal) * 100;
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-0.5 group">
+                          <div className="w-full flex gap-0.5 items-end justify-center" style={{ height: '180px' }}>
+                            <div className="flex-1 max-w-[12px] rounded-t-sm bg-gradient-to-t from-emerald-500 to-cyan-400 opacity-80 group-hover:opacity-100 transition-opacity" style={{ height: `${Math.max(pH, m.pemasukan > 0 ? 4 : 0)}%` }}
+                              title={`Pemasukan: ${formatRupiah(m.pemasukan)}`} />
+                            <div className="flex-1 max-w-[12px] rounded-t-sm bg-gradient-to-t from-red-400 to-rose-500 opacity-80 group-hover:opacity-100 transition-opacity" style={{ height: `${Math.max(eH, m.pengeluaran > 0 ? 4 : 0)}%` }}
+                              title={`Pengeluaran: ${formatRupiah(m.pengeluaran)}`} />
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-medium">{m.month}</span>
+                        </div>
+                      );
+                    })}
                   </div>
+                ) : (
+                  <div className="h-48 sm:h-56 bg-slate-50/50 rounded-xl border border-slate-100 flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-2 text-slate-300">
+                      <Icon d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" className="w-8 h-8" />
+                      <p className="text-sm">Grafik akan tersedia setelah ada data transaksi</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Laba Bersih + Quick Stats */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <button onClick={() => setPage('laba-rugi')}
+                  className="bg-gradient-to-br from-emerald-500 to-cyan-600 rounded-2xl p-6 text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 text-left cursor-pointer">
+                  <p className="text-sm font-medium text-white/70">Laba Bersih Tahun Ini</p>
+                  <p className="text-3xl font-bold mt-2 tabular-nums">{formatRupiah(dashData?.labaBersih || 0)}</p>
+                  <p className="text-xs text-white/60 mt-2">Klik untuk lihat Laporan Laba Rugi →</p>
+                </button>
+                <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+                  <p className="text-sm font-medium text-slate-500">Transaksi Bulan Ini</p>
+                  <p className="text-3xl font-bold text-slate-900 mt-2 tabular-nums">{dashData?.transaksiBulanIni || 0}</p>
+                  <button onClick={() => setPage('jurnal')}
+                    className="text-xs text-emerald-600 font-semibold mt-2 hover:underline">Input Jurnal →</button>
                 </div>
               </div>
 
-              {/* Recent activity */}
+              {/* Recent activity — link ke menu utama */}
               <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
-                <h3 className="font-bold text-slate-900 mb-4">Aktivitas Terakhir</h3>
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
-                      <Icon d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" className="w-4 h-4 text-emerald-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-700">Akun BUM Desa berhasil dibuat</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Saat registrasi</p>
-                    </div>
-                  </div>
-                  <div className="text-center pt-2">
-                    <p className="text-xs text-slate-400">Fitur lainnya segera hadir</p>
-                  </div>
+                <h3 className="font-bold text-slate-900 mb-4">Menu Cepat</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Jurnal Umum', page: 'jurnal' as Page, d: jurnalIcon },
+                    { label: 'Buku Besar', page: 'buku-besar' as Page, d: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
+                    { label: 'Neraca Saldo', page: 'neraca-saldo' as Page, d: 'M10 3H3v18h7v-8h3v8h7V3h-7v6h-3z' },
+                    { label: 'Aset Tetap', page: 'aset-tetap' as Page, d: 'M12 2l9 4.5v11L12 22l-9-4.5v-11L12 2z M12 6v6.5 M7.5 9l9 4.5' },
+                  ].map((m, i) => (
+                    <button key={i} onClick={() => setPage(m.page)}
+                      className="flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-50 hover:bg-emerald-50 hover:text-emerald-700 transition-all duration-200 text-slate-600 cursor-pointer">
+                      <Icon d={m.d} className="w-6 h-6" />
+                      <span className="text-xs font-semibold text-center">{m.label}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
