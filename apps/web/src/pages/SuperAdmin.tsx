@@ -4,8 +4,8 @@ import PasswordForm from './PasswordForm';
 
 type Settings = { smtp: any; oauth: any; tripay: any; security: any };
 type TabKey = 'smtp' | 'oauth' | 'tripay' | 'security';
-type Page = 'dashboard' | 'users' | 'settings' | 'password' | 'broadcast';
-type ModalAction = 'delete' | 'clear' | 'toggle' | 'reset' | 'impersonate' | 'subscription' | null;
+type Page = 'dashboard' | 'users' | 'settings' | 'password' | 'broadcast' | 'profile' | 'addAdmin';
+type ModalAction = 'delete' | 'clear' | 'toggle' | 'reset' | 'impersonate' | 'subscription' | 'addAdmin' | null;
 
 type AdminUser = {
   id: string;
@@ -89,6 +89,18 @@ export default function SuperAdmin() {
   const [subStatus, setSubStatus] = useState<'trial' | 'active' | 'expired'>('trial');
   const [subEndsAt, setSubEndsAt] = useState('');
   const [trialEndsAt, setTrialEndsAt] = useState('');
+
+  // Profile form state
+  const [profileEmail, setProfileEmail] = useState('');
+  const [profileCurrentPw, setProfileCurrentPw] = useState('');
+  const [profileNewPw, setProfileNewPw] = useState('');
+  const [profileLoading, setProfileLoading] = useState(false);
+
+  // Add Admin form state
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [newAdminNama, setNewAdminNama] = useState('');
+  const [addAdminLoading, setAddAdminLoading] = useState(false);
 
   useEffect(() => {
     if (!token) { navigate('/login'); return; }
@@ -215,6 +227,35 @@ export default function SuperAdmin() {
 
   function logout() { localStorage.clear(); sessionStorage.clear(); navigate('/login'); }
 
+  async function handleProfileUpdate() {
+    setProfileLoading(true); setMsg(null);
+    try {
+      const body: any = {};
+      if (profileEmail.trim()) body.email = profileEmail.trim();
+      if (profileNewPw) { body.password = profileNewPw; body.current_password = profileCurrentPw; }
+      if (!body.email && !body.password) { setMsg({ t: 'err', m: 'Isi email atau password baru' }); setProfileLoading(false); return; }
+      const r = await fetch('/api/admin/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setMsg({ t: 'ok', m: d.message || 'Profil berhasil diperbarui' });
+      setProfileEmail(''); setProfileCurrentPw(''); setProfileNewPw('');
+    } catch (e: any) { setMsg({ t: 'err', m: e?.message || 'Gagal memperbarui profil' }); } finally { setProfileLoading(false); }
+  }
+
+  async function handleAddAdmin() {
+    setAddAdminLoading(true); setMsg(null);
+    try {
+      if (!newAdminEmail.trim() || !newAdminPassword || !newAdminNama.trim()) { setMsg({ t: 'err', m: 'Semua field wajib diisi' }); setAddAdminLoading(false); return; }
+      const r = await fetch('/api/admin/admins', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ email: newAdminEmail.trim(), password: newAdminPassword, nama_lengkap: newAdminNama.trim() }) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setMsg({ t: 'ok', m: `Admin "${d.user?.nama_lengkap}" berhasil ditambahkan` });
+      setNewAdminEmail(''); setNewAdminPassword(''); setNewAdminNama('');
+      setModalAction(null);
+      await Promise.all([loadUsers(false), loadStats()]);
+    } catch (e: any) { setMsg({ t: 'err', m: e?.message || 'Gagal menambahkan admin' }); } finally { setAddAdminLoading(false); }
+  }
+
   async function save(key: string, value: any) {
     setMsg(null); setLoading(true);
     try {
@@ -265,7 +306,7 @@ export default function SuperAdmin() {
     return users.filter(u => [u.nama_lengkap, u.email, u.nama_bumdes, u.role, u.auth_provider, u.subscription_status].some(v => String(v || '').toLowerCase().includes(q)));
   }, [users, search]);
 
-  const pageTitle = page === 'password' ? 'Ubah Password' : page === 'dashboard' ? 'Dashboard' : page === 'users' ? 'Management User' : page === 'broadcast' ? 'Broadcast' : 'Settings';
+  const pageTitle = page === 'password' ? 'Ubah Password' : page === 'dashboard' ? 'Dashboard' : page === 'users' ? 'Management User' : page === 'broadcast' ? 'Broadcast' : page === 'profile' ? 'Profil Saya' : page === 'addAdmin' ? 'Tambah Admin' : 'Settings';
   const formatDate = (v?: string | null) => v ? new Date(v).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
   const money = (n?: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n || 0);
   const statusClass = (s?: string | null) => s === 'active' ? 'bg-cyan-50 text-cyan-700 ring-cyan-100' : s === 'expired' ? 'bg-amber-50 text-amber-700 ring-amber-100' : 'bg-emerald-50 text-emerald-700 ring-emerald-100';
@@ -302,7 +343,7 @@ export default function SuperAdmin() {
         <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-slate-600 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 transition"><Icon d="M4 6h16M4 12h16M4 18h16" className="w-6 h-6" /></button>
         <h2 className="text-lg font-bold text-slate-900 truncate">{pageTitle}</h2><div className="flex-1" />
         <div ref={profileRef} className="relative"><button onClick={() => setProfileOpen(!profileOpen)} className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center text-white font-bold text-xs shadow-sm hover:shadow-md hover:scale-105 transition-all">SA</button>
-          {profileOpen && <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 animate-scale-in z-50 origin-top-right"><div className="px-4 py-3 border-b border-slate-100"><p className="text-sm font-bold text-slate-900 truncate">Super Admin</p><p className="text-xs text-slate-400 truncate">admin@silabu.ondesa.id</p></div><button onClick={() => { setPage('password'); setProfileOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition"><Icon d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" className="w-4 h-4 text-slate-400" />Ubah Password</button><button onClick={() => { setConfirmLogout(true); setProfileOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition"><Icon d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" className="w-4 h-4 text-red-400" />Keluar</button></div>}
+          {profileOpen && <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 animate-scale-in z-50 origin-top-right"><div className="px-4 py-3 border-b border-slate-100"><p className="text-sm font-bold text-slate-900 truncate">Super Admin</p><p className="text-xs text-slate-400 truncate">admin@silabu.ondesa.id</p></div><button onClick={() => { setPage('profile'); setProfileOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition"><Icon d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" className="w-4 h-4 text-slate-400" />Profil Saya</button><button onClick={() => { setPage('password'); setProfileOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition"><Icon d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" className="w-4 h-4 text-slate-400" />Ubah Password</button><button onClick={() => { setConfirmLogout(true); setProfileOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition"><Icon d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" className="w-4 h-4 text-red-400" />Keluar</button></div>}
         </div>
       </header>
 
@@ -318,10 +359,24 @@ export default function SuperAdmin() {
         </div>}
 
         {page === 'users' && <div className="space-y-8 animate-fade-in">
-          <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm"><div className="flex flex-col sm:flex-row sm:items-center gap-4"><div className="flex-1"><h3 className="font-bold text-slate-900">Management User</h3><p className="text-sm text-slate-500">Kelola akun BUM Desa, status, dan data tenant.</p></div><div className="relative sm:w-80"><Icon d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z" className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama, email, BUM Desa..." className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition" /></div></div></div>
+          <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm"><div className="flex flex-col sm:flex-row sm:items-center gap-4"><div className="flex-1"><h3 className="font-bold text-slate-900">Management User</h3><p className="text-sm text-slate-500">Kelola akun BUM Desa, status, dan data tenant.</p></div><button onClick={() => setModalAction('addAdmin')} className="shrink-0 flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-cyan-600 text-white rounded-xl text-sm font-semibold hover:shadow-md hover:scale-105 transition-all"><Icon d="M12 6v6m0 0v6m0-6h6m-6 0H6" className="w-4 h-4" />Tambah Admin</button><div className="relative sm:w-80"><Icon d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z" className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama, email, BUM Desa..." className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition" /></div></div></div>
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden">{usersLoading ? <div className="h-64 flex items-center justify-center"><div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" /></div> : <UsersTable users={filteredUsers} formatDate={formatDate} statusClass={statusClass} providerClass={providerClass} onAction={(u, a) => { setActionUser(u); setModalAction(a); }} onImpersonate={(u) => handleImpersonate(u)} onSubscription={(u) => { setActionUser(u); setSubStatus((u.subscription_status as any) || 'trial'); setSubEndsAt(u.subscription_ends_at ? u.subscription_ends_at.slice(0, 10) : ''); setTrialEndsAt(u.trial_ends_at ? u.trial_ends_at.slice(0, 10) : ''); setModalAction('subscription'); }} />}</div>
         </div>}
 
+        
+        {page === 'profile' && <div className="max-w-3xl animate-fade-in">
+          <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-100 space-y-6">
+            <div><h3 className="text-lg font-bold text-slate-900">Profil Saya</h3><p className="text-sm text-slate-500">Ubah email dan password akun Super Admin Anda.</p></div>
+            <div className="space-y-4">
+              <div><label className="text-sm font-semibold text-slate-700">Email Baru</label><input type="email" value={profileEmail} onChange={e => setProfileEmail(e.target.value)} placeholder="Kosongkan jika tidak ingin mengubah" className={input} /></div>
+              <div className="border-t border-slate-100 pt-4"><p className="text-sm font-semibold text-slate-700 mb-3">Ubah Password</p><div className="space-y-3">
+                <div><label className="text-xs font-medium text-slate-500">Password Saat Ini</label><input type="password" value={profileCurrentPw} onChange={e => setProfileCurrentPw(e.target.value)} className={input} /></div>
+                <div><label className="text-xs font-medium text-slate-500">Password Baru</label><input type="password" value={profileNewPw} onChange={e => setProfileNewPw(e.target.value)} className={input} /></div>
+              </div></div>
+            </div>
+            <button onClick={handleProfileUpdate} disabled={profileLoading} className="w-full px-4 py-3 bg-gradient-to-r from-emerald-500 to-cyan-600 text-white rounded-xl font-semibold text-sm disabled:opacity-50">{profileLoading ? 'Menyimpan...' : 'Simpan Perubahan'}</button>
+          </div>
+        </div>}
         {page === 'settings' && <div className="max-w-3xl animate-fade-in">
           <div className="flex gap-2 mb-8 overflow-x-auto pb-2 -mx-1 px-1">{(['smtp', 'oauth', 'tripay', 'security'] as const).map(t => <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition ${tab === t ? 'bg-gradient-to-r from-emerald-500 to-cyan-600 text-white shadow-sm' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}`}>{t === 'smtp' ? 'SMTP Email' : t === 'oauth' ? 'Google OAuth' : t === 'tripay' ? 'Tripay' : 'Keamanan'}</button>)}</div>
           {tab === 'smtp' && <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-100 space-y-4"><h3 className="text-lg font-bold text-slate-900">SMTP Email</h3><p className="text-sm text-slate-500">Konfigurasi pengiriman email verifikasi & notifikasi.</p><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label className="text-sm font-semibold text-slate-700">Host</label><input value={settings.smtp.host || ''} onChange={e => update('smtp', 'host', e.target.value)} className={input} /></div><div><label className="text-sm font-semibold text-slate-700">Port</label><input type="number" value={settings.smtp.port || 587} onChange={e => update('smtp', 'port', Number(e.target.value))} className={input} /></div></div><div><label className="text-sm font-semibold text-slate-700">Username</label><input value={settings.smtp.user || ''} onChange={e => update('smtp', 'user', e.target.value)} className={input} /></div><div><label className="text-sm font-semibold text-slate-700">Password</label><input type="password" value={settings.smtp.pass || ''} onChange={e => update('smtp', 'pass', e.target.value)} className={input} /></div><div><label className="text-sm font-semibold text-slate-700">From</label><input value={settings.smtp.from || ''} onChange={e => update('smtp', 'from', e.target.value)} className={input} /></div><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.smtp.secure || false} onChange={e => update('smtp', 'secure', e.target.checked)} /> Secure SSL/TLS (port 465)</label><button onClick={() => save('smtp', settings.smtp)} disabled={loading} className="w-full px-4 py-3 bg-gradient-to-r from-emerald-500 to-cyan-600 text-white rounded-xl font-semibold text-sm disabled:opacity-50">Simpan SMTP</button></div>}
@@ -379,6 +434,10 @@ export default function SuperAdmin() {
 
     {/* Delete announcement confirmation */}
     {deleteAnnouncementId && <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !broadcastLoading && setDeleteAnnouncementId(null)} /><div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl animate-scale-in"><div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50"><Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-9 0h12" className="h-6 w-6 text-red-600" /></div><h3 className="text-center text-lg font-bold text-slate-900">Hapus pengumuman?</h3><p className="mt-1 text-center text-sm text-slate-500">Pengumuman akan dihapus permanen.</p><div className="mt-6 flex gap-3"><button onClick={() => setDeleteAnnouncementId(null)} disabled={broadcastLoading} className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">Batal</button><button onClick={() => deleteAnnouncement(deleteAnnouncementId)} disabled={broadcastLoading} className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition disabled:opacity-50">{broadcastLoading ? 'Menghapus...' : 'Hapus'}</button></div></div></div>}
+
+
+    {/* Add Admin modal */}
+    {modalAction === 'addAdmin' && <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { if (!addAdminLoading) { setModalAction(null); setNewAdminEmail(''); setNewAdminPassword(''); setNewAdminNama(''); } }} /><div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl animate-scale-in"><div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50"><Icon d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" className="h-6 w-6 text-emerald-600" /></div><h3 className="text-center text-lg font-bold text-slate-900">Tambah Admin Sistem</h3><p className="mt-1 text-center text-sm text-slate-500">Buat akun Super Admin baru</p><div className="mt-5 space-y-4"><div><label className="text-sm font-semibold text-slate-700">Nama Lengkap</label><input value={newAdminNama} onChange={e => setNewAdminNama(e.target.value)} className={input} placeholder="Nama admin" /></div><div><label className="text-sm font-semibold text-slate-700">Email</label><input type="email" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)} className={input} placeholder="admin2@silabu.ondesa.id" /></div><div><label className="text-sm font-semibold text-slate-700">Password</label><input type="password" value={newAdminPassword} onChange={e => setNewAdminPassword(e.target.value)} className={input} placeholder="Minimal 8 karakter" /></div></div><div className="mt-6 flex gap-3"><button onClick={() => { setModalAction(null); setNewAdminEmail(''); setNewAdminPassword(''); setNewAdminNama(''); }} disabled={addAdminLoading} className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">Batal</button><button onClick={handleAddAdmin} disabled={addAdminLoading || !newAdminEmail.trim() || !newAdminPassword || !newAdminNama.trim()} className="flex-1 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-600 py-2.5 text-sm font-semibold text-white hover:shadow-md transition disabled:opacity-50">{addAdminLoading ? 'Membuat...' : 'Buat Admin'}</button></div></div></div>}
 
     {confirmLogout && <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setConfirmLogout(false)} /><div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl animate-scale-in"><div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50"><svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg></div><h3 className="text-center text-lg font-bold text-slate-900">Yakin ingin keluar?</h3><p className="mt-1 text-center text-sm text-slate-500">Anda harus login kembali untuk mengakses akun.</p><div className="mt-6 flex gap-3"><button onClick={() => setConfirmLogout(false)} className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">Batal</button><button onClick={() => { setConfirmLogout(false); logout(); }} className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition">Ya, Keluar</button></div></div></div>}
   </div>;

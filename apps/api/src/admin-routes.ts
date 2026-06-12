@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import { pool } from './db.js';
 import { requireRole } from './guards.js';
 
@@ -62,6 +63,11 @@ export async function adminRoutes(app: FastifyInstance) {
         return { error: 'User tidak ditemukan' };
       }
       if (user.role === 'super_admin') {
+        const currentAdminId = (req as any).auth?.userId;
+        if (currentAdminId) {
+          await client.query('ROLLBACK');
+          return { error: 'Super Admin tidak bisa menghapus akun Super Admin lain' };
+        }
         await client.query('ROLLBACK');
         return { error: 'Akun super admin tidak boleh dihapus dari menu ini' };
       }
@@ -354,5 +360,73 @@ export async function adminRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     await pool.query('DELETE FROM announcements WHERE id = $1', [id]);
     return { success: true, message: 'Pengumuman dihapus' };
+  });
+
+  // PUT /profile — update current admin's email and/or password
+  app.put('/profile', async (req: FastifyRequest, reply: FastifyReply) => {
+    const auth = (req as any).auth;
+    const userId = auth.userId as string;
+    const body = req.body as any;
+    if (!body) return reply.code(400).send({ error: 'Body request kosong' });
+
+    const { email, current_password, new_password } = body;
+
+    // Fetch current user
+    const userRes = await pool.query('SELECT id, email, password_hash FROM users WHERE id=$1', [userId]);
+    if (!userRes.rowCount) return reply.code(404).send({ error: 'User tidak ditemukan' });
+    const user = userRes.rows[0] as any;
+
+    const updates: string[] = [];
+    const params: any[] = [userId];
+    let idx = 2;
+
+    // Email update
+    if (email && email !== user.email) {
+      const dup = await pool.query('SELECT id FROM users WHERE email=$1 AND id != $2', [email, userId]);
+      if (dup.rowCount) return reply.code(409).send({ error: 'Email sudah digunakan' });
+      updates.push(`email = $${idx++}`);
+      params.push(email);
+    }
+
+    // Password update
+    if (new_password) {
+      if (!current_password) return reply.code(400).send({ error: 'Password lama wajib diisi' });
+      const valid = await bcrypt.compare(current_password, user.password_hash);
+      if (!valid) return reply.code(400).send({ error: 'Password lama salah' });
+      const hash = await bcrypt.hash(new_password, 10);
+      updates.push(`password_hash = $${idx++}`);
+      params.push(hash);
+    }
+
+    if (!updates.length) return reply.code(400).send({ error: 'Tidak ada perubahan' });
+
+    const result = await pool.query(
+      `UPDATE users SET ${updates.join(', ')}, updated_at=now() WHERE id=$1 RETURNING id, email, nama_lengkap, role, auth_provider, is_active, created_at, updated_at`,
+      params
+    );
+    return { success: true, user: result.rows[0], message: 'Profil berhasil diperbarui' };
+  });
+
+  // POST /admins — create a new super admin account
+  app.post('/admins', async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as any;
+    if (!body) return reply.code(400).send({ error: 'Body request kosong' });
+    const { email, password, nama_lengkap } = body;
+    if (!email || !password || !nama_lengkap) {
+      return reply.code(400).send({ error: 'Email, password, dan nama_lengkap wajib diisi' });
+    }
+
+    // Check email uniqueness
+    const dup = await pool.query('SELECT id FROM users WHERE email=$1', [email]);
+    if (dup.rowCount) return reply.code(409).send({ error: 'Email sudah terdaftar' });
+
+    const hash = await bcrypt.hash(password, 6);
+    const result = await pool.query(
+      `INSERT INTO users (email, password_hash, nama_lengkap, role, auth_provider, is_active)
+       VALUES ($1, $2, $3, 'super_admin', 'email', true)
+       RETURNING id, email, nama_lengkap, role, auth_provider, is_active, created_at`,
+      [email, hash, nama_lengkap]
+    );
+    return { success: true, user: result.rows[0], message: 'Super Admin berhasil dibuat' };
   });
 }
