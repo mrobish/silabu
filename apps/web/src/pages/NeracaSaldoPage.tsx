@@ -124,8 +124,7 @@ export default function NeracaSaldoPage() {
                   <th className="text-right py-3 px-3" style={{ width: '22%' }}>Kredit</th>
                 </tr>
               </thead>
-              <tbody>
-                {glCodes.map(g => hasAny(g) && (
+              {glCodes.map(g => hasAny(g) && (
                   <tbody key={g}>
                     <tr className="border-0">
                       <td colSpan={4} className="p-0">
@@ -147,12 +146,13 @@ export default function NeracaSaldoPage() {
                   </tbody>
                 ))}
                 {/* TOTAL row */}
+                <tfoot>
                 <tr className="border-t-2 border-slate-200 bg-slate-50">
                   <td colSpan={2} className="py-3 px-3 text-sm font-bold text-slate-800">TOTAL</td>
                   <td className="py-3 px-3 text-right text-sm font-bold text-emerald-700 tabular-nums">{rupiah(data.totalDebit)}</td>
                   <td className="py-3 px-3 text-right text-sm font-bold text-emerald-700 tabular-nums">{rupiah(data.totalKredit)}</td>
                 </tr>
-              </tbody>
+                </tfoot>
             </table>
           </div>
 
