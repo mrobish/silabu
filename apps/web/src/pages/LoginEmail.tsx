@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TurnstileWidget } from './TurnstileWidget';
 import BackBar from './BackBar';
@@ -12,12 +12,19 @@ export default function LoginEmail() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [captchaToken, setCaptchaToken] = useState('');
-  const [captchaKey, setCaptchaKey] = useState(0); // reset CAPTCHA via key change
+  const [captchaKey, setCaptchaKey] = useState(0);
+  const [captchaEnabled, setCaptchaEnabled] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/auth/captcha-config').then(r => r.json()).then(d => {
+      setCaptchaEnabled(!!d.enabled);
+    }).catch(() => {});
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (!captchaToken) { setError('Verifikasi CAPTCHA dulu'); return; }
+    if (captchaEnabled && !captchaToken) { setError('Verifikasi CAPTCHA dulu'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/auth/login', {
