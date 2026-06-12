@@ -360,8 +360,8 @@ export async function subledgerRoutes(app: FastifyInstance) {
       if (entry) { entry.kode = coa.kode; entry.nama = coa.nama; }
     }
 
-    // 3. Get current balance from ALL journal lines (not just opening balance)
-    // globalValue = SUM(debit) - SUM(kredit) per akun → then take absolute as "balance"
+    // 3. Get balance from OPENING_BALANCE journal entries ONLY
+    // This ensures Recon Badge validates Saldo Awal cut-off, not operational transactions
     const balanceRes = await pool.query(
       `SELECT jl.akun_id,
               COALESCE(SUM(jl.debit), 0) AS total_debit,
@@ -369,6 +369,7 @@ export async function subledgerRoutes(app: FastifyInstance) {
        FROM journal_lines jl
        JOIN journal_entries je ON je.id = jl.entry_id
        WHERE je.tenant_id = $1 AND jl.akun_id = ANY($2)
+         AND je.tipetransaksi = 'OPENING_BALANCE'
        GROUP BY jl.akun_id`,
       [a.tenantId, akunIds]
     );
