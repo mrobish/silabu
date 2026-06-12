@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { BookOpen, Calendar, FileText, DollarSign, Search, ChevronDown, X } from 'lucide-react';
+import ReportPrintLayout from './ReportPrintLayout';
 
 // ─── Types ───────────────────────────────────────────────────
 interface CoAAccount { id: string; kode: string; nama: string; isPostable?: boolean; is_postable?: boolean; level?: number; }
@@ -17,22 +18,38 @@ interface BukuBesarData {
 // ─── Helpers ─────────────────────────────────────────────────
 const token = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
 const rupiah = (n: number) => 'Rp ' + n.toLocaleString('id-ID');
+const rupiahPrint = (n: number) => n.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtDate = (d: string) => { try { return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return d; } };
-const today = () => new Date().toISOString().slice(0, 10);
-const startOfYear = () => new Date().getFullYear() + '-01-01';
+const fmtDateShort = (d: string) => { try { return new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }); } catch { return d; } };
+const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
 // ─── Component ───────────────────────────────────────────────
 export default function BukuBesarPage() {
+  const now = new Date();
   const [coaList, setCoaList] = useState<CoAAccount[]>([]);
   const [akunId, setAkunId] = useState('');
   const [search, setSearch] = useState('');
   const [openSearch, setOpenSearch] = useState(false);
-  const [startDate, setStartDate] = useState(startOfYear);
-  const [endDate, setEndDate] = useState(today);
+  const [filterMode, setFilterMode] = useState<'bulanan' | 'tahunan'>('bulanan');
+  const [bulan, setBulan] = useState(now.getMonth() + 1);
+  const [tahun, setTahun] = useState(now.getFullYear());
   const [data, setData] = useState<BukuBesarData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [printOpen, setPrintOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Compute startDate / endDate from filter
+  const startDate = filterMode === 'bulanan'
+    ? `${tahun}-${String(bulan).padStart(2, '0')}-01`
+    : `${tahun}-01-01`;
+  const endDate = filterMode === 'bulanan'
+    ? `${tahun}-${String(bulan).padStart(2, '0')}-${String(new Date(tahun, bulan, 0).getDate()).padStart(2, '0')}`
+    : `${tahun}-12-31`;
+
+  const periodLabel = filterMode === 'bulanan'
+    ? `Periode: ${MONTHS_ID[bulan - 1]} ${tahun}`
+    : `Tahun: ${tahun}`;
 
   useEffect(() => {
     fetch('/api/accounting/coa', { headers: { Authorization: 'Bearer ' + token() } })
@@ -62,9 +79,7 @@ export default function BukuBesarPage() {
     if (!akunId) { setError('Pilih akun terlebih dahulu'); return; }
     setLoading(true); setError(''); setData(null);
     try {
-      const params = new URLSearchParams({ akun_id: akunId });
-      if (startDate) params.set('start_date', startDate);
-      if (endDate) params.set('end_date', endDate);
+      const params = new URLSearchParams({ akun_id: akunId, start_date: startDate, end_date: endDate });
       const res = await fetch('/api/accounting/buku-besar?' + params.toString(), { headers: { Authorization: 'Bearer ' + token() } });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Gagal memuat data');
@@ -93,9 +108,9 @@ export default function BukuBesarPage() {
 
       {/* Filter Card */}
       <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-xl relative z-10">
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
           {/* CoA dropdown */}
-          <div className="sm:col-span-2 relative" ref={dropdownRef}>
+          <div className="sm:col-span-4 relative" ref={dropdownRef}>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Pilih Akun</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -130,25 +145,53 @@ export default function BukuBesarPage() {
             )}
           </div>
 
-          {/* Start date */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Dari Tanggal</label>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} />
+          {/* Filter Mode Toggle */}
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Filter</label>
+            <div className="flex rounded-xl border border-slate-200 overflow-hidden">
+              <button type="button" onClick={() => setFilterMode('bulanan')}
+                className={'flex-1 px-3 py-2.5 text-xs font-bold transition ' + (filterMode === 'bulanan' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50')}>
+                Bulanan
+              </button>
+              <button type="button" onClick={() => setFilterMode('tahunan')}
+                className={'flex-1 px-3 py-2.5 text-xs font-bold transition ' + (filterMode === 'tahunan' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50')}>
+                Tahunan
+              </button>
+            </div>
           </div>
 
-          {/* End date */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Sampai Tanggal</label>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} />
+          {/* Month (only when bulanan) */}
+          {filterMode === 'bulanan' && (
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Bulan</label>
+              <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className={inputCls}>
+                {MONTHS_ID.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Year */}
+          <div className={filterMode === 'bulanan' ? 'sm:col-span-2' : 'sm:col-span-2'}>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Tahun</label>
+            <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className={inputCls}>
+              {Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i).map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
           </div>
 
-          {/* Submit button */}
-          <div>
+          {/* Action buttons */}
+          <div className="sm:col-span-2 flex gap-2">
             <button type="button" onClick={fetchData}
               disabled={!akunId || loading}
-              className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
+              className="flex-1 rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
               {loading ? 'Memuat...' : 'Tampilkan'}
             </button>
+            {data && (
+              <button type="button" onClick={() => setPrintOpen(true)}
+                className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-emerald-700 hover:bg-emerald-100 transition whitespace-nowrap"
+                title="Cetak Buku Besar">
+                🖨️ Cetak
+              </button>
+            )}
           </div>
         </div>
 
@@ -161,6 +204,9 @@ export default function BukuBesarPage() {
             <span className={'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ' +
               (data.akun.saldoNormal === 'D' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700')}>
               Normal {data.akun.saldoNormal === 'D' ? 'Debit' : 'Kredit'}
+            </span>
+            <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+              {periodLabel}
             </span>
           </div>
         )}
@@ -206,7 +252,7 @@ export default function BukuBesarPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {/* Baris Saldo Awal — hanya jika ada saldo */}
+                  {/* Baris Saldo Awal */}
                   {data.saldoAwal !== 0 && (
                   <tr className="bg-slate-50/80">
                     <td className="px-5 py-3 font-semibold text-slate-500 text-xs" colSpan={1}>
@@ -268,6 +314,83 @@ export default function BukuBesarPage() {
           <BookOpen className="w-12 h-12 text-slate-300 mx-auto" />
           <p className="mt-4 text-sm text-slate-400">Pilih akun dan klik <strong>Tampilkan</strong> untuk melihat buku besar.</p>
         </div>
+      )}
+
+      {/* Print Preview */}
+      {printOpen && data && (
+        <ReportPrintLayout
+          title="BUKU BESAR"
+          isOpen={printOpen}
+          onClose={() => setPrintOpen(false)}
+          periodLabel={periodLabel}
+        >
+          {/* Account Info */}
+          <p className="text-center text-[12px] font-bold text-slate-800 mb-0.5">
+            Akun: {data.akun.nama.toUpperCase()} ({data.akun.kode})
+          </p>
+          <p className="text-center text-[10px] text-slate-500 mb-3">
+            Saldo Normal: {data.akun.saldoNormal === 'D' ? 'Debit' : 'Kredit'}
+          </p>
+
+          {/* Print Table */}
+          <table className="w-full border-collapse text-[10px]" style={{ tableLayout: 'fixed' }}>
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="border border-slate-400 px-2 py-1.5 text-left font-bold" style={{ width: '13%' }}>Tanggal</th>
+                <th className="border border-slate-400 px-2 py-1.5 text-left font-bold" style={{ width: '13%' }}>No. Bukti</th>
+                <th className="border border-slate-400 px-2 py-1.5 text-left font-bold" style={{ width: '30%' }}>Keterangan / Uraian</th>
+                <th className="border border-slate-400 px-2 py-1.5 text-right font-bold" style={{ width: '14%' }}>Debit (Rp)</th>
+                <th className="border border-slate-400 px-2 py-1.5 text-right font-bold" style={{ width: '14%' }}>Kredit (Rp)</th>
+                <th className="border border-slate-400 px-2 py-1.5 text-right font-bold" style={{ width: '16%' }}>Saldo (Rp)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {/* Saldo Awal row */}
+              {data.saldoAwal !== 0 && (
+                <tr className="bg-slate-50">
+                  <td className="border border-slate-300 px-2 py-1 font-semibold">{fmtDateShort(startDate)}</td>
+                  <td className="border border-slate-300 px-2 py-1 font-semibold">Saldo Awal</td>
+                  <td className="border border-slate-300 px-2 py-1 italic">Saldo awal periode</td>
+                  <td className="border border-slate-300 px-2 py-1 text-right">—</td>
+                  <td className="border border-slate-300 px-2 py-1 text-right">—</td>
+                  <td className="border border-slate-300 px-2 py-1 text-right font-bold">{rupiahPrint(data.saldoAwal)}</td>
+                </tr>
+              )}
+
+              {/* Mutasi rows */}
+              {data.mutasi.map((m, i) => (
+                <tr key={i}>
+                  <td className="border border-slate-300 px-2 py-1">{fmtDateShort(m.tanggal)}</td>
+                  <td className="border border-slate-300 px-2 py-1 font-mono text-[9px]">{m.noJurnal}</td>
+                  <td className="border border-slate-300 px-2 py-1">{m.keterangan || '-'}</td>
+                  <td className="border border-slate-300 px-2 py-1 text-right">{m.debit > 0 ? rupiahPrint(m.debit) : ''}</td>
+                  <td className="border border-slate-300 px-2 py-1 text-right">{m.kredit > 0 ? rupiahPrint(m.kredit) : ''}</td>
+                  <td className="border border-slate-300 px-2 py-1 text-right font-semibold">{rupiahPrint(m.saldoBerjalan)}</td>
+                </tr>
+              ))}
+
+              {/* Total row */}
+              {data.mutasi.length > 0 && (
+                <tr className="bg-slate-100 font-bold">
+                  <td colSpan={3} className="border border-slate-400 px-2 py-1.5 text-right uppercase text-[9px] tracking-wide">Total Mutasi</td>
+                  <td className="border border-slate-400 px-2 py-1.5 text-right">{rupiahPrint(data.totalDebit)}</td>
+                  <td className="border border-slate-400 px-2 py-1.5 text-right">{rupiahPrint(data.totalKredit)}</td>
+                  <td className="border border-slate-400 px-2 py-1.5 text-right">{rupiahPrint(data.saldoAkhir)}</td>
+                </tr>
+              )}
+
+              {/* Saldo Akhir highlight */}
+              <tr className="bg-emerald-50">
+                <td colSpan={5} className="border border-slate-400 px-2 py-1.5 text-right font-bold uppercase text-[9px] tracking-wide text-emerald-800">
+                  Saldo Akhir Periode
+                </td>
+                <td className="border border-slate-400 px-2 py-1.5 text-right font-bold text-emerald-800 text-[11px]">
+                  {rupiahPrint(data.saldoAkhir)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </ReportPrintLayout>
       )}
     </div>
   );
