@@ -1089,14 +1089,11 @@ function SaldoAwalPage({ setPage }: { setPage: (p: Page) => void }) {
         if (data.isSetup && data.existingLines) {
           for (const a of (data.accounts || [])) {
             const line = data.existingLines[a.id];
-            const debit = line?.debit && line.debit !== '0' ? line.debit : '';
-            const kredit = line?.kredit && line.kredit !== '0' ? line.kredit : '';
-            const rawVal = debit || kredit;
-            if (rawVal) {
-              // numeric(18,2) from DB returns "100000000.00" — must parse to float first
-              // to strip decimal before formatting, otherwise dot gets removed
-              // and "100000000.00" → "10000000000" (10x larger!)
-              const numVal = parseFloat(rawVal) || 0;
+            // numeric(18,2) returns "0.00" not "0" — must parse to float to check non-zero
+            const debitNum = parseFloat(line?.debit || '0') || 0;
+            const kreditNum = parseFloat(line?.kredit || '0') || 0;
+            const numVal = debitNum > 0 ? debitNum : kreditNum;
+            if (numVal > 0) {
               existing[a.id] = formatNumberString(String(Math.round(numVal)));
             }
           }
