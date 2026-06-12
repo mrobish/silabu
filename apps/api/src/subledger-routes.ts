@@ -414,4 +414,219 @@ export async function subledgerRoutes(app: FastifyInstance) {
     results.sort((a: any, b: any) => a.kode.localeCompare(b.kode));
     return { accounts: results };
   });
+
+  // ─── BUKU PEMBANTU (Subsidiary Ledger) ───────────────────────
+  // GET /buku-pembantu/utang — Utang per supplier
+  app.get('/buku-pembantu/utang', tenantGuard, async (req: FastifyRequest) => {
+    const a = getToken(req);
+    const q = req.query as any;
+    const contactId = q.contact_id || null;
+    const startDate = q.start_date || null;
+    const endDate = q.end_date || null;
+
+    // Get all suppliers
+    const contactsRes = await pool.query(
+      `SELECT c.id, c.nama, c.telepon, c.alamat, c.saldo_awal AS "saldoAwal", c.saldo_awal_tipe AS "saldoAwalTipe",
+              coa.id AS "akunId", coa.kode AS "akunKode", coa.nama AS "akunNama"
+       FROM contacts c
+       JOIN chart_of_accounts coa ON coa.id = c.akun_id
+       WHERE c.tenant_id=$1 AND c.tipe='supplier'
+       ORDER BY c.nama`,
+      [a.tenantId]
+    );
+
+    const results: any[] = [];
+    for (const contact of contactsRes.rows as any[]) {
+      if (contactId && contact.id !== contactId) continue;
+
+      // Get journal lines for this contact
+      let lineSql = `
+        SELECT je.tanggal, je.no_jurnal AS "noJurnal", je.keterangan AS "entryKeterangan",
+               je.referensi, je.tipetransaksi AS "tipeTransaksi",
+               jl.debit, jl.kredit, jl.keterangan AS "lineKeterangan"
+        FROM journal_lines jl
+        JOIN journal_entries je ON je.id = jl.entry_id
+        WHERE je.tenant_id=$1 AND jl.contact_id=$2`;
+      const lineParams: any[] = [a.tenantId, contact.id];
+      let paramIdx = 3;
+      if (startDate) { lineSql += ` AND je.tanggal >= $${paramIdx++}`; lineParams.push(startDate); }
+      if (endDate) { lineSql += ` AND je.tanggal <= $${paramIdx++}`; lineParams.push(endDate); }
+      lineSql += ' ORDER BY je.tanggal, je.created_at';
+
+      const linesRes = await pool.query(lineSql, lineParams);
+
+      // Calculate running balance
+      const saldoAwal = Number(contact.saldoAwal);
+      const isDebitNormal = contact.saldoAwalTipe === 'debit';
+      let running = isDebitNormal ? saldoAwal : -saldoAwal;
+      const transactions = linesRes.rows.map((l: any) => {
+        running += Number(l.debit) - Number(l.kredit);
+        return {
+          tanggal: l.tanggal,
+          noJurnal: l.noJurnal,
+          keterangan: l.lineKeterangan || l.entryKeterangan,
+          referensi: l.referensi,
+          tipeTransaksi: l.tipeTransaksi,
+          debit: Number(l.debit),
+          kredit: Number(l.kredit),
+          saldo: running,
+        };
+      });
+
+      results.push({
+        contactId: contact.id,
+        nama: contact.nama,
+        telepon: contact.telepon,
+        alamat: contact.alamat,
+        akunKode: contact.akunKode,
+        akunNama: contact.akunNama,
+        saldoAwal,
+        saldoAkhir: running,
+        transactions,
+      });
+    }
+
+    return { data: results };
+  });
+
+  // GET /buku-pembantu/piutang — Piutang per pelanggan
+  app.get('/buku-pembantu/piutang', tenantGuard, async (req: FastifyRequest) => {
+    const a = getToken(req);
+    const q = req.query as any;
+    const contactId = q.contact_id || null;
+    const startDate = q.start_date || null;
+    const endDate = q.end_date || null;
+
+    const contactsRes = await pool.query(
+      `SELECT c.id, c.nama, c.telepon, c.alamat, c.saldo_awal AS "saldoAwal", c.saldo_awal_tipe AS "saldoAwalTipe",
+              coa.id AS "akunId", coa.kode AS "akunKode", coa.nama AS "akunNama"
+       FROM contacts c
+       JOIN chart_of_accounts coa ON coa.id = c.akun_id
+       WHERE c.tenant_id=$1 AND c.tipe='pelanggan'
+       ORDER BY c.nama`,
+      [a.tenantId]
+    );
+
+    const results: any[] = [];
+    for (const contact of contactsRes.rows as any[]) {
+      if (contactId && contact.id !== contactId) continue;
+
+      let lineSql = `
+        SELECT je.tanggal, je.no_jurnal AS "noJurnal", je.keterangan AS "entryKeterangan",
+               je.referensi, je.tipetransaksi AS "tipeTransaksi",
+               jl.debit, jl.kredit, jl.keterangan AS "lineKeterangan"
+        FROM journal_lines jl
+        JOIN journal_entries je ON je.id = jl.entry_id
+        WHERE je.tenant_id=$1 AND jl.contact_id=$2`;
+      const lineParams: any[] = [a.tenantId, contact.id];
+      let paramIdx = 3;
+      if (startDate) { lineSql += ` AND je.tanggal >= $${paramIdx++}`; lineParams.push(startDate); }
+      if (endDate) { lineSql += ` AND je.tanggal <= $${paramIdx++}`; lineParams.push(endDate); }
+      lineSql += ' ORDER BY je.tanggal, je.created_at';
+
+      const linesRes = await pool.query(lineSql, lineParams);
+
+      const saldoAwal = Number(contact.saldoAwal);
+      let running = saldoAwal; // Piutang = debit normal
+      const transactions = linesRes.rows.map((l: any) => {
+        running += Number(l.debit) - Number(l.kredit);
+        return {
+          tanggal: l.tanggal,
+          noJurnal: l.noJurnal,
+          keterangan: l.lineKeterangan || l.entryKeterangan,
+          referensi: l.referensi,
+          tipeTransaksi: l.tipeTransaksi,
+          debit: Number(l.debit),
+          kredit: Number(l.kredit),
+          saldo: running,
+        };
+      });
+
+      results.push({
+        contactId: contact.id,
+        nama: contact.nama,
+        telepon: contact.telepon,
+        alamat: contact.alamat,
+        akunKode: contact.akunKode,
+        akunNama: contact.akunNama,
+        saldoAwal,
+        saldoAkhir: running,
+        transactions,
+      });
+    }
+
+    return { data: results };
+  });
+
+  // GET /buku-pembantu/persediaan — Persediaan per item
+  app.get('/buku-pembantu/persediaan', tenantGuard, async (req: FastifyRequest) => {
+    const a = getToken(req);
+    const q = req.query as any;
+    const itemId = q.item_id || null;
+    const startDate = q.start_date || null;
+    const endDate = q.end_date || null;
+
+    const itemsRes = await pool.query(
+      `SELECT i.id, i.nama, i.kode, i.satuan, i.qty_awal AS "qtyAwal", i.harga_satuan AS "hargaSatuan",
+              i.saldo_awal AS "saldoAwal",
+              coa.id AS "akunId", coa.kode AS "akunKode", coa.nama AS "akunNama"
+       FROM inventory_items i
+       JOIN chart_of_accounts coa ON coa.id = i.akun_id
+       WHERE i.tenant_id=$1
+       ORDER BY i.nama`,
+      [a.tenantId]
+    );
+
+    const results: any[] = [];
+    for (const item of itemsRes.rows as any[]) {
+      if (itemId && item.id !== itemId) continue;
+
+      let lineSql = `
+        SELECT je.tanggal, je.no_jurnal AS "noJurnal", je.keterangan AS "entryKeterangan",
+               je.referensi, je.tipetransaksi AS "tipeTransaksi",
+               jl.debit, jl.kredit, jl.keterangan AS "lineKeterangan"
+        FROM journal_lines jl
+        JOIN journal_entries je ON je.id = jl.entry_id
+        WHERE je.tenant_id=$1 AND jl.inventory_item_id=$2`;
+      const lineParams: any[] = [a.tenantId, item.id];
+      let paramIdx = 3;
+      if (startDate) { lineSql += ` AND je.tanggal >= $${paramIdx++}`; lineParams.push(startDate); }
+      if (endDate) { lineSql += ` AND je.tanggal <= $${paramIdx++}`; lineParams.push(endDate); }
+      lineSql += ' ORDER BY je.tanggal, je.created_at';
+
+      const linesRes = await pool.query(lineSql, lineParams);
+
+      const saldoAwal = Number(item.saldoAwal);
+      let running = saldoAwal; // Persediaan = debit normal
+      const transactions = linesRes.rows.map((l: any) => {
+        running += Number(l.debit) - Number(l.kredit);
+        return {
+          tanggal: l.tanggal,
+          noJurnal: l.noJurnal,
+          keterangan: l.lineKeterangan || l.entryKeterangan,
+          referensi: l.referensi,
+          tipeTransaksi: l.tipeTransaksi,
+          debit: Number(l.debit),
+          kredit: Number(l.kredit),
+          saldo: running,
+        };
+      });
+
+      results.push({
+        itemId: item.id,
+        nama: item.nama,
+        kode: item.kode,
+        satuan: item.satuan,
+        qtyAwal: Number(item.qtyAwal),
+        hargaSatuan: Number(item.hargaSatuan),
+        akunKode: item.akunKode,
+        akunNama: item.akunNama,
+        saldoAwal,
+        saldoAkhir: running,
+        transactions,
+      });
+    }
+
+    return { data: results };
+  });
 }
