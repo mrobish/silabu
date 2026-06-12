@@ -325,6 +325,36 @@ function parentKode(kode: string, level: number): string | null {
   return zeroed.join('.');
 }
 
+/**
+ * Essential Level 4 accounts that are ACTIVE by default for new tenants.
+ * All other Level 4 accounts start as isActive=false to keep the UI clean.
+ * Users can enable them via CoA Settings > Toggle.
+ */
+const ESSENTIAL_ACCOUNTS = new Set([
+  // === ASET (Gol 1) ===
+  '1.1.01.01', // Kas Tunai
+  '1.1.01.02', // Kas di Bank BSI
+  '1.1.01.98', // Kas Kecil (Petty Cash)
+  '1.1.03.01', // Piutang Usaha
+  '1.1.05.01', // Persediaan Barang Dagangan
+  '1.3.01.01', // Tanah
+  '1.3.02.01', // Kendaraan
+  '1.3.03.01', // Peralatan dan Mesin
+  '1.3.04.01', // Meubelair
+  '1.3.05.01', // Gedung dan Bangunan
+  '1.3.07.01', // Akumulasi Penyusutan Kendaraan
+  '1.3.07.02', // Akumulasi Penyusutan Peralatan dan Mesin
+  '1.3.07.03', // Akumulasi Penyusutan Meubelair
+  '1.3.07.04', // Akumulasi Penyusutan Gedung dan Bangunan
+  // === KEWAJIBAN (Gol 2) ===
+  '2.1.01.01', // Utang Usaha
+  '2.1.03.01', // Utang Gaji dan Tunjangan
+  // === EKUITAS (Gol 3) ===
+  '3.1.01.01', // Penyertaan Modal Desa
+  '3.3.01.01', // Saldo Laba Tidak Dicadangkan
+  '3.9.01.01', // Ikhtisar Laba Rugi
+]);
+
 export async function seedDefaultCoa(tenantId: string): Promise<void> {
   const existing = await pool.query(
     'SELECT 1 FROM chart_of_accounts WHERE tenant_id=$1 LIMIT 1',
@@ -340,12 +370,14 @@ export async function seedDefaultCoa(tenantId: string): Promise<void> {
     for (const [kode, nama, jenisAkun, kelompok, saldoNormal, isPostable, level] of DEFAULT_COA) {
       const pk = parentKode(kode, level);
       const parentId = pk ? idByKode.get(pk) ?? null : null;
+      // Level 1-3 always active; Level 4 only if in ESSENTIAL_ACCOUNTS
+      const isActive = level < 4 || ESSENTIAL_ACCOUNTS.has(kode);
       const res = await client.query(
         `INSERT INTO chart_of_accounts
            (tenant_id, kode, nama, jenisAkun, kelompok, saldoNormal, isPostable, parent_id, is_seeded, is_system_default, isActive, level)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,true,true,$9)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,true,$9,$10)
          RETURNING id`,
-        [tenantId, kode, nama, jenisAkun, kelompok, saldoNormal, isPostable, parentId, level]
+        [tenantId, kode, nama, jenisAkun, kelompok, saldoNormal, isPostable, parentId, isActive, level]
       );
       idByKode.set(kode, res.rows[0].id as string);
     }

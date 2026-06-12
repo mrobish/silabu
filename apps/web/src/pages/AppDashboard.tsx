@@ -1019,7 +1019,7 @@ function CoAPage() {
 }
 
 
-function SaldoAwalPage() {
+function SaldoAwalPage({ setPage }: { setPage: (p: Page) => void }) {
   const [accounts, setAccounts] = useState<{ id: string; kode: string; nama: string; jenisAkun: string; kelompok: string; saldoNormal: string; level: number }[]>([]);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -1176,7 +1176,8 @@ function SaldoAwalPage() {
       setShowSuccess(data.message || 'Saldo awal berhasil disimpan!');
       setIsSetup(true);
       setEntry({ noJurnal: data.noJurnal, tanggal });
-      clearDraft();
+      // Only clear localStorage draft, keep amounts visible in disabled inputs
+      try { localStorage.removeItem(getDraftKey()); setDraftSavedAt(null); } catch {}
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -1234,6 +1235,32 @@ function SaldoAwalPage() {
 
       {showSuccess && <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-sm">{showSuccess}</div>}
       {error && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{error}</div>}
+
+      {/* CoA Info Banner — dismissible */}
+      {!localStorage.getItem('coa-info-banner-dismissed') && (
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-gradient-to-r from-blue-50 to-amber-50 border border-blue-200/60 shadow-sm">
+          <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18" /></svg>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-blue-900 leading-relaxed">
+              <span className="font-semibold">Tips:</span> Untuk menjaga kerapian, beberapa rincian akun keuangan disembunyikan oleh sistem. Silakan kunjungi menu <span className="font-semibold">Pengaturan CoA</span> untuk mengaktifkan akun spesifik sesuai kebutuhan BUM Desa Anda.
+            </p>
+            <button
+              onClick={() => setPage('coa')}
+              className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold shadow-sm hover:bg-blue-700 transition active:scale-[0.97]"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+              Ke Pengaturan CoA
+            </button>
+          </div>
+          <button
+            onClick={() => { localStorage.setItem('coa-info-banner-dismissed', '1'); }}
+            className="flex-shrink-0 p-1 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-100 transition"
+            title="Tutup pengumuman"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
 
       <label className="block max-w-xs">
         <span className="text-xs font-medium text-slate-600 mb-1 block">Tanggal Cutoff</span>
@@ -1301,7 +1328,7 @@ function SaldoAwalPage() {
   );
 }
 
-function JurnalUmumPage() {
+function JurnalUmumPage({ setPage }: { setPage: (p: Page) => void }) {
   const [coaAccounts, setCoaAccounts] = useState<CoAAccount[]>([]);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1525,6 +1552,32 @@ function JurnalUmumPage() {
         <h1 className="text-2xl font-bold text-slate-900">Jurnal Umum</h1>
         <p className="mt-1 text-sm text-slate-500">Catat transaksi jurnal umum BUM Desa.</p>
       </div>
+
+      {/* CoA Info Banner — dismissible */}
+      {!localStorage.getItem('coa-info-banner-dismissed') && (
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-gradient-to-r from-blue-50 to-amber-50 border border-blue-200/60 shadow-sm">
+          <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18" /></svg>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-blue-900 leading-relaxed">
+              <span className="font-semibold">Tips:</span> Untuk menjaga kerapian, beberapa rincian akun keuangan disembunyikan oleh sistem. Silakan kunjungi menu <span className="font-semibold">Pengaturan CoA</span> untuk mengaktifkan akun spesifik sesuai kebutuhan BUM Desa Anda.
+            </p>
+            <button
+              onClick={() => setPage('coa')}
+              className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold shadow-sm hover:bg-blue-700 transition active:scale-[0.97]"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+              Ke Pengaturan CoA
+            </button>
+          </div>
+          <button
+            onClick={() => { localStorage.setItem('coa-info-banner-dismissed', '1'); }}
+            className="flex-shrink-0 p-1 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-100 transition"
+            title="Tutup pengumuman"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
 
       {/* Quick Action Buttons */}
       {!editingId && (
@@ -2028,7 +2081,7 @@ export default function AppDashboard() {
 
         {/* Content */}
         <div className="p-4 sm:p-6 lg:p-8">
-          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : page === 'profil' ? <ProfilPage setPage={setPage} /> : page === 'coa' ? <CoAPage /> : page === 'saldo-awal' ? <SaldoAwalPage /> : page === 'jurnal' ? <JurnalUmumPage /> : page === 'rekap-jurnal' ? <RekapJurnalPage /> : page === 'penyesuaian' ? <JurnalPenyesuaianPage /> : page === 'rincian-saldo' ? <RincianSaldoPage /> : page === 'buku-besar' ? <BukuBesarPage /> : page === 'laba-rugi' ? <LabaRugiPage /> : page === 'neraca' ? <NeracaPage /> : page === 'neraca-saldo' ? <NeracaSaldoPage /> : page === 'arus-kas' ? <ArusKasPage /> : page === 'perubahan-modal' ? <PerubahanModalPage /> : page === 'aset-tetap' ? <AsetTetapPage /> : page === 'tutup-buku' ? <TutupBukuPage /> : page === 'calk' ? <CalkPage /> : (
+          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : page === 'profil' ? <ProfilPage setPage={setPage} /> : page === 'coa' ? <CoAPage /> : page === 'saldo-awal' ? <SaldoAwalPage setPage={setPage} /> : page === 'jurnal' ? <JurnalUmumPage setPage={setPage} /> : page === 'rekap-jurnal' ? <RekapJurnalPage /> : page === 'penyesuaian' ? <JurnalPenyesuaianPage /> : page === 'rincian-saldo' ? <RincianSaldoPage /> : page === 'buku-besar' ? <BukuBesarPage /> : page === 'laba-rugi' ? <LabaRugiPage /> : page === 'neraca' ? <NeracaPage /> : page === 'neraca-saldo' ? <NeracaSaldoPage /> : page === 'arus-kas' ? <ArusKasPage /> : page === 'perubahan-modal' ? <PerubahanModalPage /> : page === 'aset-tetap' ? <AsetTetapPage /> : page === 'tutup-buku' ? <TutupBukuPage /> : page === 'calk' ? <CalkPage /> : (
             <div className="space-y-8 animate-fade-in">
               {/* Trial banner */}
               {trialEnds && !isTrialExpired && (
