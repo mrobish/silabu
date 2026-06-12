@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 type TenantProfile = {
   nama_bumdes: string;
@@ -58,7 +59,7 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
 
   const pageStyle = landscape ? 'A4 landscape' : 'A4';
 
-  return (
+  const content = (
     <>
       <style>{`
         @media print {
@@ -92,17 +93,21 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
         .print-branding strong { color: #64748b; font-weight: 600; }
       `}</style>
 
-      <div className="no-print fixed inset-0 z-[9999] flex items-center justify-center p-4"
-        style={{ background: 'rgba(0,0,0,0.5)' }}>
-        <div ref={printRef} className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-          style={{ width: '100%', maxWidth: landscape ? '297mm' : '210mm', maxHeight: '92vh' }}>
-          {/* Toolbar */}
-          <div className="no-print flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 sm:px-6 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
-            <h3 className="text-sm font-semibold text-slate-700">Cetak {title}</h3>
+      {/* Backdrop */}
+      <div className="no-print fixed inset-0 z-[9999] bg-black/50 sm:flex sm:items-center sm:justify-center sm:p-4"
+        onClick={onClose}>
+        {/* Modal — full-screen on mobile, centered on desktop */}
+        <div ref={printRef}
+          className="no-print relative z-[10000] bg-white flex flex-col h-full sm:h-auto sm:rounded-2xl sm:shadow-2xl sm:overflow-hidden"
+          style={{ maxWidth: landscape ? '297mm' : '210mm', maxHeight: '100vh', ...(typeof window !== 'undefined' && window.innerWidth >= 640 ? { maxHeight: '92vh' } : {}) }}
+          onClick={e => e.stopPropagation()}>
+          {/* Toolbar — always visible at top */}
+          <div className="no-print flex items-center justify-between gap-2 px-4 sm:px-6 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
+            <h3 className="text-sm font-semibold text-slate-700 truncate">Cetak {title}</h3>
             <div className="flex gap-2 shrink-0">
               <button onClick={() => window.print()}
-                className="flex-1 sm:flex-none rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-4 py-2 text-sm font-bold text-white shadow-md hover:shadow-lg transition-all whitespace-nowrap">
-                🖨 Cetak / Simpan PDF
+                className="rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-4 py-2 text-sm font-bold text-white shadow-md hover:shadow-lg transition-all whitespace-nowrap">
+                🖨 Cetak / PDF
               </button>
               <button onClick={onClose}
                 className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-all whitespace-nowrap">
@@ -112,7 +117,7 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
           </div>
 
           {/* Scrollable preview */}
-          <div className="flex-1 overflow-y-auto p-6" style={{ background: '#fff' }}>
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6" style={{ background: '#fff' }}>
             <div className="print-area mx-auto" style={{
               fontFamily: "'Segoe UI', 'Arial', sans-serif",
               maxWidth: landscape ? '277mm' : '190mm',
@@ -179,4 +184,6 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
       </div>
     </>
   );
+
+  return createPortal(content, document.body);
 }
