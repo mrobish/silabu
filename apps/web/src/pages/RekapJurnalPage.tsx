@@ -31,6 +31,7 @@ export default function RekapJurnalPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [filterMode, setFilterMode] = useState<'bulanan' | 'tahunan'>('bulanan');
+  const [journalType, setJournalType] = useState<'ALL' | 'GENERAL' | 'ADJUSTMENT'>('ALL');
   const [bulan, setBulan] = useState(now.getMonth() + 1);
   const [tahun, setTahun] = useState(now.getFullYear());
   const [printOpen, setPrintOpen] = useState(false);
@@ -65,6 +66,7 @@ export default function RekapJurnalPage() {
     try {
       const params = new URLSearchParams({ tahun: String(tahun) });
       if (filterMode === 'bulanan') params.set('bulan', String(bulan));
+      if (journalType !== 'ALL') params.set('tipeTransaksi', journalType);
       params.set('limit', '200');
       const res = await fetch('/api/accounting/jurnal-umum?' + params.toString(), { headers: { Authorization: 'Bearer ' + token() } });
       const json = await res.json();
@@ -105,7 +107,7 @@ export default function RekapJurnalPage() {
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
           {/* Filter Mode Toggle */}
           <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Filter</label>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Periode</label>
             <div className="flex rounded-xl border border-slate-200 overflow-hidden">
               <button type="button" onClick={() => setFilterMode('bulanan')}
                 className={'flex-1 px-3 py-2.5 text-xs font-bold transition ' + (filterMode === 'bulanan' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50')}>
@@ -116,6 +118,16 @@ export default function RekapJurnalPage() {
                 Tahunan
               </button>
             </div>
+          </div>
+
+          {/* Journal Type Filter */}
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Tipe Jurnal</label>
+            <select value={journalType} onChange={e => setJournalType(e.target.value as any)} className={inputCls + ' text-xs'}>
+              <option value="ALL">Semua</option>
+              <option value="GENERAL">Jurnal Umum</option>
+              <option value="ADJUSTMENT">Penyesuaian</option>
+            </select>
           </div>
 
           {/* Month (only when bulanan) */}
@@ -197,7 +209,10 @@ export default function RekapJurnalPage() {
                           {isFirst ? fmtDate(entry.tanggal) : ''}
                         </td>
                         <td className="px-4 py-2.5">
-                          {isFirst ? <span className="font-mono text-xs font-semibold text-emerald-600">{entry.noJurnal}</span> : ''}
+                          {isFirst ? <>
+                            <span className="font-mono text-xs font-semibold text-emerald-600">{entry.noJurnal}</span>
+                            {entry.tipeTransaksi === 'ADJUSTMENT' && <span className="ml-1 inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">ADJ</span>}
+                          </> : ''}
                         </td>
                         <td className="px-4 py-2.5 text-slate-900 text-xs">
                           {isFirst ? (entry.keterangan || '-') : ''}

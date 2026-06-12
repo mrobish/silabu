@@ -184,7 +184,9 @@ export async function accountingRoutes(app: FastifyInstance) {
     const body = req.body as any;
     if (!body) return reply.status(400).send({ error: 'Body request kosong' });
 
-    const { tanggal, keterangan, referensi, lines } = body;
+    const { tanggal, keterangan, referensi, lines, tipeTransaksi } = body;
+    // Allow GENERAL (default) and ADJUSTMENT
+    const journalType = (tipeTransaksi === 'ADJUSTMENT') ? 'ADJUSTMENT' : 'GENERAL';
 
     // Validate required fields
     if (!tanggal) return reply.status(400).send({ error: 'Tanggal wajib diisi' });
@@ -248,9 +250,9 @@ export async function accountingRoutes(app: FastifyInstance) {
       const entryRes = await client.query(
         `INSERT INTO journal_entries
            (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, referensi, tipeTransaksi, isPosted, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'GENERAL',true,$8)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9)
          RETURNING id`,
-        [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan || null, referensi || null, a.userId]
+        [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan || null, referensi || null, journalType, a.userId]
       );
       const entryId = entryRes.rows[0].id as string;
 
@@ -301,6 +303,11 @@ export async function accountingRoutes(app: FastifyInstance) {
     if (bulan && !isNaN(bulan)) {
       conditions.push(`je.bulan=$${paramIdx++}`);
       params.push(bulan);
+    }
+    // Filter by journal type (GENERAL, ADJUSTMENT, CLOSING)
+    if (q.tipeTransaksi && ['GENERAL', 'ADJUSTMENT', 'CLOSING'].includes(q.tipeTransaksi)) {
+      conditions.push(`je.tipetransaksi=$${paramIdx++}`);
+      params.push(q.tipeTransaksi);
     }
 
     const where = conditions.join(' AND ');
@@ -392,7 +399,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const entry = existing.rows[0] as any;
 
     // 2. PAGAR TIPE TRANSAKSI — hanya GENERAL yang boleh diedit
-    if (entry.tipeTransaksi !== 'GENERAL') {
+    if (!['GENERAL', 'ADJUSTMENT'].includes(entry.tipeTransaksi)) {
       return reply.status(403).send({
         error: 'Transaksi ini tidak dapat diedit dari Jurnal Umum',
         code: 'NOT_GENERAL',
@@ -469,7 +476,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_entries WHERE id=$1 AND tenant_id=$2 FOR UPDATE`,
         [id, a.tenantId]
       );
-      if (!lock.rowCount || (lock.rows[0] as any).tipeTransaksi !== 'GENERAL' || (lock.rows[0] as any).isLocked) {
+      if (!lock.rowCount || !['GENERAL', 'ADJUSTMENT'].includes((lock.rows[0] as any).tipeTransaksi) || (lock.rows[0] as any).isLocked) {
         await client.query('ROLLBACK');
         return reply.status(403).send({ error: 'Transaksi tidak dapat diedit', code: 'NOT_GENERAL_OR_LOCKED' });
       }
@@ -520,7 +527,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const entry = existing.rows[0] as any;
 
     // 2. PAGAR TIPE TRANSAKSI — hanya GENERAL
-    if (entry.tipeTransaksi !== 'GENERAL') {
+    if (!['GENERAL', 'ADJUSTMENT'].includes(entry.tipeTransaksi)) {
       return reply.status(403).send({
         error: 'Transaksi ini tidak dapat dihapus dari Jurnal Umum',
         code: 'NOT_GENERAL',
@@ -549,7 +556,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_entries WHERE id=$1 AND tenant_id=$2 FOR UPDATE`,
         [id, a.tenantId]
       );
-      if (!lock.rowCount || (lock.rows[0] as any).tipeTransaksi !== 'GENERAL' || (lock.rows[0] as any).isLocked) {
+      if (!lock.rowCount || !['GENERAL', 'ADJUSTMENT'].includes((lock.rows[0] as any).tipeTransaksi) || (lock.rows[0] as any).isLocked) {
         await client.query('ROLLBACK');
         return reply.status(403).send({ error: 'Transaksi tidak dapat dihapus', code: 'NOT_GENERAL_OR_LOCKED' });
       }
