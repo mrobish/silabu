@@ -851,6 +851,17 @@ export async function accountingRoutes(app: FastifyInstance) {
       [a.tenantId]
     );
 
+    // Check lock status from tenants table
+    const lockRes = await pool.query(
+      `SELECT saldo_awal_locked AS locked, saldo_awal_locked_at AS locked_at,
+              u.nama AS locked_by_name
+       FROM tenants t
+       LEFT JOIN users u ON u.id = t.saldo_awal_locked_by
+       WHERE t.id = $1`,
+      [a.tenantId]
+    );
+    const lockStatus = lockRes.rows[0] || { locked: false, locked_at: null, locked_by_name: null };
+
     let existingLines: Record<string, { debit: string; kredit: string }> = {};
     let entry: any = null;
     if (obEntry.rowCount) {
@@ -869,6 +880,11 @@ export async function accountingRoutes(app: FastifyInstance) {
       isSetup: !!obEntry.rowCount,
       entry,
       existingLines,
+      lockStatus: {
+        locked: lockStatus.locked || false,
+        locked_at: lockStatus.locked_at,
+        locked_by_name: lockStatus.locked_by_name,
+      },
     };
   });
 
@@ -877,6 +893,15 @@ export async function accountingRoutes(app: FastifyInstance) {
     const a = (req as any).auth as AuthPayload;
     const body = req.body as any;
     if (!body) return reply.status(400).send({ error: 'Body request kosong' });
+
+    // Check if saldo awal is locked
+    const lockCheck = await pool.query(
+      `SELECT saldo_awal_locked FROM tenants WHERE id = $1`,
+      [a.tenantId]
+    );
+    if (lockCheck.rows[0]?.saldo_awal_locked) {
+      return reply.status(403).send({ error: 'Saldo awal terkunci. Buka kunci terlebih dahulu untuk mengubah.' });
+    }
 
     const { tanggal, lines } = body;
     if (!tanggal) return reply.status(400).send({ error: 'Tanggal cutoff wajib diisi' });
@@ -980,6 +1005,15 @@ export async function accountingRoutes(app: FastifyInstance) {
   app.delete('/saldo-awal', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
 
+    // Check if saldo awal is locked
+    const lockCheck = await pool.query(
+      `SELECT saldo_awal_locked FROM tenants WHERE id = $1`,
+      [a.tenantId]
+    );
+    if (lockCheck.rows[0]?.saldo_awal_locked) {
+      return reply.status(403).send({ error: 'Saldo awal terkunci. Buka kunci terlebih dahulu untuk mereset.' });
+    }
+
     const entries = await pool.query(
       `SELECT id FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE'`,
       [a.tenantId]
@@ -1003,6 +1037,87 @@ export async function accountingRoutes(app: FastifyInstance) {
     } finally {
       client.release();
     }
+  });
+
+  // GET /accounting/saldo-awal/lock-status — check if saldo awal is locked
+  app.get('/saldo-awal/lock-status', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const result = await pool.query(
+      `SELECT saldo_awal_locked AS locked, saldo_awal_locked_at AS locked_at, 
+              saldo_awal_locked_by AS locked_by, u.nama AS locked_by_name
+       FROM tenants t
+       LEFT JOIN users u ON u.id = t.saldo_awal_locked_by
+       WHERE t.id = $1`,
+      [a.tenantId]
+    );
+    const row = result.rows[0] || {};
+    return {
+      locked: row.locked || false,
+      locked_at: row.locked_at || null,
+      locked_by: row.locked_by || null,
+      locked_by_name: row.locked_by_name || null,
+    };
+  });
+
+  // POST /accounting/saldo-awal/lock — lock saldo awal (prevent editing)
+  app.post('/saldo-awal/lock', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    
+    // Check if already locked
+    const check = await pool.query(
+      `SELECT saldo_awal_locked FROM tenants WHERE id = $1`,
+      [a.tenantId]
+    );
+    if (check.rows[0]?.saldo_awal_locked) {
+      return reply.status(400).send({ error: 'Saldo awal sudah terkunci' });
+    }
+    
+    // Check if saldo awal exists
+    const entries = await pool.query(
+      `SELECT id FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE' LIMIT 1`,
+      [a.tenantId]
+    );
+    if (!entries.rowCount) {
+      return reply.status(400).send({ error: 'Belum ada saldo awal untuk dikunci' });
+    }
+    
+    // Lock it
+    await pool.query(
+      `UPDATE tenants 
+       SET saldo_awal_locked = true, 
+           saldo_awal_locked_at = now(), 
+           saldo_awal_locked_by = $2
+       WHERE id = $1`,
+      [a.tenantId, a.userId]
+    );
+    
+    return { message: 'Saldo awal berhasil dikunci', locked: true };
+  });
+
+  // POST /accounting/saldo-awal/unlock — unlock saldo awal (allow editing)
+  app.post('/saldo-awal/unlock', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    
+    // Check if actually locked
+    const check = await pool.query(
+      `SELECT saldo_awal_locked FROM tenants WHERE id = $1`,
+      [a.tenantId]
+    );
+    if (!check.rows[0]?.saldo_awal_locked) {
+      return reply.status(400).send({ error: 'Saldo awal tidak dalam keadaan terkunci' });
+    }
+    
+    // Unlock it
+    await pool.query(
+      `UPDATE tenants 
+       SET saldo_awal_locked = false, 
+           saldo_awal_locked_at = NULL, 
+           saldo_awal_locked_by = NULL
+       WHERE id = $1`,
+      [a.tenantId]
+    );
+    
+    return { message: 'Saldo awal berhasil dibuka', locked: false };
   });
 
   // GET /accounting/buku-besar — General Ledger dengan running balance

@@ -1019,6 +1019,8 @@ function SaldoAwalPage({ setPage }: { setPage: (p: Page) => void }) {
   const [entry, setEntry] = useState<any>(null);
   const [showSuccess, setShowSuccess] = useState('');
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [lockStatus, setLockStatus] = useState<{ locked: boolean; locked_at: string | null; locked_by_name: string | null }>({ locked: false, locked_at: null, locked_by_name: null });
+  const [locking, setLocking] = useState(false);
 
   function getToken() {
     return localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
@@ -1099,6 +1101,10 @@ function SaldoAwalPage({ setPage }: { setPage: (p: Page) => void }) {
           } catch {}
         }
         setAmounts(existing);
+        // Fetch lock status
+        if (data.lockStatus) {
+          setLockStatus(data.lockStatus);
+        }
       })
       .catch(e => setError(e.message || 'Gagal memuat data'))
       .finally(() => setLoading(false));
@@ -1196,6 +1202,45 @@ function SaldoAwalPage({ setPage }: { setPage: (p: Page) => void }) {
     }
   }
 
+  async function handleLock() {
+    if (!confirm('Kunci Saldo Awal? Anda tidak bisa mengubah data sampai membuka kunci.')) return;
+    setLocking(true);
+    setError('');
+    try {
+      const res = await fetch('/api/accounting/saldo-awal/lock', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mengunci saldo awal');
+      setLockStatus({ locked: true, locked_at: new Date().toISOString(), locked_by_name: 'Anda' });
+      setShowSuccess('Saldo awal berhasil dikunci!');
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLocking(false);
+    }
+  }
+
+  async function handleUnlock() {
+    if (!confirm('Buka kunci Saldo Awal? Anda bisa mengubah data lagi.')) return;
+    setLocking(true);
+    setError('');
+    try {
+      const res = await fetch('/api/accounting/saldo-awal/unlock', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal membuka kunci saldo awal');
+      setLockStatus({ locked: false, locked_at: null, locked_by_name: null });
+      setShowSuccess('Kunci saldo awal berhasil dibuka!');
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLocking(false);
+    }
+  }
   if (loading) return <div className="flex items-center justify-center py-20 text-slate-500"><span className="w-5 h-5 mr-2 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" /> Memuat...</div>;
 
   const fmt = (n: number) => 'Rp ' + n.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1221,13 +1266,40 @@ function SaldoAwalPage({ setPage }: { setPage: (p: Page) => void }) {
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
               Tersimpan - {entry?.noJurnal || 'OB-001'}
             </span>
-            <button onClick={handleReset} disabled={submitting} className="px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">Reset</button>
+            {!lockStatus.locked && (
+              <button onClick={handleReset} disabled={submitting} className="px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">Reset</button>
+            )}
+            {!lockStatus.locked ? (
+              <button onClick={handleLock} disabled={locking} className="px-3 py-1.5 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                {locking ? 'Mengunci...' : 'Kunci Saldo Awal'}
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-100 text-amber-800 text-xs font-semibold rounded-full">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                  Terkunci
+                </span>
+                <button onClick={handleUnlock} disabled={locking} className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                  {locking ? 'Membuka...' : 'Buka Kunci'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {showSuccess && <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-sm">{showSuccess}</div>}
       {error && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{error}</div>}
+
+      {/* Lock Status Info */}
+      {lockStatus.locked && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm flex items-center gap-2">
+          <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+          <span>Saldo awal <strong>terkunci</strong> oleh {lockStatus.locked_by_name || 'admin'} {lockStatus.locked_at ? `pada ${new Date(lockStatus.locked_at).toLocaleString('id-ID')}` : ''}</span>
+        </div>
+      )}
 
       {/* CoA Info Banner — dismissible */}
       {!localStorage.getItem('coa-info-banner-dismissed') && (
@@ -1282,7 +1354,7 @@ function SaldoAwalPage({ setPage }: { setPage: (p: Page) => void }) {
                         <td className="px-4 py-2 font-mono text-xs text-slate-500 whitespace-nowrap">{a.kode}</td>
                         <td className="px-4 py-2 text-slate-800">{a.nama}</td>
                         <td className="px-2 py-2 text-center"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${a.saldoNormal === 'D' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>{a.saldoNormal === 'D' ? 'Debit' : 'Kredit'}</span></td>
-                        <td className="px-3 py-1.5"><input type="text" inputMode="numeric" placeholder="0" value={displayVal} disabled={isSetup} onChange={e => handleAmountChange(a.id, e.target.value)} onBlur={() => saveDraft(amounts, tanggal)} className="w-full text-right rounded-lg border border-transparent px-2 py-1.5 text-sm tabular-nums focus:border-emerald-400 focus:ring-1 focus:ring-emerald-300 outline-none bg-transparent hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed" /></td>
+                        <td className="px-3 py-1.5"><input type="text" inputMode="numeric" placeholder="0" value={displayVal} disabled={isSetup || lockStatus.locked} onChange={e => handleAmountChange(a.id, e.target.value)} onBlur={() => saveDraft(amounts, tanggal)} className={'w-full text-right rounded-lg border border-transparent px-2 py-1.5 text-sm tabular-nums focus:border-emerald-400 focus:ring-1 focus:ring-emerald-300 outline-none bg-transparent hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed' + (lockStatus.locked ? ' bg-slate-50' : '')} /></td>
                       </tr>
                     );
                   })}
@@ -1298,7 +1370,7 @@ function SaldoAwalPage({ setPage }: { setPage: (p: Page) => void }) {
               <div><span className="text-slate-500">Total Kredit:</span> <span className="font-bold text-slate-800 tabular-nums">{fmt(totalKredit)}</span></div>
               <div><span className="text-slate-500">Selisih:</span> <span className={`font-bold tabular-nums ${Math.abs(selisih) < 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>{fmt(Math.abs(selisih))}</span></div>
             </div>
-            {!isSetup && <button onClick={handleSubmit} disabled={!isBalanced || submitting} className={'px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm ' + (isBalanced && !submitting ? 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-md active:scale-[0.97]' : 'bg-slate-200 text-slate-400 cursor-not-allowed')}>{submitting ? 'Menyimpan...' : 'Simpan Saldo Awal'}</button>}
+            {!isSetup && <button onClick={handleSubmit} disabled={!isBalanced || submitting || lockStatus.locked} className={'px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm ' + (isBalanced && !submitting && !lockStatus.locked ? 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-md active:scale-[0.97]' : 'bg-slate-200 text-slate-400 cursor-not-allowed')}>{lockStatus.locked ? 'Terkunci' : submitting ? 'Menyimpan...' : 'Simpan Saldo Awal'}</button>}
           </div>
           {!isBalanced && !isSetup && cleanRows.length > 0 && <p className="mt-3 text-xs text-red-600 font-medium">Jurnal tidak balance! Periksa kembali nominal yang dimasukkan.</p>}
           {!isBalanced && !isSetup && cleanRows.length === 0 && <p className="mt-3 text-xs text-slate-400 font-medium">Isi minimal satu akun dengan nominal untuk mengaktifkan tombol Simpan.</p>}
