@@ -1842,7 +1842,7 @@ export default function AppDashboard() {
   const [collapsed, setCollapsed] = useState(false);
   const [page, setPageRaw] = useState<Page>(() => {
     const saved = localStorage.getItem('activePage');
-    const valid: Page[] = ['dashboard', 'password', 'langganan', 'profil', 'coa', 'saldo-awal', 'jurnal', 'rincian-saldo', 'buku-besar', 'laba-rugi', 'neraca', 'neraca-saldo', 'arus-kas', 'perubahan-modal', 'aset-tetap', 'tutup-buku', 'calk'];
+    const valid: Page[] = ['dashboard', 'password', 'langganan', 'profil', 'coa', 'saldo-awal', 'jurnal', 'rekap-jurnal', 'penyesuaian', 'rincian-saldo', 'buku-besar', 'laba-rugi', 'neraca', 'neraca-saldo', 'arus-kas', 'perubahan-modal', 'aset-tetap', 'tutup-buku', 'calk'];
     return (saved && valid.includes(saved as Page)) ? (saved as Page) : 'dashboard';
   });
   const setPage = (p: Page) => { localStorage.setItem('activePage', p); setPageRaw(p); };
@@ -1851,6 +1851,23 @@ export default function AppDashboard() {
   const profileRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const [dashData, setDashData] = useState<{ totalPemasukan: number; totalPengeluaran: number; saldoKas: number; labaBersih: number; transaksiBulanIni: number; monthly: Array<{ month: string; pemasukan: number; pengeluaran: number }> } | null>(null);
+  const [impersonationInfo, setImpersonationInfo] = useState<{ nama_bumdes?: string; email?: string } | null>(null);
+  const [announcements, setAnnouncements] = useState<Array<{ id: string; message: string; type: 'info' | 'warning' | 'success'; active: boolean }>>([]);
+  const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('dismissedAnnouncements') || '[]'); } catch { return []; }
+  });
+
+  // Impersonation detection on mount
+  useEffect(() => {
+    const impToken = localStorage.getItem('impersonationToken');
+    if (impToken) {
+      localStorage.setItem('accessToken', impToken);
+      try {
+        const info = JSON.parse(localStorage.getItem('impersonationUser') || '{}');
+        setImpersonationInfo(info);
+      } catch { /* noop */ }
+    }
+  }, []);
 
   useEffect(() => {
     const stored = localStorage.getItem('user') || sessionStorage.getItem('user');
@@ -1885,6 +1902,34 @@ export default function AppDashboard() {
       .then(d => { if (!d.error) setDashData(d); })
       .catch(() => {});
   }, [page, user]);
+
+  // Fetch announcements on mount
+  useEffect(() => {
+    if (!user) return;
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    fetch('/api/accounting/announcements', { headers: { Authorization: 'Bearer ' + token } })
+      .then(r => r.json())
+      .then(d => {
+        const list = d.announcements || d || [];
+        setAnnouncements(Array.isArray(list) ? list.filter((a: any) => a.active) : []);
+      })
+      .catch(() => {});
+  }, [user]);
+
+  function returnToAdmin() {
+    const adminToken = localStorage.getItem('adminToken');
+    if (adminToken) localStorage.setItem('accessToken', adminToken);
+    localStorage.removeItem('impersonationToken');
+    localStorage.removeItem('adminToken');
+    localStorage.removeItem('impersonationUser');
+    window.location.href = '/admin';
+  }
+
+  function dismissAnnouncement(id: string) {
+    const next = [...dismissedIds, id];
+    setDismissedIds(next);
+    localStorage.setItem('dismissedAnnouncements', JSON.stringify(next));
+  }
 
   if (!user) return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -2082,6 +2127,22 @@ export default function AppDashboard() {
 
         {/* Content */}
         <div className="p-4 sm:p-6 lg:p-8">
+          {/* Impersonation banner */}
+          {impersonationInfo && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm flex items-center gap-3 animate-slide-down">
+              <Icon d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" className="w-5 h-5 text-amber-600 shrink-0" />
+              <span className="flex-1">Anda sedang melihat sebagai <strong>{impersonationInfo.nama_bumdes || 'User'}</strong> ({impersonationInfo.email}).</span>
+              <button onClick={returnToAdmin} className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 transition whitespace-nowrap">Kembali ke Admin</button>
+            </div>
+          )}
+          {/* Active announcements */}
+          {announcements.filter(a => !dismissedIds.includes(a.id)).map(a => (
+            <div key={a.id} className={'mb-4 p-3 border rounded-xl text-sm flex items-start gap-3 animate-slide-down ' + (a.type === 'info' ? 'bg-blue-50 border-blue-200 text-blue-800' : a.type === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800')}>
+              <Icon d={a.type === 'info' ? 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' : a.type === 'warning' ? 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z' : 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'} className={'w-5 h-5 shrink-0 mt-0.5 ' + (a.type === 'info' ? 'text-blue-600' : a.type === 'warning' ? 'text-amber-600' : 'text-emerald-600')} />
+              <span className="flex-1">{a.message}</span>
+              <button onClick={() => dismissAnnouncement(a.id)} className="p-1 rounded-lg hover:bg-black/10 transition shrink-0" title="Tutup"><Icon d="M6 18L18 6M6 6l12 12" className="w-4 h-4" /></button>
+            </div>
+          ))}
           {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : page === 'profil' ? <ProfilPage setPage={setPage} /> : page === 'coa' ? <CoAPage /> : page === 'saldo-awal' ? <SaldoAwalPage setPage={setPage} /> : page === 'jurnal' ? <JurnalUmumPage setPage={setPage} /> : page === 'rekap-jurnal' ? <RekapJurnalPage /> : page === 'penyesuaian' ? <JurnalPenyesuaianPage /> : page === 'rincian-saldo' ? <RincianSaldoPage /> : page === 'buku-besar' ? <BukuBesarPage /> : page === 'laba-rugi' ? <LabaRugiPage /> : page === 'neraca' ? <NeracaPage /> : page === 'neraca-saldo' ? <NeracaSaldoPage /> : page === 'arus-kas' ? <ArusKasPage /> : page === 'perubahan-modal' ? <PerubahanModalPage /> : page === 'aset-tetap' ? <AsetTetapPage /> : page === 'tutup-buku' ? <TutupBukuPage /> : page === 'calk' ? <CalkPage /> : (
             <div className="space-y-8 animate-fade-in">
               {/* Trial banner */}

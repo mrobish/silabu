@@ -216,4 +216,142 @@ export async function adminRoutes(app: FastifyInstance) {
       client.release();
     }
   });
+
+  // ─── Impersonate: Login As User ──────────────────────────────────
+  // POST /admin/users/:id/impersonate — generate temporary token as that user
+  app.post('/users/:id/impersonate', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+
+    const userRes = await pool.query(
+      `SELECT u.id, u.email, u.nama_lengkap, u.role, u.tenant_id,
+              t.nama_bumdes
+       FROM users u
+       LEFT JOIN tenants t ON t.id = u.tenant_id
+       WHERE u.id = $1`,
+      [id]
+    );
+    if (!userRes.rowCount) return reply.code(404).send({ error: 'User tidak ditemukan' });
+    const user = userRes.rows[0] as any;
+    if (!user.tenant_id) return reply.code(400).send({ error: 'User ini tidak punya tenant' });
+
+    const jwt = await import('jsonwebtoken');
+    const JWT_SECRET = process.env['JWT_SECRET'] || 'silabu-digi-secret-2026';
+    const adminAuth = (req as any).auth;
+
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        tenantId: user.tenant_id,
+        impersonatedBy: adminAuth.userId,
+        impersonatedByName: 'Super Admin',
+      },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    return {
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        nama_lengkap: user.nama_lengkap,
+        role: user.role,
+        tenantId: user.tenant_id,
+        nama_bumdes: user.nama_bumdes,
+      },
+    };
+  });
+
+  // ─── Manual Subscription Override ────────────────────────────────
+  // PUT /admin/users/:id/subscription — manual subscription status override
+  app.put('/users/:id/subscription', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const body = req.body as any;
+    if (!body) return reply.code(400).send({ error: 'Body request kosong' });
+
+    const userRes = await pool.query('SELECT tenant_id FROM users WHERE id=$1', [id]);
+    if (!userRes.rowCount || !(userRes.rows[0] as any).tenant_id) {
+      return reply.code(404).send({ error: 'User atau tenant tidak ditemukan' });
+    }
+    const tenantId = (userRes.rows[0] as any).tenant_id;
+
+    const { subscription_status, subscription_ends_at, trial_ends_at } = body;
+    const updates: string[] = [];
+    const params: any[] = [tenantId];
+    let idx = 2;
+
+    if (subscription_status) {
+      updates.push(`subscription_status = $${idx++}`);
+      params.push(subscription_status);
+    }
+    if (subscription_ends_at !== undefined) {
+      updates.push(`subscription_ends_at = $${idx++}`);
+      params.push(subscription_ends_at ? new Date(subscription_ends_at) : null);
+    }
+    if (trial_ends_at !== undefined) {
+      updates.push(`trial_ends_at = $${idx++}`);
+      params.push(trial_ends_at ? new Date(trial_ends_at) : null);
+    }
+
+    if (!updates.length) return reply.code(400).send({ error: 'Tidak ada perubahan' });
+
+    await pool.query(
+      `UPDATE tenants SET ${updates.join(', ')}, updated_at = now() WHERE id = $1`,
+      params
+    );
+
+    return { success: true, message: 'Langganan berhasil diperbarui' };
+  });
+
+  // ─── Broadcast / Announcements ───────────────────────────────────
+  // GET /admin/announcements — list all announcements
+  app.get('/announcements', async () => {
+    const r = await pool.query(
+      `SELECT id, message, type, active, created_at FROM announcements ORDER BY created_at DESC`
+    );
+    return { announcements: r.rows };
+  });
+
+  // POST /admin/announcements — create new announcement
+  app.post('/announcements', async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as any;
+    if (!body?.message?.trim()) return reply.code(400).send({ error: 'Pesan wajib diisi' });
+    const a = (req as any).auth;
+
+    const r = await pool.query(
+      `INSERT INTO announcements (message, type, active, created_by)
+       VALUES ($1, $2, $3, $4) RETURNING id, message, type, active, created_at`,
+      [body.message.trim(), body.type || 'info', body.active !== false, a.userId]
+    );
+    return { announcement: r.rows[0], message: 'Pengumuman berhasil dibuat' };
+  });
+
+  // PUT /admin/announcements/:id — update announcement
+  app.put('/announcements/:id', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const body = req.body as any;
+    if (!body) return reply.code(400).send({ error: 'Body request kosong' });
+
+    const updates: string[] = [];
+    const params: any[] = [id];
+    let idx = 2;
+
+    if (body.message !== undefined) { updates.push(`message = $${idx++}`); params.push(body.message); }
+    if (body.type !== undefined) { updates.push(`type = $${idx++}`); params.push(body.type); }
+    if (body.active !== undefined) { updates.push(`active = $${idx++}`); params.push(body.active); }
+
+    if (!updates.length) return reply.code(400).send({ error: 'Tidak ada perubahan' });
+
+    await pool.query(`UPDATE announcements SET ${updates.join(', ')} WHERE id = $1`, params);
+    return { success: true, message: 'Pengumuman diperbarui' };
+  });
+
+  // DELETE /admin/announcements/:id — delete announcement
+  app.delete('/announcements/:id', async (req: FastifyRequest) => {
+    const { id } = req.params as { id: string };
+    await pool.query('DELETE FROM announcements WHERE id = $1', [id]);
+    return { success: true, message: 'Pengumuman dihapus' };
+  });
 }

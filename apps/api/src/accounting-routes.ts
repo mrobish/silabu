@@ -74,6 +74,14 @@ export async function accountingRoutes(app: FastifyInstance) {
     return { seeded: (r.rows[0] as any).cnt, message: 'Chart of accounts berhasil disimpan' };
   });
 
+  // GET /accounting/announcements — active announcements for BUM Desa users
+  app.get('/announcements', tenantGuard, async () => {
+    const r = await pool.query(
+      `SELECT id, message, type, created_at FROM announcements WHERE active = true ORDER BY created_at DESC LIMIT 10`
+    );
+    return { announcements: r.rows };
+  });
+
   // GET /accounting/years — available years from financial_periods + journal entries
   app.get('/years', tenantGuard, async (req: FastifyRequest) => {
     const a = (req as any).auth as AuthPayload;

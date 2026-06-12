@@ -219,6 +219,18 @@ export async function initDatabase() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_payments_tenant ON payments(tenant_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);`);
 
+  // Announcements / Broadcast messages
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS announcements (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      message text NOT NULL,
+      type varchar(16) NOT NULL DEFAULT 'info',
+      active boolean NOT NULL DEFAULT true,
+      created_at timestamp NOT NULL DEFAULT now(),
+      created_by uuid REFERENCES users(id) ON DELETE SET NULL
+    );
+  `);
+
   // Idempotent alterations for existing databases
   await pool.query(`
     DO $$ BEGIN
