@@ -386,6 +386,154 @@ export async function accountingRoutes(app: FastifyInstance) {
     }
   });
 
+  // POST /accounting/jurnal-umum/batch — Excel-style batch input (multiple entries at once)
+  // Groups flat rows by (tanggal, no_bukti) → 1 journal entry per group
+  app.post('/jurnal-umum/batch', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const body = req.body as any;
+    if (!body) return reply.status(400).send({ error: 'Body request kosong' });
+
+    const { rows } = body;
+    if (!rows || !Array.isArray(rows) || rows.length < 2) {
+      return reply.status(400).send({ error: 'Minimal 2 baris jurnal' });
+    }
+
+    // Sanitize: remove ghost rows
+    const cleanRows = rows.filter((r: any) =>
+      r.akun_id && (parseFloat(r.debit || '0') > 0 || parseFloat(r.kredit || '0') > 0)
+    );
+    if (cleanRows.length < 2) {
+      return reply.status(400).send({ error: 'Minimal 2 baris dengan akun dan nominal' });
+    }
+
+    // Validate each row
+    for (const r of cleanRows) {
+      const debit = parseFloat(r.debit || '0');
+      const kredit = parseFloat(r.kredit || '0');
+      if (isNaN(debit) || isNaN(kredit)) return reply.status(400).send({ error: 'Debit/kredit harus angka' });
+      if (debit < 0 || kredit < 0) return reply.status(400).send({ error: 'Debit/kredit tidak boleh negatif' });
+      if (debit > 0 && kredit > 0) return reply.status(400).send({ error: 'Satu baris hanya boleh debit ATAU kredit' });
+    }
+
+    // Collect all unique akun_ids and validate
+    const allAkunIds = [...new Set(cleanRows.map((r: any) => r.akun_id))];
+    const akunRows = await pool.query(
+      `SELECT id, kode, ispostable AS "isPostable", isactive AS "isActive" FROM chart_of_accounts
+       WHERE id = ANY($1::uuid[]) AND tenant_id=$2`,
+      [allAkunIds, a.tenantId]
+    );
+    const validAkun = new Map(akunRows.rows.map((r: any) => [r.id, r]));
+    for (const akunId of allAkunIds) {
+      const row: any = validAkun.get(akunId);
+      if (!row) return reply.status(400).send({ error: `Akun ${akunId} tidak ditemukan` });
+      if (!row.isActive) return reply.status(400).send({ error: `Akun ${row.kode} tidak aktif` });
+      if (!row.isPostable) return reply.status(400).send({ error: `Akun ${row.kode} tidak dapat diposting` });
+    }
+
+    // Group rows by (tanggal, no_bukti) — each group becomes 1 journal entry
+    const groups = new Map<string, any[]>();
+    for (const r of cleanRows) {
+      const tanggal = (r.tanggal || '').slice(0, 10);
+      const noBukti = (r.no_bukti || '').trim();
+      const keterangan = (r.keterangan || '').trim();
+      // Group key: tanggal + no_bukti (keterangan can vary within a group, use first non-empty)
+      const key = `${tanggal}__${noBukti}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(r);
+    }
+
+    // Validate each group has balanced debit/kredit
+    for (const [key, groupRows] of groups) {
+      const gDebit = groupRows.reduce((s: number, r: any) => s + parseFloat(r.debit || '0'), 0);
+      const gKredit = groupRows.reduce((s: number, r: any) => s + parseFloat(r.kredit || '0'), 0);
+      if (Math.abs(gDebit - gKredit) > 0.01) {
+        const tanggal = groupRows[0]?.tanggal || '?';
+        const noBukti = groupRows[0]?.no_bukti || '(tanpa bukti)';
+        return reply.status(400).send({
+          error: `Jurnal "${noBukti}" tanggal ${tanggal} tidak balance. Debit: ${gDebit}, Kredit: ${gKredit}`,
+          code: 'GROUP_NOT_BALANCED'
+        });
+      }
+    }
+
+    // Validate all dates and ensure periods
+    const yearBulanSet = new Set<string>();
+    for (const [key, groupRows] of groups) {
+      const tanggal = groupRows[0].tanggal;
+      const [tahunStr, bulanStr] = tanggal.split('-');
+      const tahun = parseInt(tahunStr, 10);
+      const bulan = parseInt(bulanStr, 10);
+      if (isNaN(tahun) || isNaN(bulan) || tahun < 2000 || tahun > 2100 || bulan < 1 || bulan > 12) {
+        return reply.status(400).send({ error: `Format tanggal tidak valid: ${tanggal}` });
+      }
+      await checkPeriodLock(a.tenantId!, tahun);
+      const yb = `${tahun}-${bulan}`;
+      if (!yearBulanSet.has(yb)) {
+        await ensurePeriod(a.tenantId!, tahun);
+        yearBulanSet.add(yb);
+      }
+    }
+
+    // Transaction: create one journal entry per group
+    const client = await pool.connect();
+    const createdEntries: any[] = [];
+    try {
+      await client.query('BEGIN');
+
+      for (const [key, groupRows] of groups) {
+        const tanggal = groupRows[0].tanggal;
+        const [tahunStr, bulanStr] = tanggal.split('-');
+        const tahun = parseInt(tahunStr, 10);
+        const bulan = parseInt(bulanStr, 10);
+
+        // Derive keterangan: first non-empty from rows in this group
+        const keterangan = groupRows.map((r: any) => (r.keterangan || '').trim()).find(Boolean) || 'Tanpa keterangan';
+        const noBukti = (groupRows[0].no_bukti || '').trim() || null;
+
+        const no_jurnal = await nextJurnalNo(a.tenantId!, tahun, bulan);
+
+        const entryRes = await client.query(
+          `INSERT INTO journal_entries
+             (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, referensi, tipeTransaksi, isPosted, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'GENERAL',true,$8)
+           RETURNING id, no_jurnal AS "noJurnal"`,
+          [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan, noBukti, a.userId]
+        );
+        const entryId = entryRes.rows[0].id as string;
+        const entryNoJurnal = entryRes.rows[0].noJurnal as string;
+
+        for (const r of groupRows) {
+          await client.query(
+            `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan)
+             VALUES ($1,$2,$3,$4,$5)`,
+            [entryId, r.akun_id, String(r.debit || '0'), String(r.kredit || '0'), r.keterangan || null]
+          );
+        }
+
+        const totalDebit = groupRows.reduce((s: number, r: any) => s + parseFloat(r.debit || '0'), 0);
+        createdEntries.push({
+          id: entryId,
+          noJurnal: entryNoJurnal,
+          tanggal,
+          keterangan,
+          lineCount: groupRows.length,
+          total: totalDebit,
+        });
+      }
+
+      await client.query('COMMIT');
+      return reply.status(201).send({
+        message: `${createdEntries.length} jurnal berhasil disimpan`,
+        entries: createdEntries,
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
   // GET /accounting/jurnal-umum — list entries for tenant
   app.get('/jurnal-umum', tenantGuard, async (req: FastifyRequest) => {
     const a = (req as any).auth as AuthPayload;
