@@ -1534,7 +1534,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const endDate = q.end_date || new Date().toISOString().slice(0, 10);
     const tid = a.tenantId;
 
-    // ── Kas Tahun Lalu: total Kas/Bank s/d start_date ──
+    // ── Kas Tahun Lalu: total Kas/Bank s/d start_date (termasuk Saldo Awal) ──
     const kasTahunLalu = await (async () => {
       if (!startDate) return 0;
       const r = await pool.query(
@@ -1543,7 +1543,8 @@ export async function accountingRoutes(app: FastifyInstance) {
          LEFT JOIN (
            SELECT jl.akun_id, SUM(jl.debit) AS debit, SUM(jl.kredit) AS kredit
            FROM journal_lines jl
-           JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal < $2
+           JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1
+             AND (je.tanggal < $2 AND je.tipetransaksi <> 'CLOSING' OR je.tipetransaksi = 'OPENING_BALANCE')
            GROUP BY jl.akun_id
          ) m ON m.akun_id=c.id
          WHERE c.tenant_id=$1 AND c.ispostable=true AND (c.kode LIKE '1.1.01%' OR c.kode LIKE '1.1.02%')`,
@@ -1561,7 +1562,7 @@ export async function accountingRoutes(app: FastifyInstance) {
         SELECT DISTINCT je.id AS entry_id, je.tanggal
         FROM journal_lines jl
         JOIN chart_of_accounts c ON c.id=jl.akun_id AND (c.kode LIKE '1.1.01%' OR c.kode LIKE '1.1.02%')
-        JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal>=$2 AND je.tanggal<=$3
+        JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal>=$2 AND je.tanggal<=$3 AND je.tipetransaksi NOT IN ('OPENING_BALANCE','CLOSING')
       ),
       kas_lines AS (
         SELECT ke.entry_id, ke.tanggal,
@@ -1632,7 +1633,7 @@ export async function accountingRoutes(app: FastifyInstance) {
        LEFT JOIN (
          SELECT jl.akun_id, SUM(jl.debit) AS debit, SUM(jl.kredit) AS kredit
          FROM journal_lines jl
-         JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal<=$2
+         JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal<= $2 AND je.tipetransaksi <> 'CLOSING'
          GROUP BY jl.akun_id
        ) m ON m.akun_id=c.id
        WHERE c.tenant_id=$1 AND c.ispostable=true AND (c.kode LIKE '1.1.01%' OR c.kode LIKE '1.1.02%')`,
@@ -1667,7 +1668,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM chart_of_accounts c
          LEFT JOIN (
            SELECT jl.akun_id, SUM(jl.debit) AS debit, SUM(jl.kredit) AS kredit
-           FROM journal_lines jl JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal<=$2
+           FROM journal_lines jl JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal<=$2 AND je.tipetransaksi <> 'CLOSING'
            GROUP BY jl.akun_id
          ) m ON m.akun_id=c.id
          WHERE c.tenant_id=$1 AND c.ispostable=true AND ${kodeLike}
