@@ -77,7 +77,7 @@ export async function accountingRoutes(app: FastifyInstance) {
   // GET /accounting/announcements — active announcements for BUM Desa users
   app.get('/announcements', tenantGuard, async () => {
     const r = await pool.query(
-      `SELECT id, message, type, created_at FROM announcements WHERE active = true ORDER BY created_at DESC LIMIT 10`
+      `SELECT id, message, type, active, created_at FROM announcements WHERE active = true ORDER BY created_at DESC LIMIT 10`
     );
     return { announcements: r.rows };
   });

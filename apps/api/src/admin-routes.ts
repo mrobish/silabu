@@ -1,6 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import jwt from 'jsonwebtoken';
 import { pool } from './db.js';
 import { requireRole } from './guards.js';
+
+const JWT_SECRET = process.env['JWT_SECRET'] || 'silabu-digi-secret-2026';
 
 const requireSuperAdmin = requireRole('super_admin');
 
@@ -234,9 +237,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const user = userRes.rows[0] as any;
     if (!user.tenant_id) return reply.code(400).send({ error: 'User ini tidak punya tenant' });
 
-    const jwt = await import('jsonwebtoken');
-    const JWT_SECRET = process.env['JWT_SECRET'] || 'silabu-digi-secret-2026';
-    const adminAuth = (req as any).auth;
+     const adminAuth = (req as any).auth;
 
     const token = jwt.sign(
       {
