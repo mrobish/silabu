@@ -1104,6 +1104,142 @@ export async function accountingRoutes(app: FastifyInstance) {
     };
   });
 
+  // ── Laporan Perubahan Modal (Statement of Changes in Equity) ──
+  // Formula: Modal Akhir = Modal Awal + Tambahan Modal + Laba Bersih - Prive/Penarikan
+  // Cross-check: Modal Akhir WAJIB === Total Ekuitas di Neraca
+  app.get('/perubahan-modal', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const q = req.query as any;
+    const tahun = Number(q.tahun) || new Date().getFullYear();
+    const startDate = `${tahun}-01-01`;
+    const endDate = `${tahun}-12-31`;
+
+    // 1. Laba Bersih dari computeLabaRugi (SUMBER TUNGGAL — anti mismatch)
+    const lr = await computeLabaRugi(a.tenantId as string, startDate, endDate);
+    const labaBersih = lr.labaBersih;
+
+    // 2. Modal Awal: saldo Gol 3 dari OPENING_BALANCE entries atau saldo awal
+    const modalAwalRes = await pool.query(
+      `SELECT COALESCE(SUM(
+         CASE WHEN c.saldonormal = 'D'
+              THEN COALESCE(m.debit,0) - COALESCE(m.kredit,0)
+              ELSE COALESCE(m.kredit,0) - COALESCE(m.debit,0)
+         END
+       ), 0) AS saldo
+       FROM chart_of_accounts c
+       LEFT JOIN (
+         SELECT jl.akun_id, jl.debit, jl.kredit
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id = jl.entry_id
+              AND je.tenant_id = $1
+              AND je.tipetransaksi = 'OPENING_BALANCE'
+       ) m ON m.akun_id = c.id
+       WHERE c.tenant_id = $1 AND c.ispostable = true AND LEFT(c.kode,1) = '3'`,
+      [a.tenantId]
+    );
+    const modalAwal = Number(modalAwalRes.rows[0]?.saldo || 0);
+
+    // 3. Mutasi Gol 3 selama tahun berjalan (EXCLUDE OPENING_BALANCE dan CLOSING)
+    //    Tambahan Modal = kredit bersih positif pada akun Gol 3
+    //    Prive/Penarikan = debit bersih pada akun Gol 3
+    const mutasiRes = await pool.query(
+      `SELECT c.kode, c.nama, c.saldonormal AS "saldoNormal",
+              COALESCE(SUM(COALESCE(m.debit,0)), 0) AS total_debit,
+              COALESCE(SUM(COALESCE(m.kredit,0)), 0) AS total_kredit
+       FROM chart_of_accounts c
+       LEFT JOIN (
+         SELECT jl.akun_id, jl.debit, jl.kredit
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id = jl.entry_id
+              AND je.tenant_id = $1
+              AND je.tipetransaksi NOT IN ('OPENING_BALANCE', 'CLOSING')
+              AND je.tanggal >= $2 AND je.tanggal <= $3
+       ) m ON m.akun_id = c.id
+       WHERE c.tenant_id = $1 AND c.ispostable = true AND LEFT(c.kode,1) = '3'
+       GROUP BY c.kode, c.nama, c.saldonormal
+       ORDER BY c.kode`,
+      [a.tenantId, startDate, endDate]
+    );
+
+    type MutasiItem = { kode: string; nama: string; debit: number; kredit: number };
+    const mutasiDetail: MutasiItem[] = mutasiRes.rows.map((r: any) => ({
+      kode: r.kode, nama: r.nama,
+      debit: Number(r.total_debit), kredit: Number(r.total_kredit),
+    }));
+
+    // Pisahkan: Tambahan Modal (kredit > 0, net positive) vs Prive (debit > 0)
+    let tambahanModal = 0;
+    let prive = 0;
+    const tambahanDetail: MutasiItem[] = [];
+    const priveDetail: MutasiItem[] = [];
+
+    for (const m of mutasiDetail) {
+      const net = m.kredit - m.debit;
+      if (net > 0) {
+        tambahanModal += net;
+        tambahanDetail.push(m);
+      } else if (m.debit > 0) {
+        prive += m.debit;
+        priveDetail.push(m);
+      }
+    }
+
+    // 4. Modal Akhir
+    const modalAkhir = modalAwal + tambahanModal + labaBersih - prive;
+
+    // 5. VALIDASI EMAS: Cross-check dengan Neraca
+    //    Total Ekuitas di Neraca = sum Gol 3 + labaBerjalan
+    const neracaEkuitasRes = await pool.query(
+      `SELECT COALESCE(SUM(
+         CASE WHEN c.saldonormal = 'D'
+              THEN COALESCE(m.debit,0) - COALESCE(m.kredit,0)
+              ELSE COALESCE(m.kredit,0) - COALESCE(m.debit,0)
+         END
+       ), 0) AS saldo
+       FROM chart_of_accounts c
+       LEFT JOIN (
+         SELECT jl.akun_id, jl.debit, jl.kredit
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id = jl.entry_id
+              AND je.tenant_id = $1
+              AND je.tanggal <= $2
+       ) m ON m.akun_id = c.id
+       WHERE c.tenant_id = $1 AND c.ispostable = true AND LEFT(c.kode,1) = '3'`,
+      [a.tenantId, endDate]
+    );
+    const neracaEkuitasAkun = Number(neracaEkuitasRes.rows[0]?.saldo || 0);
+    const neracaTotalEkuitas = neracaEkuitasAkun + labaBersih;
+
+    const selisih = Math.abs(modalAkhir - neracaTotalEkuitas);
+    const isBalanced = selisih < 0.005;
+
+    return {
+      tahun,
+      periode: { startDate, endDate },
+      modalAwal,
+      tambahanModal,
+      labaBersih,
+      prive,
+      modalAkhir,
+      // Detail
+      tambahanDetail,
+      priveDetail,
+      labaRugi: {
+        pendapatan: lr.pendapatanOperasional.subtotal + lr.nonOperasional.pendapatanLain.subtotal,
+        beban: lr.hpp.subtotal + lr.bebanOperasional.subtotal + lr.nonOperasional.bebanLain.subtotal + lr.pajak.subtotal,
+      },
+      // Cross-check
+      crossCheck: {
+        neracaEkuitasAkun,
+        neracaLabaBerjalan: labaBersih,
+        neracaTotalEkuitas,
+        perubahanModalAkhir: modalAkhir,
+        selisih,
+        isBalanced,
+      },
+    };
+  });
+
   // ── Trail Balance (Neraca Saldo) ──
   app.get('/neraca-saldo', tenantGuard, async (req: FastifyRequest) => {
     const a = (req as any).auth as AuthPayload;
