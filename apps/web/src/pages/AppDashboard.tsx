@@ -1492,7 +1492,7 @@ export default function AppDashboard() {
             {!collapsed && <span>Profil BUM Desa</span>}
           </button>
 
-          {!collapsed && <p className="px-2.5 pt-4 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Keuangan</p>}
+          {!collapsed && <p className="px-2.5 pt-4 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Setup Saldo Awal</p>}
           <button onClick={() => { setPage('coa'); setSidebarOpen(false); }}
             className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'coa' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
             <span className="relative">
@@ -1509,6 +1509,17 @@ export default function AppDashboard() {
             </span>
             {!collapsed && <span>Saldo Awal</span>}
           </button>
+          <button onClick={() => { setPage('rincian-saldo'); setSidebarOpen(false); }}
+            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'rincian-saldo' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
+            <span className="relative">
+              <Icon d="M4 6h16M4 10h16M4 14h10M4 18h10" />
+              {page === 'rincian-saldo' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
+            </span>
+            {!collapsed && <span>Rincian Saldo Awal</span>}
+          </button>
+
+          <div className="my-2 border-t border-slate-200/60" />
+          {!collapsed && <p className="px-2.5 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Keuangan</p>}
           <button onClick={() => { setPage('jurnal'); setSidebarOpen(false); }}
             className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'jurnal' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
             <span className="relative">
@@ -1516,14 +1527,6 @@ export default function AppDashboard() {
               {page === 'jurnal' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
             </span>
             {!collapsed && <span>Jurnal Umum</span>}
-          </button>
-          <button onClick={() => { setPage('rincian-saldo'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'rincian-saldo' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d="M4 6h16M4 10h16M4 14h10M4 18h10" />
-              {page === 'rincian-saldo' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>Rincian Saldo</span>}
           </button>
           <button onClick={() => { setPage('buku-besar'); setSidebarOpen(false); }}
             className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'buku-besar' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
@@ -1592,7 +1595,7 @@ export default function AppDashboard() {
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-slate-600 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 transition" aria-label="Buka menu">
             <Icon d="M4 6h16M4 12h16M4 18h16" className="w-6 h-6" />
           </button>
-          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : page === 'profil' ? 'Profil BUM Desa' : page === 'coa' ? 'Bagan Akun (CoA)' : page === 'saldo-awal' ? 'Setup Saldo Awal' : page === 'jurnal' ? 'Jurnal Umum' : page === 'rekap-jurnal' ? 'Rekap Transaksi Jurnal' : page === 'penyesuaian' ? 'Jurnal Penyesuaian' : page === 'rincian-saldo' ? 'Rincian Saldo' : page === 'buku-besar' ? 'Buku Besar' : page === 'laba-rugi' ? 'Laba Rugi' : page === 'neraca' ? 'Neraca' : page === 'neraca-saldo' ? 'Neraca Saldo' : page === 'arus-kas' ? 'Arus Kas' : page === 'aset-tetap' ? 'Aset & Inventaris' : page === 'tutup-buku' ? 'Tutup Buku Tahunan' : page === 'calk' ? 'CALK' : page === 'bantuan' ? 'Panduan' : 'Dashboard'}</h2>
+          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : page === 'profil' ? 'Profil BUM Desa' : page === 'coa' ? 'Bagan Akun (CoA)' : page === 'saldo-awal' ? 'Setup Saldo Awal' : page === 'jurnal' ? 'Jurnal Umum' : page === 'rekap-jurnal' ? 'Rekap Transaksi Jurnal' : page === 'penyesuaian' ? 'Jurnal Penyesuaian' : page === 'rincian-saldo' ? 'Rincian Saldo Awal' : page === 'buku-besar' ? 'Buku Besar' : page === 'laba-rugi' ? 'Laba Rugi' : page === 'neraca' ? 'Neraca' : page === 'neraca-saldo' ? 'Neraca Saldo' : page === 'arus-kas' ? 'Arus Kas' : page === 'aset-tetap' ? 'Aset & Inventaris' : page === 'tutup-buku' ? 'Tutup Buku Tahunan' : page === 'calk' ? 'CALK' : page === 'bantuan' ? 'Panduan' : 'Dashboard'}</h2>
           <div className="flex-1" />
           {/* Profile dropdown */}
           <div ref={profileRef} className="relative">

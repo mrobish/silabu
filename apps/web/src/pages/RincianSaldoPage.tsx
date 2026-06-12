@@ -50,6 +50,19 @@ const fmt = (v: number) =>
 const getToken = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
 const H = () => ({ Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' });
 
+// Helper to check if a tab's recon is fully matched (all green)
+function isTabMatched(tabId: TabId, rows: ReconRow[]): boolean {
+  const prefixes: Record<TabId, string[]> = {
+    'persediaan': ['1.1.05'],
+    'hutang-piutang': ['1.1.03', '2.1.01'],
+    'aset-tetap': ['1.3.01', '1.3.02', '1.3.03', '1.3.04', '1.3.05', '1.3.06', '1.3.07', '1.3.99'],
+    'modal': ['3'],
+  };
+  const relevant = rows.filter(r => prefixes[tabId].some(p => r.kode.startsWith(p)));
+  if (!relevant.length) return false;
+  return relevant.every(r => Math.abs(r.selisih) < 1);
+}
+
 // ─── Reconciliation Badge ─────────────────────────────────────
 function ReconBadge({ rows, tabId }: { rows: ReconRow[]; tabId: TabId }) {
   const prefixes: Record<TabId, string[]> = {
@@ -145,7 +158,7 @@ function ReconBadge({ rows, tabId }: { rows: ReconRow[]; tabId: TabId }) {
 }
 
 // ─── Inventory (Persediaan) Tab ────────────────────────────────
-function InventoryTab({ reconRows }: { reconRows: ReconRow[] }) {
+function InventoryTab({ reconRows, isMatched }: { reconRows: ReconRow[]; isMatched: boolean }) {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [coaList, setCoaList] = useState<CoAOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -223,9 +236,10 @@ function InventoryTab({ reconRows }: { reconRows: ReconRow[] }) {
           </select>
         </div>
         <div className="mt-4 flex gap-2">
-          <button onClick={save} disabled={!saveable}
+          <button onClick={save} disabled={!saveable || isMatched}
+            title={isMatched ? 'Saldo sudah selaras. Edit atau hapus data yang ada untuk menambah rincian baru.' : ''}
             className={'rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-all shadow-sm ' +
-              (saveable ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 hover:shadow-md cursor-pointer' : 'bg-slate-300 cursor-not-allowed')}>
+              (saveable && !isMatched ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 hover:shadow-md cursor-pointer' : 'bg-slate-300 cursor-not-allowed')}>
             {editId ? 'Simpan' : 'Tambah'}
           </button>
           {editId && <button onClick={() => { setEditId(null); setForm({ nama: '', kode: '', satuan: 'pcs', akunId: '', qtyAwal: '', hargaSatuan: '' }); }}
@@ -272,7 +286,7 @@ function InventoryTab({ reconRows }: { reconRows: ReconRow[] }) {
 }
 
 // ─── Contacts (Hutang/Piutang) Tab ──────────────────────────────
-function ContactsTab({ reconRows }: { reconRows: ReconRow[] }) {
+function ContactsTab({ reconRows, isMatched }: { reconRows: ReconRow[]; isMatched: boolean }) {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [coaList, setCoaList] = useState<CoAOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -361,9 +375,10 @@ function ContactsTab({ reconRows }: { reconRows: ReconRow[] }) {
           </div>
         </div>
         <div className="mt-4 flex gap-2">
-          <button onClick={save} disabled={!saveable}
+          <button onClick={save} disabled={!saveable || isMatched}
+            title={isMatched ? 'Saldo sudah selaras. Edit atau hapus data yang ada untuk menambah rincian baru.' : ''}
             className={'rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-all shadow-sm ' +
-              (saveable ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 hover:shadow-md cursor-pointer' : 'bg-slate-300 cursor-not-allowed')}>
+              (saveable && !isMatched ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 hover:shadow-md cursor-pointer' : 'bg-slate-300 cursor-not-allowed')}>
             {editId ? 'Simpan' : 'Tambah'}
           </button>
           {editId && <button onClick={() => { setEditId(null); setForm({ nama: '', tipe: 'supplier', telepon: '', alamat: '', akunId: '', saldoAwal: '', saldoAwalTipe: 'debit' }); }}
@@ -409,7 +424,7 @@ function ContactsTab({ reconRows }: { reconRows: ReconRow[] }) {
 }
 
 // ─── Fixed Assets (Aset Tetap) Tab ──────────────────────────────
-function AssetsTab({ reconRows }: { reconRows: ReconRow[] }) {
+function AssetsTab({ reconRows, isMatched }: { reconRows: ReconRow[]; isMatched: boolean }) {
   const [assets, setAssets] = useState<FixedAsset[]>([]);
   const [coaList, setCoaList] = useState<CoAOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -505,9 +520,10 @@ function AssetsTab({ reconRows }: { reconRows: ReconRow[] }) {
           </ul>
         </div>
         <div className="mt-3 flex gap-2">
-          <button onClick={save} disabled={!saveable}
+          <button onClick={save} disabled={!saveable || isMatched}
+            title={isMatched ? 'Saldo sudah selaras. Edit atau hapus data yang ada untuk menambah rincian baru.' : ''}
             className={'rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-all shadow-sm ' +
-              (saveable ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 hover:shadow-md cursor-pointer' : 'bg-slate-300 cursor-not-allowed')}>
+              (saveable && !isMatched ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 hover:shadow-md cursor-pointer' : 'bg-slate-300 cursor-not-allowed')}>
             {editId ? 'Simpan' : 'Tambah'}
           </button>
           {editId && <button onClick={() => { setEditId(null); setForm({ nama: '', kategori: 'lainnya', akunId: '', tanggalPerolehan: '', hargaPerolehan: '', akumulasiPenyusutan: '', umurManfaatBulan: '' }); }}
@@ -558,7 +574,7 @@ function AssetsTab({ reconRows }: { reconRows: ReconRow[] }) {
 }
 
 // ─── Equity (Modal / Ekuitas) Tab ────────────────────────────────
-function EquityTab({ reconRows }: { reconRows: ReconRow[] }) {
+function EquityTab({ reconRows, isMatched }: { reconRows: ReconRow[]; isMatched: boolean }) {
   const [equities, setEquities] = useState<Equity[]>([]);
   const [coaList, setCoaList] = useState<CoAOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -638,9 +654,10 @@ function EquityTab({ reconRows }: { reconRows: ReconRow[] }) {
             className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition" />
         </div>
         <div className="mt-4 flex gap-2">
-          <button onClick={save} disabled={!saveable}
+          <button onClick={save} disabled={!saveable || isMatched}
+            title={isMatched ? 'Saldo sudah selaras. Edit atau hapus data yang ada untuk menambah rincian baru.' : ''}
             className={'rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-all shadow-sm ' +
-              (saveable ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 hover:shadow-md cursor-pointer' : 'bg-slate-300 cursor-not-allowed')}>
+              (saveable && !isMatched ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 hover:shadow-md cursor-pointer' : 'bg-slate-300 cursor-not-allowed')}>
             {editId ? 'Simpan' : 'Tambah'}
           </button>
           {editId && <button onClick={() => { setEditId(null); setForm({ sumber: 'Pemerintah Desa', tahunPenerimaan: new Date().getFullYear().toString(), keterangan: '', akunId: '', saldoAwal: '' }); }}
@@ -710,7 +727,7 @@ export default function RincianSaldoPage() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Rincian Saldo</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Rincian Saldo Awal</h1>
           <p className="mt-1 text-sm text-slate-500">Detail Persediaan, Hutang/Piutang, Aset Tetap, dan Modal yang terhubung ke Saldo Awal global.</p>
         </div>
         <button type="button" onClick={() => setPrintOpen(true)} disabled={!reconRows.length}
@@ -733,15 +750,15 @@ export default function RincianSaldoPage() {
         <div className="py-16 text-center text-slate-400 text-sm">Memuat data rekonsiliasi...</div>
       ) : (
         <>
-          {activeTab === 'persediaan' && <InventoryTab reconRows={reconRows} />}
-          {activeTab === 'hutang-piutang' && <ContactsTab reconRows={reconRows} />}
-          {activeTab === 'aset-tetap' && <AssetsTab reconRows={reconRows} />}
-          {activeTab === 'modal' && <EquityTab reconRows={reconRows} />}
+          {activeTab === 'persediaan' && <InventoryTab reconRows={reconRows} isMatched={isTabMatched('persediaan', reconRows)} />}
+          {activeTab === 'hutang-piutang' && <ContactsTab reconRows={reconRows} isMatched={isTabMatched('hutang-piutang', reconRows)} />}
+          {activeTab === 'aset-tetap' && <AssetsTab reconRows={reconRows} isMatched={isTabMatched('aset-tetap', reconRows)} />}
+          {activeTab === 'modal' && <EquityTab reconRows={reconRows} isMatched={isTabMatched('modal', reconRows)} />}
         </>
       )}
 
       {/* Print Modal */}
-      <ReportPrintLayout title="RINCIAN SALDO" isOpen={printOpen} onClose={() => setPrintOpen(false)}>
+      <ReportPrintLayout title="RINCIAN SALDO AWAL" isOpen={printOpen} onClose={() => setPrintOpen(false)}>
         {reconRows.length > 0 && (
           <div className="text-[11px]">
             <div className="mb-3 flex gap-4 text-[10px]">
