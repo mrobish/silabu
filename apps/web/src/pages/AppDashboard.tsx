@@ -909,19 +909,26 @@ function SaldoAwalPage() {
     } catch { return 'saldo-awal-draft-unknown'; }
   }
 
-  // Auto-save draft to localStorage on amounts change (debounced 1s)
+  // Save draft helper (synchronous, no debounce)
+  function saveDraft(currentAmounts: Record<string, string>, currentTanggal: string) {
+    try {
+      const key = getDraftKey();
+      const hasAnyValue = Object.values(currentAmounts).some(v => v);
+      if (!hasAnyValue && !draftSavedAt) return; // never saved, all empty → skip
+      localStorage.setItem(key, JSON.stringify({ amounts: currentAmounts, tanggal: currentTanggal, savedAt: new Date().toISOString() }));
+      setDraftSavedAt(new Date().toISOString());
+    } catch {}
+  }
+
+  // Auto-save draft to localStorage on amounts change (debounced 1s + cleanup save)
   useEffect(() => {
     if (loading || isSetup) return;
-    const filled = Object.entries(amounts).filter(([, v]) => v && v !== '0');
-    if (filled.length === 0) return;
-    const timer = setTimeout(() => {
-      try {
-        const key = getDraftKey();
-        localStorage.setItem(key, JSON.stringify({ amounts, tanggal, savedAt: new Date().toISOString() }));
-        setDraftSavedAt(new Date().toISOString());
-      } catch {}
-    }, 1000);
-    return () => clearTimeout(timer);
+    const timer = setTimeout(() => saveDraft(amounts, tanggal), 1000);
+    return () => {
+      clearTimeout(timer);
+      // FIX: save immediately on unmount (race condition protection)
+      saveDraft(amounts, tanggal);
+    };
   }, [amounts, tanggal, loading, isSetup]);
 
   function clearDraft() {
@@ -1120,7 +1127,7 @@ function SaldoAwalPage() {
                         <td className="px-4 py-2 font-mono text-xs text-slate-500 whitespace-nowrap">{a.kode}</td>
                         <td className="px-4 py-2 text-slate-800">{a.nama}</td>
                         <td className="px-2 py-2 text-center"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${a.saldoNormal === 'D' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>{a.saldoNormal === 'D' ? 'Debit' : 'Kredit'}</span></td>
-                        <td className="px-3 py-1.5"><input type="text" inputMode="numeric" placeholder="0" value={displayVal} disabled={isSetup} onChange={e => handleAmountChange(a.id, e.target.value)} className="w-full text-right rounded-lg border border-transparent px-2 py-1.5 text-sm tabular-nums focus:border-emerald-400 focus:ring-1 focus:ring-emerald-300 outline-none bg-transparent hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed" /></td>
+                        <td className="px-3 py-1.5"><input type="text" inputMode="numeric" placeholder="0" value={displayVal} disabled={isSetup} onChange={e => handleAmountChange(a.id, e.target.value)} onBlur={() => saveDraft(amounts, tanggal)} className="w-full text-right rounded-lg border border-transparent px-2 py-1.5 text-sm tabular-nums focus:border-emerald-400 focus:ring-1 focus:ring-emerald-300 outline-none bg-transparent hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed" /></td>
                       </tr>
                     );
                   })}
