@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup PDF Report — SILABU DIGI</title>
+<style>
+  @page { size: A4 portrait; margin: 1.5cm 1.8cm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; background: #f1f5f9; color: #1e293b; }
+  .page { background: #fff; width: 210mm; min-height: 297mm; margin: 20px auto; padding: 1.5cm 1.8cm; box-shadow: 0 4px 24px rgba(0,0,0,0.12); position: relative; }
+
+  /* ── KOP SURAT ── */
+  .kop { text-align: center; margin-bottom: 6px; }
+  .kop-logo { width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #059669, #0891b2); display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 22px; margin-bottom: 6px; }
+  .kop-nama { font-size: 17px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; }
+  .kop-alamat { font-size: 11px; color: #64748b; margin-top: 2px; }
+  .kop-telp { font-size: 10px; color: #94a3b8; margin-top: 1px; }
+  .kop-line { border: none; border-top: 2.5px solid #0f172a; margin: 6px 0 2px; }
+  .kop-line2 { border: none; border-top: 1.5px solid #0f172a; margin: 0 0 10px; }
+
+  /* ── JUDUL ── */
+  .judul { text-align: center; margin-bottom: 14px; }
+  .judul h2 { font-size: 14px; font-weight: 800; text-transform: uppercase; color: #0f172a; letter-spacing: 0.3px; }
+  .judul .periode { font-size: 11.5px; color: #475569; margin-top: 2px; }
+  .judul .satuan { font-size: 10px; color: #94a3b8; margin-top: 1px; }
+
+  /* ── TABEL ── */
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  thead th { background: #f0fdf4; color: #166534; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.3px; padding: 8px 10px; border-bottom: 2px solid #86efac; text-align: left; }
+  thead th.num { text-align: right; }
+  tbody td { padding: 7px 10px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  tbody td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: 'Consolas', 'Courier New', monospace; font-size: 10.5px; }
+  tbody tr:hover { background: #f8fafc; }
+  .row-group td { background: #f1f5f9; font-weight: 700; color: #334155; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.2px; border-bottom: 1.5px solid #cbd5e1; }
+  .row-subtotal td { font-weight: 700; color: #0f172a; border-top: 1.5px solid #94a3b8; border-bottom: none; background: #fafafa; }
+  .row-grandtotal td { font-weight: 800; color: #0f172a; font-size: 12px; border-top: 2.5px solid #0f172a; border-bottom: 3px double #0f172a; background: #f0fdf4; padding: 10px; }
+  .row-laba td { font-weight: 700; color: #059669; border-top: 2px solid #059669; }
+  .text-right { text-align: right; }
+  .text-muted { color: #94a3b8; font-style: italic; }
+
+  /* ── SIGNATURE BLOCK ── */
+  .sig-area { margin-top: 28px; }
+  .sig-date { text-align: center; font-size: 11.5px; color: #334155; margin-bottom: 6px; }
+  .sig-grid { display: flex; justify-content: space-between; gap: 12px; }
+  .sig-col { flex: 1; text-align: center; }
+  .sig-label { font-size: 10.5px; color: #64748b; margin-bottom: 2px; }
+  .sig-title { font-size: 11px; font-weight: 700; color: #1e293b; text-transform: uppercase; }
+  .sig-org { font-size: 10px; color: #64748b; margin-bottom: 2px; }
+  .sig-space { height: 56px; }
+  .sig-line { border-top: 1px solid #1e293b; margin: 0 8px 3px; }
+  .sig-name { font-size: 11px; font-weight: 600; color: #1e293b; }
+
+  /* ── WATERMARK (opsional) ── */
+  .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 72px; font-weight: 900; color: rgba(0,0,0,0.02); pointer-events: none; text-transform: uppercase; letter-spacing: 8px; }
+
+  /* ── BADGE ── */
+  .badge-balance { display: inline-block; background: #dcfce7; color: #166534; font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: 8px; }
+
+  /* ── PAGE LABEL ── */
+  .page-label { text-align: center; margin-bottom: 16px; color: #94a3b8; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="page-label">📄 Mockup Standar PDF — SILABU DIGI (Preview Layar, bukan cetakan)</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- PAGE 1: NERACA SALDO (contoh)              -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="page" id="page-neraca-saldo">
+
+  <!-- KOP SURAT -->
+  <div class="kop">
+    <div class="kop-logo">SD</div>
+    <div class="kop-nama">Badan Usaha Milik Desa Cikapinis</div>
+    <div class="kop-alamat">Desa Cikapinis, Kec. Cikapinis, Kab. Tasikmalaya, Prov. Jawa Barat</div>
+    <div class="kop-telp">Telp. 0812-3456-7890</div>
+  </div>
+  <hr class="kop-line">
+  <hr class="kop-line2">
+
+  <!-- JUDUL -->
+  <div class="judul">
+    <h2>Neraca Saldo</h2>
+    <div class="periode">Per 31 Desember 2026</div>
+    <div class="satuan">(Dalam Rupiah)</div>
+  </div>
+
+  <!-- TABEL NERACA SALDO -->
+  <table>
+    <thead>
+      <tr>
+        <th style="width:12%">Kode</th>
+        <th>Nama Akun</th>
+        <th class="num" style="width:18%">Debit</th>
+        <th class="num" style="width:18%">Kredit</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="row-group"><td colspan="4">Aset (Golongan 1)</td></tr>
+      <tr><td>1.1.01.01</td><td>Kas Tunai</td><td class="num">57.750.000</td><td class="num">-</td></tr>
+      <tr><td>1.1.03.01</td><td>Piutang Usaha</td><td class="num">5.000.000</td><td class="num">-</td></tr>
+      <tr><td>1.3.04.01</td><td>Komputer & Peralatan IT</td><td class="num">12.000.000</td><td class="num">-</td></tr>
+      <tr><td>1.3.07.01</td><td>Akum. Penyusutan Komputer</td><td class="num">-</td><td class="num">250.000</td></tr>
+      <tr class="row-subtotal"><td></td><td class="text-right">Jumlah Aset</td><td class="num">74.750.000</td><td class="num">250.000</td></tr>
+
+      <tr class="row-group"><td colspan="4">Ekuitas (Golongan 3)</td></tr>
+      <tr><td>3.1.01.01</td><td>Penyertaan Modal Desa</td><td class="num">-</td><td class="num">50.000.000</td></tr>
+      <tr><td>3.3.01.01</td><td>Saldo Laba Tidak Dicadangkan</td><td class="num">-</td><td class="num">-</td></tr>
+      <tr class="row-subtotal"><td></td><td class="text-right">Jumlah Ekuitas</td><td class="num">-</td><td class="num">50.000.000</td></tr>
+
+      <tr class="row-group"><td colspan="4">Pendapatan (Golongan 4)</td></tr>
+      <tr><td>4.1.01.01</td><td>Pendapatan Jasa</td><td class="num">-</td><td class="num">10.000.000</td></tr>
+      <tr class="row-subtotal"><td></td><td class="text-right">Jumlah Pendapatan</td><td class="num">-</td><td class="num">10.000.000</td></tr>
+
+      <tr class="row-group"><td colspan="4">Beban (Golongan 6)</td></tr>
+      <tr><td>6.1.01.01</td><td>Beban Listrik</td><td class="num">1.000.000</td><td class="num">-</td></tr>
+      <tr><td>5.1.01.01</td><td>Beban Penyusutan</td><td class="num">250.000</td><td class="num">-</td></tr>
+      <tr class="row-subtotal"><td></td><td class="text-right">Jumlah Beban</td><td class="num">1.250.000</td><td class="num">-</td></tr>
+    </tbody>
+    <tfoot>
+      <tr class="row-grandtotal">
+        <td colspan="2" class="text-right">TOTAL</td>
+        <td class="num">76.000.000</td>
+        <td class="num">76.000.000</td>
+      </tr>
+      <tr>
+        <td colspan="4" style="text-align:center; padding-top:8px;">
+          <span class="badge-balance">✓ BALANCE</span>
+        </td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <!-- SIGNATURE BLOCK -->
+  <div class="sig-area">
+    <div class="sig-date">Cikapinis, 12 Juni 2026</div>
+    <div class="sig-grid">
+      <div class="sig-col">
+        <div class="sig-label">Disusun oleh,</div>
+        <div class="sig-title">Bendahara</div>
+        <div class="sig-org">BUM Desa Cikapinis</div>
+        <div class="sig-space"></div>
+        <div class="sig-line"></div>
+        <div class="sig-name">Hj. Siti Nurhaliza</div>
+      </div>
+      <div class="sig-col">
+        <div class="sig-label">Diperiksa oleh,</div>
+        <div class="sig-title">Sekretaris</div>
+        <div class="sig-org">BUM Desa Cikapinis</div>
+        <div class="sig-space"></div>
+        <div class="sig-line"></div>
+        <div class="sig-name">Ahmad Fauzi, S.E.</div>
+      </div>
+      <div class="sig-col">
+        <div class="sig-label">Mengetahui,</div>
+        <div class="sig-title">Direktur</div>
+        <div class="sig-org">BUM Desa Cikapinis</div>
+        <div class="sig-space"></div>
+        <div class="sig-line"></div>
+        <div class="sig-name">H. Dedi Supriadi</div>
+      </div>
+      <div class="sig-col">
+        <div class="sig-label">Penasihat,</div>
+        <div class="sig-title">Kepala Desa</div>
+        <div class="sig-org">Desa Cikapinis</div>
+        <div class="sig-space"></div>
+        <div class="sig-line"></div>
+        <div class="sig-name">Drs. Endang Suryana</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- PAGE 2: LABA RUGI (contoh)                 -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="page" id="page-laba-rugi" style="page-break-before: always;">
+
+  <div class="kop">
+    <div class="kop-logo">SD</div>
+    <div class="kop-nama">Badan Usaha Milik Desa Cikapinis</div>
+    <div class="kop-alamat">Desa Cikapinis, Kec. Cikapinis, Kab. Tasikmalaya, Prov. Jawa Barat</div>
+    <div class="kop-telp">Telp. 0812-3456-7890</div>
+  </div>
+  <hr class="kop-line">
+  <hr class="kop-line2">
+
+  <div class="judul">
+    <h2>Laporan Laba Rugi</h2>
+    <div class="periode">Periode 1 Januari — 31 Desember 2026</div>
+    <div class="satuan">(Dalam Rupiah)</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:12%">Kode</th>
+        <th>Keterangan</th>
+        <th class="num" style="width:22%">Jumlah (Rp)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="row-group"><td colspan="3">PENDAPATAN</td></tr>
+      <tr><td>4.1.01.01</td><td>Pendapatan Jasa</td><td class="num">10.000.000</td></tr>
+      <tr class="row-subtotal"><td></td><td class="text-right">Total Pendapatan</td><td class="num">10.000.000</td></tr>
+
+      <tr class="row-group"><td colspan="3">BEBAN OPERASIONAL</td></tr>
+      <tr><td>6.1.01.01</td><td>Beban Listrik</td><td class="num">1.000.000</td></tr>
+      <tr><td>5.1.01.01</td><td>Beban Penyusutan</td><td class="num">250.000</td></tr>
+      <tr class="row-subtotal"><td></td><td class="text-right">Jumlah Beban Operasional</td><td class="num">1.250.000</td></tr>
+    </tbody>
+    <tfoot>
+      <tr class="row-laba">
+        <td colspan="2" class="text-right" style="font-size:12px;">LABA BERSIH</td>
+        <td class="num" style="font-size:13px; font-weight:800;">8.750.000</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="sig-area">
+    <div class="sig-date">Cikapinis, 12 Juni 2026</div>
+    <div class="sig-grid">
+      <div class="sig-col">
+        <div class="sig-label">Disusun oleh,</div>
+        <div class="sig-title">Bendahara</div>
+        <div class="sig-org">BUM Desa Cikapinis</div>
+        <div class="sig-space"></div>
+        <div class="sig-line"></div>
+        <div class="sig-name">Hj. Siti Nurhaliza</div>
+      </div>
+      <div class="sig-col">
+        <div class="sig-label">Diperiksa oleh,</div>
+        <div class="sig-title">Sekretaris</div>
+        <div class="sig-org">BUM Desa Cikapinis</div>
+        <div class="sig-space"></div>
+        <div class="sig-line"></div>
+        <div class="sig-name">Ahmad Fauzi, S.E.</div>
+      </div>
+      <div class="sig-col">
+        <div class="sig-label">Mengetahui,</div>
+        <div class="sig-title">Direktur</div>
+        <div class="sig-org">BUM Desa Cikapinis</div>
+        <div class="sig-space"></div>
+        <div class="sig-line"></div>
+        <div class="sig-name">H. Dedi Supriadi</div>
+      </div>
+      <div class="sig-col">
+        <div class="sig-label">Penasihat,</div>
+        <div class="sig-title">Kepala Desa</div>
+        <div class="sig-org">Desa Cikapinis</div>
+        <div class="sig-space"></div>
+        <div class="sig-line"></div>
+        <div class="sig-name">Drs. Endang Suryana</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- PAGE 3: ARUS KAS (contoh)                  -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="page" id="page-arus-kas" style="page-break-before: always;">
+
+  <div class="kop">
+    <div class="kop-logo">SD</div>
+    <div class="kop-nama">Badan Usaha Milik Desa Cikapinis</div>
+    <div class="kop-alamat">Desa Cikapinis, Kec. Cikapinis, Kab. Tasikmalaya, Prov. Jawa Barat</div>
+    <div class="kop-telp">Telp. 0812-3456-7890</div>
+  </div>
+  <hr class="kop-line">
+  <hr class="kop-line2">
+
+  <div class="judul">
+    <h2>Laporan Arus Kas</h2>
+    <div class="periode">Periode 1 Januari — 31 Desember 2026</div>
+    <div class="satuan">(Dalam Rupiah)</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Keterangan</th>
+        <th class="num" style="width:20%">Penerimaan</th>
+        <th class="num" style="width:20%">Pengeluaran</th>
+        <th class="num" style="width:18%">Bersih</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="row-group"><td colspan="4">ARUS KAS DARI AKTIVITAS OPERASI</td></tr>
+      <tr><td>Pendapatan Jasa</td><td class="num">10.000.000</td><td class="num">-</td><td class="num">10.000.000</td></tr>
+      <tr><td>Beban Listrik</td><td class="num">-</td><td class="num">1.000.000</td><td class="num">(1.000.000)</td></tr>
+      <tr class="row-subtotal"><td class="text-right">Kas Bersih dari Operasi</td><td class="num">10.000.000</td><td class="num">1.000.000</td><td class="num">9.000.000</td></tr>
+
+      <tr class="row-group"><td colspan="4">ARUS KAS DARI AKTIVITAS INVESTASI</td></tr>
+      <tr><td>Pembelian Komputer</td><td class="num">-</td><td class="num">12.000.000</td><td class="num">(12.000.000)</td></tr>
+      <tr class="row-subtotal"><td class="text-right">Kas Bersih dari Investasi</td><td class="num">-</td><td class="num">12.000.000</td><td class="num">(12.000.000)</td></tr>
+
+      <tr class="row-group"><td colspan="4">ARUS KAS DARI AKTIVITAS PENDANAAN</td></tr>
+      <tr><td>Penyertaan Modal Desa</td><td class="num">50.000.000</td><td class="num">-</td><td class="num">50.000.000</td></tr>
+      <tr class="row-subtotal"><td class="text-right">Kas Bersih dari Pendanaan</td><td class="num">50.000.000</td><td class="num">-</td><td class="num">50.000.000</td></tr>
+    </tbody>
+    <tfoot>
+      <tr class="row-grandtotal">
+        <td class="text-right" colspan="3" style="font-size:11px;">KAS AWAL PERIODE</td>
+        <td class="num">0</td>
+      </tr>
+      <tr style="border-bottom: 2px solid #0f172a;">
+        <td class="text-right" colspan="3" style="font-size:12px; font-weight:800; padding:10px;">KAS AKHIR PERIODE</td>
+        <td class="num" style="font-size:13px; font-weight:800; color:#059669; padding:10px;">47.000.000</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="sig-area">
+    <div class="sig-date">Cikapinis, 12 Juni 2026</div>
+    <div class="sig-grid">
+      <div class="sig-col">
+        <div class="sig-label">Disusun oleh,</div>
+        <div class="sig-title">Bendahara</div>
+        <div class="sig-org">BUM Desa Cikapinis</div>
+        <div class="sig-space"></div>
+        <div class="sig-line"></div>
+        <div class="sig-name">Hj. Siti Nurhaliza</div>
+      </div>
+      <div class="sig-col">
+        <div class="sig-label">Diperiksa oleh,</div>
+        <div class="sig-title">Sekretaris</div>
+        <div class="sig-org">BUM Desa Cikapinis</div>
+        <div class="sig-space"></div>
+        <div class="sig-line"></div>
+        <div class="sig-name">Ahmad Fauzi, S.E.</div>
+      </div>
+      <div class="sig-col">
+        <div class="sig-label">Mengetahui,</div>
+        <div class="sig-title">Direktur</div>
+        <div class="sig-org">BUM Desa Cikapinis</div>
+        <div class="sig-space"></div>
+        <div class="sig-line"></div>
+        <div class="sig-name">H. Dedi Supriadi</div>
+      </div>
+      <div class="sig-col">
+        <div class="sig-label">Penasihat,</div>
+        <div class="sig-title">Kepala Desa</div>
+        <div class="sig-org">Desa Cikapinis</div>
+        <div class="sig-space"></div>
+        <div class="sig-line"></div>
+        <div class="sig-name">Drs. Endang Suryana</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

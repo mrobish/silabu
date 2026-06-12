@@ -132,30 +132,26 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
 
               {/* FOOTER — Tanda Tangan */}
               <div className="mt-8 mb-4">
-                <div className="text-center mb-6">
-                  <input type="text" className="print-input-date"
-                    value={tglCetak} onChange={e => setTglCetak(e.target.value)} />
-                </div>
-
                 <div className="flex justify-between" style={{ maxWidth: '90%', margin: '0 auto' }}>
-                  {/* Bendahara */}
-                  <div className="text-center" style={{ width: '45%' }}>
-                    <p className="text-[11px] text-slate-600">Disusun oleh,</p>
-                    <p className="text-[11px] font-bold text-slate-800 mt-0.5">BENDAHARA</p>
-                    <p className="text-[11px] text-slate-700 mb-1">BUM Desa {tenant?.nama_bumdes || '...'}</p>
-                    <div style={{ height: '70px' }} />
-                    <input type="text" className="print-input"
-                      value={namaBendahara} onChange={e => setNamaBendahara(e.target.value)} />
-                  </div>
-
-                  {/* Direktur */}
-                  <div className="text-center" style={{ width: '45%' }}>
+                  {/* Direktur — kiri */}
+                  <div className="text-center" style={{ width: '42%' }}>
                     <p className="text-[11px] text-slate-600">Mengetahui,</p>
                     <p className="text-[11px] font-bold text-slate-800 mt-0.5">DIREKTUR</p>
-                    <p className="text-[11px] text-slate-700 mb-1">BUM Desa {tenant?.nama_bumdes || '...'}</p>
-                    <div style={{ height: '70px' }} />
+                    <p className="text-[11px] text-slate-700 mb-1">{tenant?.nama_bumdes || 'BUM Desa'}</p>
+                    <div style={{ height: '56px' }} />
                     <input type="text" className="print-input"
                       value={namaDirektur} onChange={e => setNamaDirektur(e.target.value)} />
+                  </div>
+
+                  {/* Bendahara — kanan, titimangsa di atas */}
+                  <div className="text-center" style={{ width: '42%' }}>
+                    <input type="text" className="print-input-date"
+                      value={tglCetak} onChange={e => setTglCetak(e.target.value)} />
+                    <p className="text-[11px] font-bold text-slate-800 mt-1">BENDAHARA</p>
+                    <p className="text-[11px] text-slate-700 mb-1">{tenant?.nama_bumdes || 'BUM Desa'}</p>
+                    <div style={{ height: '56px' }} />
+                    <input type="text" className="print-input"
+                      value={namaBendahara} onChange={e => setNamaBendahara(e.target.value)} />
                   </div>
                 </div>
               </div>
