@@ -19,9 +19,12 @@ const SUBLEDGER_MAP: { prefixes: string[]; table: string; field: string; label: 
     where: "tipe='supplier' AND saldo_awal_tipe='kredit'" },
   // Aset Tetap (1.3.x, kecuali 1.3.07 Akum Penyusutan) = Harga Perolehan (debit)
   { prefixes: ['1.3.01', '1.3.02', '1.3.03', '1.3.04', '1.3.05', '1.3.06', '1.3.99'],
-    table: 'fixed_assets', field: 'harga_perolehan', label: 'Aset Tetap' },
-  // Akumulasi Penyusutan (1.3.07.x) = Akumulasi Penyusutan (kredit, contra-aset)
-  { prefixes: ['1.3.07'], table: 'fixed_assets', field: 'akumulasi_penyusutan', label: 'Akum. Penyusutan' },
+    table: 'fixed_assets', field: 'harga_perolehan', label: 'Aset Tetap',
+    where: "is_saldo_awal = true" },
+  // Akumulasi Penyusutan (1.3.07.x) = Akumulasi Penyusutan AWAL (kredit, contra-aset)
+  // MUST use akumulasi_penyusutan_awal (static column) not akumulasi_penyusutan (dynamic)
+  { prefixes: ['1.3.07'], table: 'fixed_assets', field: 'akumulasi_penyusutan_awal', label: 'Akum. Penyusutan',
+    where: "is_saldo_awal = true" },
   { prefixes: ['3'], table: 'equity_details', field: 'saldo_awal', label: 'Modal / Ekuitas' },
 ];
 
@@ -180,8 +183,9 @@ export async function subledgerRoutes(app: FastifyInstance) {
     const nilaiBuku = harga - akumulasi;
     const r = await pool.query(
       `INSERT INTO fixed_assets (tenant_id, nama, kategori, akun_id, tanggal_perolehan,
-        harga_perolehan, akumulasi_penyusutan, nilai_buku_awal, umur_manfaat_bulan)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        harga_perolehan, akumulasi_penyusutan, nilai_buku_awal, umur_manfaat_bulan,
+        is_saldo_awal, akumulasi_penyusutan_awal)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,$7)
        RETURNING id, nama, kategori, harga_perolehan AS "hargaPerolehan",
                  akumulasi_penyusutan AS "akumulasiPenyusutan", nilai_buku_awal AS "nilaiBukuAwal"`,
       [a.tenantId, b.nama, b.kategori || 'lainnya', b.akun_id, b.tanggal_perolehan || null,
@@ -201,7 +205,8 @@ export async function subledgerRoutes(app: FastifyInstance) {
     const nilaiBuku = harga - akumulasi;
     const r = await pool.query(
       `UPDATE fixed_assets SET nama=$1, kategori=$2, akun_id=$3, tanggal_perolehan=$4,
-        harga_perolehan=$5, akumulasi_penyusutan=$6, nilai_buku_awal=$7, umur_manfaat_bulan=$8, updated_at=now()
+        harga_perolehan=$5, akumulasi_penyusutan=$6, akumulasi_penyusutan_awal=$6,
+        nilai_buku_awal=$7, umur_manfaat_bulan=$8, updated_at=now()
        WHERE id=$9 AND tenant_id=$10
        RETURNING id, nama, harga_perolehan AS "hargaPerolehan",
                  akumulasi_penyusutan AS "akumulasiPenyusutan", nilai_buku_awal AS "nilaiBukuAwal"`,
@@ -379,11 +384,17 @@ export async function subledgerRoutes(app: FastifyInstance) {
       const bal = balanceMap.get(akunId);
       // For subledger comparison, use the balance side that matches saldo normal
       // Assets (1.x) = debit side, Liabilities (2.x)/Equity (3.x) = kredit side
-      const kodePrefix = info.kode.charAt(0);
+      // EXCEPTION: Contra-asset (1.3.07.x Akum. Penyusutan) = kredit side (normal balance kredit)
+      const isContraAsset = info.kode.startsWith('1.3.07');
       let globalValue = 0;
       if (bal) {
-        // net balance = debit - kredit; for assets positive=debit, for liabilities/equity positive=kredit
-        globalValue = kodePrefix === '1' ? bal.debit - bal.kredit : bal.kredit - bal.debit;
+        if (isContraAsset) {
+          // Contra-asset: normal balance = kredit, so use kredit - debit
+          globalValue = bal.kredit - bal.debit;
+        } else {
+          // Normal: assets=debit, liabilities/equity=kredit
+          globalValue = info.kode.charAt(0) === '1' ? bal.debit - bal.kredit : bal.kredit - bal.debit;
+        }
       }
       const selisih = globalValue - info.rincianValue;
       results.push({
