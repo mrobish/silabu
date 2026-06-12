@@ -894,9 +894,42 @@ function SaldoAwalPage() {
   const [isSetup, setIsSetup] = useState(false);
   const [entry, setEntry] = useState<any>(null);
   const [showSuccess, setShowSuccess] = useState('');
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
 
   function getToken() {
     return localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
+  }
+
+  // Draft key per tenant (from JWT)
+  function getDraftKey(): string {
+    try {
+      const token = getToken();
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return 'saldo-awal-draft-' + (payload.tenantId || 'unknown');
+    } catch { return 'saldo-awal-draft-unknown'; }
+  }
+
+  // Auto-save draft to localStorage on amounts change (debounced 1s)
+  useEffect(() => {
+    if (loading || isSetup) return;
+    const filled = Object.entries(amounts).filter(([, v]) => v && v !== '0');
+    if (filled.length === 0) return;
+    const timer = setTimeout(() => {
+      try {
+        const key = getDraftKey();
+        localStorage.setItem(key, JSON.stringify({ amounts, tanggal, savedAt: new Date().toISOString() }));
+        setDraftSavedAt(new Date().toISOString());
+      } catch {}
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [amounts, tanggal, loading, isSetup]);
+
+  function clearDraft() {
+    try {
+      localStorage.removeItem(getDraftKey());
+      setDraftSavedAt(null);
+      setAmounts({});
+    } catch {}
   }
 
   useEffect(() => {
@@ -909,11 +942,26 @@ function SaldoAwalPage() {
         setIsSetup(data.isSetup);
         setEntry(data.entry);
         const existing: Record<string, string> = {};
-        for (const a of (data.accounts || [])) {
-          const line = data.existingLines?.[a.id];
-          const debit = line?.debit && line.debit !== '0' ? line.debit : '';
-          const kredit = line?.kredit && line.kredit !== '0' ? line.kredit : '';
-          existing[a.id] = formatNumberString(debit || kredit);
+        // If API has existing lines (already submitted OB-001), use those
+        if (data.isSetup && data.existingLines) {
+          for (const a of (data.accounts || [])) {
+            const line = data.existingLines[a.id];
+            const debit = line?.debit && line.debit !== '0' ? line.debit : '';
+            const kredit = line?.kredit && line.kredit !== '0' ? line.kredit : '';
+            existing[a.id] = formatNumberString(debit || kredit);
+          }
+        } else if (!data.isSetup) {
+          // Not submitted yet — try loading draft from localStorage
+          try {
+            const key = 'saldo-awal-draft-' + (JSON.parse(atob(t.split('.')[1])).tenantId || 'unknown');
+            const draft = localStorage.getItem(key);
+            if (draft) {
+              const parsed = JSON.parse(draft);
+              if (parsed.amounts) Object.assign(existing, parsed.amounts);
+              if (parsed.tanggal) setTanggal(parsed.tanggal);
+              setDraftSavedAt(parsed.savedAt || null);
+            }
+          } catch {}
         }
         setAmounts(existing);
       })
@@ -986,6 +1034,7 @@ function SaldoAwalPage() {
       setShowSuccess(data.message || 'Saldo awal berhasil disimpan!');
       setIsSetup(true);
       setEntry({ noJurnal: data.noJurnal, tanggal });
+      clearDraft();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -1019,6 +1068,17 @@ function SaldoAwalPage() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-500">Masukkan sisa saldo akun riil dari kepengurusan sebelumnya. Cukup ketik nominal, sistem otomatis menempatkan di kolom Debit atau Kredit sesuai Saldo Normal akun.</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          {draftSavedAt && !isSetup && (
+            <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 text-xs font-semibold rounded-full">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              Draft tersimpan
+            </span>
+          )}
+          {draftSavedAt && !isSetup && (
+            <button onClick={clearDraft} className="px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition">Hapus Draft</button>
+          )}
+        </div>
         {isSetup && (
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
