@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { FileText, Loader2, CheckCircle, ChevronDown, ChevronRight, Printer } from 'lucide-react';
+import { FileText, Loader2, ChevronDown, ChevronRight, Printer } from 'lucide-react';
 import DateRangePicker from './DateRangePicker';
 
 const rupiah = (n: number) => {

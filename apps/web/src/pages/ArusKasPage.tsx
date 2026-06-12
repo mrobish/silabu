@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowUpRight, ArrowDownRight, DollarSign, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, Calendar, ChevronDown, ChevronRight, Printer } from 'lucide-react';
+import { DollarSign, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, ChevronDown, ChevronRight, Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
 
@@ -16,7 +16,6 @@ type ArusKasData = {
 };
 
 const rupiah = (n: number) => 'Rp ' + Number(n).toLocaleString('id-ID');
-const inputCls = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition';
 const br = 'rounded-2xl border border-white/70 bg-white/80 backdrop-blur-xl shadow-sm';
 
 function AktivitasBlock({ title, icon, data, color, open, onToggle }: {

@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useAccountingYears } from './useAccountingYears';
-import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, ListOrdered } from 'lucide-react';
+import { ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, ListOrdered } from 'lucide-react';
 
 type Akun = { kode: string; nama: string; saldoNormal: string; debit: number; kredit: number };
 type TBData = {

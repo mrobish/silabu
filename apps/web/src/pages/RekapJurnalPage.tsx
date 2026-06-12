@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, Search } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
 

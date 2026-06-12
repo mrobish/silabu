@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { BookOpen, Calendar, FileText, DollarSign, Search, ChevronDown, X } from 'lucide-react';
+import { BookOpen, Calendar, Search, X } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
 

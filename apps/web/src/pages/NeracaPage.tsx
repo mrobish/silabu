@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, FileDown, Printer } from 'lucide-react';
+import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, FileDown } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, ChevronDown, ChevronRight, DollarSign, Calendar, BarChart4, Receipt, Printer } from 'lucide-react';
+import { TrendingUp, TrendingDown, ChevronDown, ChevronRight, DollarSign, BarChart4, Receipt, Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
 
@@ -94,8 +94,6 @@ export default function LabaRugiPage() {
   useEffect(() => { fetchData(); }, []);
 
   const toggle = (k: string) => setExpanded(prev => ({ ...prev, [k]: !prev[k] }));
-
-  const inputCls = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition';
 
   return (
     <div className="space-y-4">

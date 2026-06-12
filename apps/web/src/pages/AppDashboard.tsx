@@ -62,18 +62,6 @@ function formatDate(value?: string) {
   return new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(value));
 }
 
-// Shared currency input helpers (SaldoAwal + JurnalUmum)
-function formatCurrencyDisplay(raw: string): string {
-  if (!raw) return '';
-  const digits = raw.replace(/\D/g, '');
-  if (!digits) return '';
-  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-}
-
-function parseCurrencyInput(displayVal: string): number {
-  const digits = displayVal.replace(/\D/g, '');
-  return parseFloat(digits) || 0;
-}
 
 function LanggananPage() {
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
@@ -540,8 +528,6 @@ function ProfilPage({ setPage }: { setPage: (p: Page) => void }) {
 }
 
 type CoAAccount = { id: number; kode: string; nama: string; jenis_akun?: string; jenisAkun?: string; saldo_normal?: string; saldoNormal?: string; is_postable?: boolean; isPostable?: boolean; parentId?: number | null; parent_id?: number | null; isSeeded?: boolean; is_seeded?: boolean; isSystemDefault?: boolean; is_system_default?: boolean; level?: number; isActive?: boolean; kelompok?: string };
-type JournalLine = { akun_id: number; debit: number; kredit: number; keterangan: string };
-type JournalEntry = { id: number; no_jurnal: string; tanggal: string; keterangan: string; total: number; lines?: JournalLine[] };
 
 function CoAPage() {
   const [accounts, setAccounts] = useState<CoAAccount[]>([]);
