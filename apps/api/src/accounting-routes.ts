@@ -2060,7 +2060,7 @@ export async function accountingRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: `Periode ${year} sudah ditutup.` });
     }
 
-    // Hitung saldo akhir Gol 4-7 per 31 Des
+    // Hitung saldo akhir Gol 4-7 per 31 Des (P&L)
     const endDate = `${year}-12-31`;
     const pnL = await pool.query(
       `SELECT ca.id, ca.kode, ca.nama, ca.saldonormal,
@@ -2082,8 +2082,29 @@ export async function accountingRoutes(app: FastifyInstance) {
       [tid, endDate]
     );
 
-    if (!pnL.rows.length) {
-      return reply.code(400).send({ error: 'Tidak ada saldo akun Laba/Rugi yang perlu ditutup.' });
+    // Hitung saldo Prive (Gol 3.2.x — Pengambilan oleh Pemilik) per 31 Des
+    const priveQuery = await pool.query(
+      `SELECT ca.id, ca.kode, ca.nama, ca.saldonormal,
+              COALESCE(SUM(
+                CASE WHEN ca.saldonormal='D' THEN jl.debit - jl.kredit
+                     ELSE jl.kredit - jl.debit END
+              ), 0) AS saldo
+       FROM journal_lines jl
+       JOIN journal_entries je ON je.id=jl.entry_id
+       JOIN chart_of_accounts ca ON ca.id=jl.akun_id AND ca.tenant_id=$1
+       WHERE je.tenant_id=$1 AND je.tanggal <= $2
+         AND ca.kode LIKE '3.2%'
+       GROUP BY ca.id, ca.kode, ca.nama, ca.saldonormal
+       HAVING COALESCE(SUM(
+         CASE WHEN ca.saldonormal='D' THEN jl.debit - jl.kredit
+              ELSE jl.kredit - jl.debit END
+       ), 0) != 0
+       ORDER BY ca.kode`,
+      [tid, endDate]
+    );
+
+    if (!pnL.rows.length && !priveQuery.rows.length) {
+      return reply.code(400).send({ error: 'Tidak ada saldo akun Laba/Rugi atau Prive yang perlu ditutup.' });
     }
 
     // Hitung Laba Bersih
@@ -2150,13 +2171,33 @@ export async function accountingRoutes(app: FastifyInstance) {
         }
       }
 
-      // Laba bersih → Saldo Laba Tidak Dicadangkan
-      if (labaBersih > 0) {
-        lines.push({ akunId: labaDitahanId, debit: 0, kredit: labaBersih });
-        totalKredit += labaBersih;
-      } else if (labaBersih < 0) {
-        lines.push({ akunId: labaDitahanId, debit: Math.abs(labaBersih), kredit: 0 });
-        totalDebit += Math.abs(labaBersih);
+      // Zeroing Prive (Gol 3.2.x): credit to zero, debit Saldo Laba
+      let totalPrive = 0;
+      for (const r of priveQuery.rows) {
+        const saldo = Number((r as any).saldo);
+        if (saldo !== 0) {
+          // Prive has saldoNormal='D' (debit). To zero: credit it.
+          if (saldo > 0) {
+            lines.push({ akunId: (r as any).id, debit: 0, kredit: saldo });
+            totalKredit += saldo;
+            totalPrive += saldo;
+          } else {
+            // Negative Prive (unusual) → debit to zero
+            lines.push({ akunId: (r as any).id, debit: Math.abs(saldo), kredit: 0 });
+            totalDebit += Math.abs(saldo);
+            totalPrive += saldo; // negative
+          }
+        }
+      }
+
+      // Net ke Saldo Laba: laba bersih dikurangi Prive
+      const netToSaldoLaba = labaBersih - totalPrive;
+      if (netToSaldoLaba > 0) {
+        lines.push({ akunId: labaDitahanId, debit: 0, kredit: netToSaldoLaba });
+        totalKredit += netToSaldoLaba;
+      } else if (netToSaldoLaba < 0) {
+        lines.push({ akunId: labaDitahanId, debit: Math.abs(netToSaldoLaba), kredit: 0 });
+        totalDebit += Math.abs(netToSaldoLaba);
       }
 
       // Balance check
@@ -2194,11 +2235,14 @@ export async function accountingRoutes(app: FastifyInstance) {
         success: true,
         tahun: year,
         noJurnal,
-        totalAkun: pnL.rows.length,
+        totalAkunPnL: pnL.rows.length,
+        totalAkunPrive: priveQuery.rows.length,
         totalPendapatan,
         totalBeban,
         labaBersih,
-        message: `Tutup buku ${year} berhasil. Laba bersih Rp ${labaBersih.toLocaleString('id-ID')} dipindahkan ke Saldo Laba.`,
+        totalPrive,
+        netToSaldoLaba,
+        message: `Tutup buku ${year} berhasil. Laba bersih Rp ${labaBersih.toLocaleString('id-ID')}${totalPrive > 0 ? `, Prive Rp ${totalPrive.toLocaleString('id-ID')}` : ''} → Saldo Laba Rp ${netToSaldoLaba.toLocaleString('id-ID')}.`,
       };
     } catch (e: any) {
       await client.query('ROLLBACK');

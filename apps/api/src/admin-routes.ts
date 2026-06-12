@@ -147,4 +147,73 @@ export async function adminRoutes(app: FastifyInstance) {
     await pool.query('UPDATE users SET is_active=$1, updated_at=now() WHERE id=$2', [active ?? false, id]);
     return { success: true };
   });
+
+  // POST /tutup-buku/undo — Batal Tutup Buku (Super Admin only)
+  app.post('/tutup-buku/undo', async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as any;
+    if (!body) return reply.code(400).send({ error: 'Body request kosong' });
+
+    const { tenantId, tahun } = body;
+    if (!tenantId) return reply.code(400).send({ error: 'tenantId wajib diisi' });
+    if (!tahun || tahun < 2000 || tahun > 2099) return reply.code(400).send({ error: 'Tahun tidak valid' });
+
+    // Verify period is CLOSED
+    const period = await pool.query(
+      `SELECT id, status FROM financial_periods WHERE tenant_id=$1 AND tahun=$2 LIMIT 1`,
+      [tenantId, tahun]
+    );
+    if (!period.rows.length) return reply.code(404).send({ error: `Periode ${tahun} tidak ditemukan` });
+    if ((period.rows[0] as any).status !== 'CLOSED') return reply.code(400).send({ error: `Periode ${tahun} belum ditutup (status: ${(period.rows[0] as any).status})` });
+
+    // Check if next year has transactions (safety)
+    const nextYearTx = await pool.query(
+      `SELECT COUNT(*)::int AS cnt FROM journal_entries WHERE tenant_id=$1 AND tahun=$2 AND tipetransaksi <> 'CLOSING'`,
+      [tenantId, tahun + 1]
+    );
+    if ((nextYearTx.rows[0] as any).cnt > 0) {
+      return reply.code(400).send({
+        error: `Tahun ${tahun + 1} sudah memiliki ${(nextYearTx.rows[0] as any).cnt} transaksi. Undo closing tidak aman karena akan menyebabkan inkonsistensi saldo. Hubungi tim teknis.`,
+        code: 'NEXT_YEAR_HAS_DATA'
+      });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. Delete closing journal CL-{year}1231 (cascade deletes journal_lines)
+      const noJurnal = `CL-${tahun}1231`;
+      const delResult = await client.query(
+        `DELETE FROM journal_entries WHERE tenant_id=$1 AND no_jurnal=$2 AND tipetransaksi='CLOSING'`,
+        [tenantId, noJurnal]
+      );
+
+      // 2. Revert period to OPEN
+      await client.query(
+        `UPDATE financial_periods SET status='OPEN', closed_at=NULL, closed_by=NULL WHERE tenant_id=$1 AND tahun=$2`,
+        [tenantId, tahun]
+      );
+
+      // 3. Remove auto-created next year if it has no transactions
+      await client.query(
+        `DELETE FROM financial_periods WHERE tenant_id=$1 AND tahun=$2 AND status='OPEN'
+         AND NOT EXISTS (SELECT 1 FROM journal_entries WHERE tenant_id=$1 AND tahun=$2)`,
+        [tenantId, tahun + 1]
+      );
+
+      await client.query('COMMIT');
+      return {
+        success: true,
+        tahun,
+        noJurnal,
+        journalsDeleted: delResult.rowCount,
+        message: `Tutup Buku ${tahun} berhasil dibatalkan. Jurnal ${noJurnal} dihapus, periode kembali OPEN.`,
+      };
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return reply.code(500).send({ error: e.message });
+    } finally {
+      client.release();
+    }
+  });
 }
