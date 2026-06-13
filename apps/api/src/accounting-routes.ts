@@ -2580,6 +2580,18 @@ export async function accountingRoutes(app: FastifyInstance) {
     let desc = keterangan;
 
     switch (tipe) {
+      case 'uang_masuk':
+        // Uang Masuk: Debit Kas/Bank, Credit [source account]
+        // sumber_akun_id = Kas/Bank, target_akun_id = source (Pendapatan/Piutang/Utang/Modal)
+        if (!b.target_akun_id) return reply.code(400).send({ error: 'Akun sumber penerimaan wajib dipilih' });
+        if (!desc) desc = 'Penerimaan kas';
+        break;
+      case 'uang_keluar':
+        // Uang Keluar: Debit [destination], Credit Kas/Bank
+        // sumber_akun_id = Kas/Bank, target_akun_id = destination (Beban/Utang/Persediaan/Aset/Prive)
+        if (!b.target_akun_id) return reply.code(400).send({ error: 'Akun tujuan pengeluaran wajib dipilih' });
+        if (!desc) desc = 'Pengeluaran kas';
+        break;
       case 'bayar_utang':
         targetAkunKode = '2.1.01'; // Utang Usaha
         if (!contactId) return reply.code(400).send({ error: 'Supplier wajib dipilih' });
@@ -2661,6 +2673,16 @@ export async function accountingRoutes(app: FastifyInstance) {
       const nominalStr = String(nominal);
 
       switch (tipe) {
+        case 'uang_masuk':
+          // Debit Kas/Bank (uang masuk), Credit source account
+          line1AkunId = sumberAkunId; line1Debit = nominalStr; line1Kredit = '0';
+          line2AkunId = b.target_akun_id; line2Debit = '0'; line2Kredit = nominalStr;
+          break;
+        case 'uang_keluar':
+          // Debit destination account, Credit Kas/Bank (uang keluar)
+          line1AkunId = b.target_akun_id; line1Debit = nominalStr; line1Kredit = '0';
+          line2AkunId = sumberAkunId; line2Debit = '0'; line2Kredit = nominalStr;
+          break;
         case 'bayar_utang':
           // Debit Utang (kurangi hutang), Credit Kas/Bank
           line1AkunId = targetAkun.id; line1Debit = nominalStr; line1Kredit = '0';

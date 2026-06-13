@@ -401,41 +401,6 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
     }
   }
 
-  // ── Quick Actions ───────────────────────────────────────────
-  function applyQuickAction(type: 'penerimaan' | 'pengeluaran') {
-    const kasBank = coaAccounts.filter(a => a.kode?.startsWith('1.1.01') || a.kode?.startsWith('1.1.02'));
-    if (kasBank.length === 0) { setError('Akun Kas/Bank tidak ditemukan di CoA'); return; }
-
-    const bankAccount = kasBank[0];
-    const bankSearch = bankAccount.kode + ' — ' + bankAccount.nama;
-    const hasExisting = rows.some(r => r.akun_id || r.tanggal || r.no_bukti || r.keterangan || r.debit || r.kredit);
-
-    const newRow1: Row = {
-      id: makeRowId(),
-      tanggal: today(),
-      no_bukti: '',
-      keterangan: type === 'penerimaan' ? 'Penerimaan Kas' : 'Pengeluaran Kas',
-      akun_id: String(bankAccount.id),
-      debit: type === 'penerimaan' ? '' : '',
-      kredit: type === 'pengeluaran' ? '' : '',
-      searchTerm: bankSearch,
-      contact_id: '',
-      inventory_item_id: '',
-      qty: '',
-    };
-    const newRow2 = emptyRow();
-
-    if (hasExisting) {
-      setRows(prev => [...prev, newRow1, newRow2]);
-    } else {
-      setRows([newRow1, newRow2]);
-    }
-
-    setTimeout(() => {
-      refMap.current.get((type === 'penerimaan' ? 'debit' : 'kredit') + '-' + (hasExisting ? rows.length : 0))?.focus();
-    }, 100);
-  }
-
   // ── Clear form ──────────────────────────────────────────────
   function handleClearForm() {
     if (!confirm('Yakin kosongkan form? Draft yang tersimpan akan hilang.')) return;
@@ -705,22 +670,6 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
         <h1 className="text-2xl font-bold text-slate-900">Jurnal Umum</h1>
         <p className="mt-1 text-sm text-slate-500">Catat transaksi jurnal umum BUM Desa — Excel-Style Batch Input.</p>
       </div>
-
-      {/* Quick Action Buttons */}
-      {!editingId && (
-        <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={() => applyQuickAction('penerimaan')}
-            className="group flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-50 to-cyan-50 border border-emerald-200 px-5 py-3 text-sm font-bold text-emerald-700 transition hover:from-emerald-100 hover:to-cyan-100 hover:border-emerald-300 hover:shadow-md active:scale-[0.97]">
-            <svg className="w-5 h-5 text-emerald-600 transition group-hover:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-            Penerimaan Kas
-          </button>
-          <button type="button" onClick={() => applyQuickAction('pengeluaran')}
-            className="group flex items-center gap-2 rounded-2xl bg-gradient-to-r from-rose-50 to-orange-50 border border-rose-200 px-5 py-3 text-sm font-bold text-rose-700 transition hover:from-rose-100 hover:to-orange-100 hover:border-rose-300 hover:shadow-md active:scale-[0.97]">
-            <svg className="w-5 h-5 text-rose-600 transition group-hover:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12h-15" /></svg>
-            Pengeluaran Kas
-          </button>
-        </div>
-      )}
 
       {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{error}</div>}
       {showSuccess && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">{showSuccess}</div>}

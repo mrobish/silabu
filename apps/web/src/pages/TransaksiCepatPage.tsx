@@ -1,108 +1,39 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Zap, ArrowLeft, CreditCard, HandCoins, ShoppingCart, Package, CheckCircle, X, Search } from 'lucide-react';
+import {
+  ArrowLeft, ArrowDownToLine, ArrowUpFromLine, CheckCircle, X,
+  Search, Wallet, Landmark,
+} from 'lucide-react';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const rupiah = (n: number) => 'Rp ' + Number(n).toLocaleString('id-ID');
 const parseRupiah = (s: string) => Number(s.replace(/[^0-9]/g, '')) || 0;
-const fmtInput = (n: number) => (n ? n.toLocaleString('id-ID') : '');
 const inputCls = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition';
 const br = 'rounded-2xl border border-white/70 bg-white/80 backdrop-blur-xl shadow-sm';
 const token = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
 
 // ── types ────────────────────────────────────────────────────────────────────
-type Tipe = 'bayar_utang' | 'terima_piutang' | 'beli_persediaan' | 'jual_persediaan';
-type Contact = { id: string; nama: string; tipe: string };
-type InventoryItem = { id: string; nama: string; satuan: string; hargaSatuan: number; qtyAwal: number };
-type Account = { id: string; kode: string; nama: string };
-type EntryResp = { success: boolean; message: string; entry?: { id: string; noJurnal: string; tanggal: string; tipe: string; nominal: number; keterangan: string } };
-
-const TIPE_META: Record<Tipe, {
-  label: string; icon: typeof CreditCard; grad: string; desc: string;
-  summary: (d: { contact?: string; item?: string; kas?: string; tipe: Tipe }) => string;
-}> = {
-  bayar_utang: {
-    label: 'Bayar Utang',
-    icon: CreditCard,
-    grad: 'from-amber-500/20 to-orange-500/20 text-amber-600',
-    desc: 'Bayar tagihan ke supplier secara otomatis',
-    summary: d => `Debit: Utang Usaha (${d.contact}) · Credit: ${d.kas}`,
-  },
-  terima_piutang: {
-    label: 'Terima Piutang',
-    icon: HandCoins,
-    grad: 'from-blue-500/20 to-indigo-500/20 text-blue-600',
-    desc: 'Terima pembayaran dari pelanggan',
-    summary: d => `Debit: ${d.kas} · Credit: Piutang Usaha (${d.contact})`,
-  },
-  beli_persediaan: {
-    label: 'Beli Persediaan',
-    icon: ShoppingCart,
-    grad: 'from-emerald-500/20 to-teal-500/20 text-emerald-600',
-    desc: 'Catat pembelian barang persediaan',
-    summary: d => `Debit: Persediaan (${d.item}) · Credit: ${d.kas}`,
-  },
-  jual_persediaan: {
-    label: 'Jual Persediaan',
-    icon: Package,
-    grad: 'from-purple-500/20 to-violet-500/20 text-purple-600',
-    desc: 'Catat penjualan barang persediaan',
-    summary: d => `Debit: ${d.kas} · Credit: Persediaan (${d.item})`,
-  },
+type Account = {
+  id: string;
+  kode: string;
+  nama: string;
+  jenisAkun?: string;
+  jenis_akun?: string;
+  isPostable?: boolean;
+  is_postable?: boolean;
+  isActive?: boolean;
+  is_active?: boolean;
 };
 
-// ── Searchable Select ────────────────────────────────────────────────────────
-function SearchSelect({
-  value, onChange, options, placeholder, disabled,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string; sub?: string }[];
-  placeholder: string;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState('');
-  const ref = __useClickOutside(() => setOpen(false));
-  const filtered = options.filter(o =>
-    o.label.toLowerCase().includes(q.toLowerCase()) ||
-    (o.sub || '').toLowerCase().includes(q.toLowerCase())
-  );
-  const selected = options.find(o => o.value === value);
+type EntryResp = {
+  success: boolean;
+  message: string;
+  entry?: { id: string; noJurnal: string; no_jurnal?: string; tanggal: string; tipe: string; nominal: number; keterangan: string };
+};
 
-  return (
-    <div className="relative" ref={ref as any}>
-      <button type="button" disabled={disabled}
-        onClick={() => { setOpen(!open); setQ(''); }}
-        className={`${inputCls} text-left flex items-center gap-2 ${!selected ? 'text-slate-400' : ''} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
-        <span className="flex-1 truncate">{selected ? selected.label : placeholder}</span>
-        <Search size={14} className="text-slate-400 shrink-0" />
-      </button>
-      {open && !disabled && (
-        <div className="absolute z-30 mt-1 w-full rounded-xl bg-white border border-slate-200 shadow-lg max-h-56 overflow-hidden">
-          <div className="p-2 border-b border-slate-100">
-            <input autoFocus value={q} onChange={e => setQ(e.target.value)}
-              placeholder="Cari..."
-              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-emerald-400" />
-          </div>
-          <div className="overflow-y-auto max-h-44">
-            {filtered.length === 0 && <p className="px-3 py-2 text-xs text-slate-400">Tidak ditemukan</p>}
-            {filtered.map(o => (
-              <button key={o.value} type="button"
-                onClick={() => { onChange(o.value); setOpen(false); setQ(''); }}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 transition ${o.value === value ? 'bg-emerald-50 font-semibold' : ''}`}>
-                <span className="text-slate-800">{o.label}</span>
-                {o.sub && <span className="text-slate-400 text-xs ml-1">— {o.sub}</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+type Tipe = 'uang_masuk' | 'uang_keluar';
 
-// simple click-outside hook
-function __useClickOutside(cb: () => void) {
+// ── click-outside hook ───────────────────────────────────────────────────────
+function useClickOutside(cb: () => void) {
   const ref = useRef<HTMLElement | null>(null);
   const cbRef = useRef(cb);
   cbRef.current = cb;
@@ -114,6 +45,78 @@ function __useClickOutside(cb: () => void) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
   return ref;
+}
+
+// ── Searchable Select ────────────────────────────────────────────────────────
+function SearchSelect({
+  value, onChange, options, placeholder, disabled, firstRef,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string; sub?: string; group?: string }[];
+  placeholder: string;
+  disabled?: boolean;
+  firstRef?: React.RefObject<HTMLInputElement | null>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const ref = useClickOutside(() => setOpen(false));
+  const filtered = options.filter(o =>
+    o.label.toLowerCase().includes(q.toLowerCase()) ||
+    (o.sub || '').toLowerCase().includes(q.toLowerCase()) ||
+    (o.group || '').toLowerCase().includes(q.toLowerCase())
+  );
+  const selected = options.find(o => o.value === value);
+
+  // group filtered items
+  const groups: Record<string, typeof filtered> = {};
+  filtered.forEach(o => {
+    const g = o.group || '';
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(o);
+  });
+  const groupKeys = Object.keys(groups);
+
+  return (
+    <div className="relative" ref={ref as any}>
+      <button type="button" disabled={disabled}
+        ref={firstRef as any}
+        onClick={() => { setOpen(!open); setQ(''); }}
+        className={`${inputCls} text-left flex items-center gap-2 ${!selected ? 'text-slate-400' : ''} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+        <span className="flex-1 truncate">{selected ? selected.label : placeholder}</span>
+        <Search size={14} className="text-slate-400 shrink-0" />
+      </button>
+      {open && !disabled && (
+        <div className="absolute z-30 mt-1 w-full rounded-xl bg-white border border-slate-200 shadow-lg max-h-64 overflow-hidden">
+          <div className="p-2 border-b border-slate-100">
+            <input autoFocus value={q} onChange={e => setQ(e.target.value)}
+              placeholder="Cari..."
+              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-emerald-400" />
+          </div>
+          <div className="overflow-y-auto max-h-52">
+            {filtered.length === 0 && <p className="px-3 py-2 text-xs text-slate-400">Tidak ditemukan</p>}
+            {groupKeys.map(g => (
+              <div key={g}>
+                {g && (
+                  <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-100">
+                    {g}
+                  </div>
+                )}
+                {groups[g].map(o => (
+                  <button key={o.value} type="button"
+                    onClick={() => { onChange(o.value); setOpen(false); setQ(''); }}
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 transition ${o.value === value ? 'bg-emerald-50 font-semibold' : ''}`}>
+                    <span className="text-slate-800">{o.label}</span>
+                    {o.sub && <span className="text-slate-400 text-xs ml-1">— {o.sub}</span>}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Currency Input ───────────────────────────────────────────────────────────
@@ -137,76 +140,85 @@ function CurrencyInput({ value, onChange, placeholder }: { value: string; onChan
   );
 }
 
-// ── Guided Form ──────────────────────────────────────────────────────────────
-function GuidedForm({
-  tipe, contacts, items, kasAccounts, onSuccess, onBack,
+// ── categorize accounts ──────────────────────────────────────────────────────
+function isKasBank(a: Account): boolean {
+  const k = (a.kode || '').replace(/\s/g, '');
+  return k.startsWith('1.1.01') || k.startsWith('1.1.02');
+}
+
+function categorizeMasuk(a: Account): string {
+  const k = (a.kode || '').replace(/\s/g, '');
+  if (k.startsWith('4')) return '💰 Pendapatan';
+  if (k.startsWith('1.1.03')) return '👥 Piutang';
+  if (k.startsWith('2.1.01') || k.startsWith('2.1.02')) return '📋 Utang';
+  if (k.startsWith('3.1')) return '🏛️ Modal';
+  return '📦 Lainnya';
+}
+
+function categorizeKeluar(a: Account): string {
+  const k = (a.kode || '').replace(/\s/g, '');
+  if (k.startsWith('5') || k.startsWith('6')) return '🏢 Beban Operasional';
+  if (k.startsWith('2.1.01') || k.startsWith('2.1.02')) return '📋 Utang';
+  if (k.startsWith('1.1.05')) return '📦 Persediaan';
+  if (k.startsWith('1.3')) return '🏗️ Aset Tetap';
+  if (k.startsWith('3.2')) return '💸 Prive';
+  return '📦 Lainnya';
+}
+
+// ── Transaction Form ─────────────────────────────────────────────────────────
+function TransactionForm({
+  tipe, accounts, onSuccess, onBack,
 }: {
   tipe: Tipe;
-  contacts: Contact[];
-  items: InventoryItem[];
-  kasAccounts: Account[];
+  accounts: Account[];
   onSuccess: (entry: NonNullable<EntryResp['entry']>) => void;
   onBack: () => void;
 }) {
-  const meta = TIPE_META[tipe];
-  const isUtang = tipe === 'bayar_utang';
-  const isPiutang = tipe === 'terima_piutang';
-  const isBeli = tipe === 'beli_persediaan';
-  const isJual = tipe === 'jual_persediaan';
-  const needContact = isUtang || isPiutang;
-  const needItem = isBeli || isJual;
+  const isMasuk = tipe === 'uang_masuk';
 
-  const contactList = contacts.filter(c =>
-    (isUtang && c.tipe === 'supplier') || (isPiutang && c.tipe === 'pelanggan')
-  );
+  const kasBankAccounts = accounts.filter(a => isKasBank(a));
+  const targetAccounts = accounts.filter(a => !isKasBank(a) && (a.isPostable ?? a.is_postable ?? true) && (a.isActive ?? a.is_active ?? true));
 
-  const [contactId, setContactId] = useState('');
-  const [itemId, setItemId] = useState('');
-  const [qty, setQty] = useState('');
-  const [hargaSatuan, setHargaSatuan] = useState('');
-  const [total, setTotal] = useState('');
   const [kasId, setKasId] = useState('');
+  const [targetId, setTargetId] = useState('');
+  const [nominal, setNominal] = useState('');
   const [tanggal, setTanggal] = useState(new Date().toISOString().slice(0, 10));
   const [keterangan, setKeterangan] = useState('');
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const firstRef = useRef<HTMLInputElement | null>(null);
 
-  // auto-fill harga when item changes
   useEffect(() => {
-    if (needItem && itemId) {
-      const it = items.find(i => i.id === itemId);
-      if (it) {
-        setHargaSatuan(String(it.hargaSatuan));
-        if (qty) setTotal(String(Number(qty) * it.hargaSatuan));
-      }
-    }
-  }, [itemId]); // eslint-disable-line
+    // auto-focus first field
+    setTimeout(() => firstRef.current?.focus(), 100);
+  }, []);
 
-  // auto-calc total
-  useEffect(() => {
-    if (needItem && qty && hargaSatuan) {
-      setTotal(String(Number(qty) * Number(hargaSatuan)));
-    }
-  }, [qty, hargaSatuan]); // eslint-disable-line
+  const selectedKas = kasBankAccounts.find(a => a.id === kasId);
+  const selectedTarget = targetAccounts.find(a => a.id === targetId);
 
-  const selectedItem = items.find(i => i.id === itemId);
-  const selectedContact = contacts.find(c => c.id === contactId);
-  const selectedKas = kasAccounts.find(a => a.id === kasId);
+  // build options for target with grouping
+  const targetOptions = targetAccounts.map(a => ({
+    value: a.id,
+    label: `${a.kode} — ${a.nama}`,
+    sub: a.kode,
+    group: isMasuk ? categorizeMasuk(a) : categorizeKeluar(a),
+  }));
 
-  const stokSetelah = selectedItem
-    ? isBeli
-      ? selectedItem.qtyAwal + (Number(qty) || 0)
-      : selectedItem.qtyAwal - (Number(qty) || 0)
-    : null;
+  const kasOptions = kasBankAccounts.map(a => ({
+    value: a.id,
+    label: `${a.kode} — ${a.nama}`,
+  }));
+
+  // journal preview
+  const debitAccount = isMasuk ? selectedKas : selectedTarget;
+  const creditAccount = isMasuk ? selectedTarget : selectedKas;
+  const nominalNum = parseRupiah(nominal);
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
-    if (needContact && !contactId) e.contact = 'Pilih kontak';
-    if (needItem && !itemId) e.item = 'Pilih barang';
-    if (needItem && (!qty || Number(qty) <= 0)) e.qty = 'Jumlah harus > 0';
-    if (needItem && isJual && selectedItem && Number(qty) > selectedItem.qtyAwal) e.qty = 'Stok tidak cukup';
-    if (!kasId) e.kas = 'Pilih sumber dana';
-    if (!total || parseRupiah(total) <= 0) e.total = 'Nominal harus > 0';
+    if (!kasId) e.kas = isMasuk ? 'Pilih akun kas/bank penerima' : 'Pilih akun kas/bank sumber';
+    if (!targetId) e.target = isMasuk ? 'Pilih sumber penerimaan' : 'Pilih tujuan pengeluaran';
+    if (!nominalNum || nominalNum <= 0) e.nominal = 'Nominal harus lebih dari 0';
     if (!tanggal) e.tanggal = 'Tanggal wajib diisi';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -219,15 +231,11 @@ function GuidedForm({
       const body: Record<string, any> = {
         tipe,
         tanggal,
-        nominal: parseRupiah(total),
+        nominal: nominalNum,
         sumber_akun_id: kasId,
+        target_akun_id: targetId,
         keterangan: keterangan || undefined,
       };
-      if (needContact) body.contact_id = contactId;
-      if (needItem) {
-        body.inventory_item_id = itemId;
-        body.qty = Number(qty);
-      }
       const r = await fetch('/api/accounting/transaksi/quick', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token() },
@@ -246,13 +254,6 @@ function GuidedForm({
     }
   };
 
-  const summaryLabel = TIPE_META[tipe].summary({
-    contact: selectedContact?.nama,
-    item: selectedItem?.nama,
-    kas: selectedKas ? `${selectedKas.kode} ${selectedKas.nama}` : '...',
-    tipe,
-  });
-
   return (
     <div className="space-y-5">
       {/* back + title */}
@@ -260,117 +261,95 @@ function GuidedForm({
         <button onClick={onBack} className="rounded-xl border border-slate-200 p-2 hover:bg-slate-50 transition">
           <ArrowLeft size={18} className="text-slate-600" />
         </button>
-        <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${meta.grad}`}>
-          <meta.icon size={18} />
+        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${isMasuk ? 'bg-gradient-to-br from-emerald-500/20 to-green-500/20 text-emerald-600' : 'bg-gradient-to-br from-rose-500/20 to-red-500/20 text-rose-600'}`}>
+          {isMasuk ? <ArrowDownToLine size={18} /> : <ArrowUpFromLine size={18} />}
         </div>
         <div>
-          <h3 className="text-base font-bold text-slate-900">{meta.label}</h3>
-          <p className="text-xs text-slate-500">{meta.desc}</p>
+          <h3 className="text-base font-bold text-slate-900">
+            {isMasuk ? '📥 Form Penerimaan Kas' : '📤 Form Pengeluaran Kas'}
+          </h3>
+          <p className="text-xs text-slate-500">
+            {isMasuk ? 'Uang masuk ke Kas/Bank BUM Desa' : 'Uang keluar dari Kas/Bank BUM Desa'}
+          </p>
         </div>
       </div>
 
       {/* form card */}
-      <div className={`${br} p-5 space-y-4`}>
-        {/* Contact */}
-        {needContact && (
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-              {isUtang ? 'Pilih Supplier' : 'Pilih Pelanggan'} *
-            </label>
-            <SearchSelect
-              value={contactId}
-              onChange={setContactId}
-              options={contactList.map(c => ({ value: c.id, label: c.nama }))}
-              placeholder={isUtang ? 'Pilih supplier...' : 'Pilih pelanggan...'}
-            />
-            {errors.contact && <p className="text-xs text-red-500 mt-1">{errors.contact}</p>}
-          </div>
-        )}
-
-        {/* Item + Qty + Harga */}
-        {needItem && (
-          <>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Pilih Barang *</label>
-              <SearchSelect
-                value={itemId}
-                onChange={setItemId}
-                options={items.map(i => ({ value: i.id, label: i.nama, sub: `${i.satuan} · Stok: ${i.qtyAwal}` }))}
-                placeholder="Pilih barang..."
-              />
-              {errors.item && <p className="text-xs text-red-500 mt-1">{errors.item}</p>}
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                  Jumlah {selectedItem && `(${selectedItem.satuan})`} *
-                </label>
-                <input type="number" min="1" value={qty} onChange={e => setQty(e.target.value)}
-                  placeholder="0" className={inputCls} />
-                {errors.qty && <p className="text-xs text-red-500 mt-1">{errors.qty}</p>}
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Harga Satuan</label>
-                <CurrencyInput value={hargaSatuan} onChange={setHargaSatuan} />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Total</label>
-                <CurrencyInput value={total} onChange={setTotal} />
-                {errors.total && <p className="text-xs text-red-500 mt-1">{errors.total}</p>}
-              </div>
-            </div>
-            {stokSetelah !== null && selectedItem && (
-              <p className="text-xs text-slate-500">
-                Stok setelah transaksi: <span className="font-semibold text-emerald-700">{stokSetelah} {selectedItem.satuan}</span>
-              </p>
-            )}
-          </>
-        )}
-
-        {/* Nominal (for utang/piutang) */}
-        {!needItem && (
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Nominal *</label>
-            <CurrencyInput value={total} onChange={setTotal} placeholder="Rp 0" />
-            {errors.total && <p className="text-xs text-red-500 mt-1">{errors.total}</p>}
-          </div>
-        )}
-
-        {/* Sumber Dana */}
+      <div className={`${br} p-5 space-y-5`}>
+        {/* Kas/Bank */}
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Sumber Dana (Kas/Bank) *</label>
+          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+            {isMasuk ? '🏦 Terima uang di mana?' : '🏦 Bayar dari mana?'}
+          </label>
           <SearchSelect
             value={kasId}
             onChange={setKasId}
-            options={kasAccounts.map(a => ({ value: a.id, label: `${a.kode} — ${a.nama}` }))}
-            placeholder="Pilih kas atau bank..."
+            options={kasOptions}
+            placeholder={isMasuk ? 'Pilih kas/bank penerima...' : 'Pilih kas/bank sumber...'}
+            firstRef={firstRef}
           />
           {errors.kas && <p className="text-xs text-red-500 mt-1">{errors.kas}</p>}
         </div>
 
-        {/* Tanggal + Keterangan */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Tanggal *</label>
-            <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className={inputCls} />
-            {errors.tanggal && <p className="text-xs text-red-500 mt-1">{errors.tanggal}</p>}
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Keterangan</label>
-            <input type="text" value={keterangan} onChange={e => setKeterangan(e.target.value)}
-              placeholder="Opsional..." className={inputCls} />
-          </div>
+        {/* Target account */}
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+            {isMasuk ? '📝 Dari siapa / Untuk apa?' : '📝 Untuk apa / Ke siapa?'}
+          </label>
+          <SearchSelect
+            value={targetId}
+            onChange={setTargetId}
+            options={targetOptions}
+            placeholder={isMasuk ? 'Pilih sumber penerimaan...' : 'Pilih tujuan pengeluaran...'}
+          />
+          {errors.target && <p className="text-xs text-red-500 mt-1">{errors.target}</p>}
         </div>
 
-        {/* Summary preview */}
-        <div className="bg-emerald-50 rounded-xl px-4 py-3 text-xs text-emerald-700 flex items-start gap-2">
-          <CheckCircle size={14} className="mt-0.5 shrink-0" />
-          <div>
-            <p className="font-semibold mb-0.5">Preview Jurnal:</p>
-            <p>{summaryLabel}</p>
-            {parseRupiah(total) > 0 && <p className="font-bold mt-0.5">{rupiah(parseRupiah(total))}</p>}
-          </div>
+        {/* Nominal */}
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-1.5">💵 Berapa jumlahnya?</label>
+          <CurrencyInput value={nominal} onChange={setNominal} placeholder="Masukkan nominal..." />
+          {errors.nominal && <p className="text-xs text-red-500 mt-1">{errors.nominal}</p>}
         </div>
+
+        {/* Tanggal */}
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-1.5">📅 Tanggal</label>
+          <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className={inputCls} />
+          {errors.tanggal && <p className="text-xs text-red-500 mt-1">{errors.tanggal}</p>}
+        </div>
+
+        {/* Keterangan */}
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-1.5">📝 Keterangan <span className="text-slate-400 font-normal">(opsional)</span></label>
+          <textarea value={keterangan} onChange={e => setKeterangan(e.target.value)}
+            placeholder="Catatan tambahan..."
+            rows={2}
+            className={`${inputCls} resize-none`} />
+        </div>
+
+        {/* Journal Preview */}
+        {(debitAccount || creditAccount) && nominalNum > 0 && (
+          <div className={`${isMasuk ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'} rounded-xl border px-4 py-3`}>
+            <p className={`text-xs font-bold mb-2 ${isMasuk ? 'text-emerald-700' : 'text-rose-700'}`}>📋 Preview Jurnal:</p>
+            <div className="space-y-1 text-sm">
+              <div className="flex items-baseline gap-2">
+                <span className={`font-bold ${isMasuk ? 'text-emerald-600' : 'text-rose-600'}`}>Debit:</span>
+                <span className="text-slate-800">
+                  {debitAccount ? `${debitAccount.nama} (${debitAccount.kode})` : '...'}
+                </span>
+                <span className="ml-auto font-mono font-semibold text-slate-900">{rupiah(nominalNum)}</span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className={`font-bold ${isMasuk ? 'text-emerald-600' : 'text-rose-600'}`}>Credit:</span>
+                <span className="text-slate-800">
+                  {creditAccount ? `${creditAccount.nama} (${creditAccount.kode})` : '...'}
+                </span>
+                <span className="ml-auto font-mono font-semibold text-slate-900">{rupiah(nominalNum)}</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Error */}
         {errors.submit && (
@@ -386,8 +365,8 @@ function GuidedForm({
             Batal
           </button>
           <button type="button" onClick={submit} disabled={saving}
-            className="flex-1 rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg disabled:opacity-40 transition hover:shadow-xl">
-            {saving ? 'Menyimpan...' : 'Simpan Transaksi'}
+            className={`flex-1 rounded-2xl px-5 py-2.5 text-sm font-bold text-white shadow-lg disabled:opacity-40 transition hover:shadow-xl ${isMasuk ? 'bg-gradient-to-r from-emerald-600 to-green-600' : 'bg-gradient-to-r from-rose-600 to-red-600'}`}>
+            {saving ? 'Menyimpan...' : isMasuk ? '💾 Simpan Penerimaan' : '💾 Simpan Pengeluaran'}
           </button>
         </div>
       </div>
@@ -404,20 +383,23 @@ function SuccessScreen({
   onAgain: () => void;
   onBack: () => void;
 }) {
-  const meta = TIPE_META[tipe];
+  const isMasuk = tipe === 'uang_masuk';
+  const noJurnal = entry.noJurnal || entry.no_jurnal || '-';
   return (
     <div className="space-y-5">
       <div className={`${br} p-6 text-center`}>
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 mb-4">
-          <CheckCircle size={32} className="text-emerald-600" />
+        <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full mb-4 ${isMasuk ? 'bg-gradient-to-br from-emerald-500/20 to-green-500/20' : 'bg-gradient-to-br from-rose-500/20 to-red-500/20'}`}>
+          <CheckCircle size={32} className={isMasuk ? 'text-emerald-600' : 'text-rose-600'} />
         </div>
-        <h3 className="text-lg font-bold text-slate-900 mb-1">Transaksi Berhasil!</h3>
-        <p className="text-sm text-slate-500 mb-4">{meta.label} telah dicatat</p>
+        <h3 className="text-lg font-bold text-slate-900 mb-1">Transaksi Berhasil Disimpan!</h3>
+        <p className="text-sm text-slate-500 mb-4">
+          {isMasuk ? 'Penerimaan kas telah dicatat' : 'Pengeluaran kas telah dicatat'}
+        </p>
 
         <div className="bg-slate-50 rounded-xl p-4 text-left space-y-2 mb-6">
           <div className="flex justify-between text-sm">
             <span className="text-slate-500">No. Jurnal</span>
-            <span className="font-bold text-emerald-700 tabular-nums">{entry.noJurnal}</span>
+            <span className="font-bold text-emerald-700 tabular-nums">{noJurnal}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-slate-500">Tanggal</span>
@@ -441,8 +423,8 @@ function SuccessScreen({
             Kembali ke Menu
           </button>
           <button onClick={onAgain}
-            className="flex-1 rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg transition hover:shadow-xl">
-            Buat Lagi
+            className={`flex-1 rounded-2xl px-5 py-2.5 text-sm font-bold text-white shadow-lg transition hover:shadow-xl ${isMasuk ? 'bg-gradient-to-r from-emerald-600 to-green-600' : 'bg-gradient-to-r from-rose-600 to-red-600'}`}>
+            Buat Lagi (Jenis Sama)
           </button>
         </div>
       </div>
@@ -455,42 +437,26 @@ export default function TransaksiCepatPage() {
   const [view, setView] = useState<'menu' | 'form' | 'success'>('menu');
   const [activeTipe, setActiveTipe] = useState<Tipe | null>(null);
   const [lastEntry, setLastEntry] = useState<NonNullable<EntryResp['entry']> | null>(null);
-
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [items, setItems] = useState<InventoryItem[]>([]);
-  const [kasAccounts, setKasAccounts] = useState<Account[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  const fetchAll = useCallback(async () => {
-    const h = { Authorization: 'Bearer ' + token() };
-    const [supCust, cust, inv, coa] = await Promise.all([
-      fetch('/api/accounting/contacts?tipe=supplier', { headers: h }).then(r => r.json()).catch(() => ({ contacts: [] })),
-      fetch('/api/accounting/contacts?tipe=pelanggan', { headers: h }).then(r => r.json()).catch(() => ({ contacts: [] })),
-      fetch('/api/accounting/inventory-items', { headers: h }).then(r => r.json()).catch(() => ({ items: [] })),
-      fetch('/api/accounting/chart-of-accounts', { headers: h }).then(r => r.json()).catch(() => ({ accounts: [] })),
-    ]);
-    const allContacts: Contact[] = [
-      ...((supCust.contacts || []).map((c: any) => ({ ...c, tipe: 'supplier' }))),
-      ...((cust.contacts || []).map((c: any) => ({ ...c, tipe: 'pelanggan' }))),
-    ];
-    setContacts(allContacts);
-    setItems((inv.items || []).map((i: any) => ({
-      id: i.id, nama: i.nama, satuan: i.satuan || 'pcs',
-      hargaSatuan: i.hargaSatuan || i.harga_satuan || 0,
-      qtyAwal: i.qty ?? i.qtyAwal ?? i.qty_awal ?? 0,
-    })));
-    const kasFiltered = (coa.accounts || coa.data || []).filter((a: any) => {
-      const k = (a.kode || '').replace(/\./g, '');
-      return k.startsWith('1101') || k.startsWith('1102') || k.startsWith('110') || k.startsWith('1.1.01') || k.startsWith('1.1.02');
-    });
-    setKasAccounts(kasFiltered.length > 0 ? kasFiltered : (coa.accounts || coa.data || []).filter((a: any) => {
-      const kode = (a.kode || '');
-      return /kas|bank/i.test(a.nama) || /^1\.?1/i.test(kode);
-    }));
+  const fetchAccounts = useCallback(async () => {
+    try {
+      const r = await fetch('/api/accounting/chart-of-accounts', {
+        headers: { Authorization: 'Bearer ' + token() },
+      });
+      const d = await r.json();
+      const all: Account[] = (d.accounts || d.data || []).filter((a: any) =>
+        (a.isPostable ?? a.is_postable ?? true) && (a.isActive ?? a.is_active ?? true)
+      );
+      setAccounts(all);
+    } catch {
+      setAccounts([]);
+    }
     setLoaded(true);
   }, []);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { fetchAccounts(); }, [fetchAccounts]);
 
   const selectTipe = (t: Tipe) => {
     setActiveTipe(t);
@@ -500,7 +466,7 @@ export default function TransaksiCepatPage() {
   const goMenu = () => {
     setView('menu');
     setActiveTipe(null);
-    setLastEntry(null as any);
+    setLastEntry(null);
   };
 
   const onSuccess = (entry: NonNullable<EntryResp['entry']>) => {
@@ -513,51 +479,62 @@ export default function TransaksiCepatPage() {
       {/* Header */}
       <div className="flex items-center gap-3 mb-1">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 text-emerald-600">
-          <Zap size={20} />
+          <Wallet size={20} />
         </div>
         <div className="flex-1">
-          <h2 className="text-lg font-bold text-slate-900">Transaksi Cepat</h2>
-          <p className="text-xs text-slate-500">Catat transaksi harian tanpa perlu tahu debit/kredit</p>
+          <h2 className="text-lg font-bold text-slate-900">Kas &amp; Bank</h2>
+          <p className="text-xs text-slate-500">Catat penerimaan dan pengeluaran kas/bank BUM Desa</p>
         </div>
       </div>
 
-      {/* Menu View */}
-      {view === 'menu' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {(Object.keys(TIPE_META) as Tipe[]).map(t => {
-            const m = TIPE_META[t];
-            const Icon = m.icon;
-            return (
-              <button key={t} onClick={() => selectTipe(t)}
-                className={`${br} p-5 text-left transition hover:shadow-md hover:-translate-y-0.5 group`}>
-                <div className="flex items-start gap-4">
-                  <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${m.grad} shrink-0`}>
-                    <Icon size={22} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-slate-900 mb-0.5">{m.label}</h3>
-                    <p className="text-xs text-slate-500">{m.desc}</p>
-                  </div>
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <span className="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700 group-hover:bg-emerald-100 transition">
-                    Buat Transaksi →
-                  </span>
-                </div>
-              </button>
-            );
-          })}
+      {/* Menu View — Two big cards */}
+      {view === 'menu' && loaded && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          {/* Uang Masuk */}
+          <button onClick={() => selectTipe('uang_masuk')}
+            className={`${br} p-6 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
+            <div className="flex items-center justify-center h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 text-white mb-4 shadow-lg shadow-emerald-500/20">
+              <ArrowDownToLine size={28} />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 mb-1">Uang Masuk</h3>
+            <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wide mb-2">Penerimaan</p>
+            <p className="text-sm text-slate-500 mb-5">
+              Terima uang dari pelanggan, pendapatan, atau sumber lainnya
+            </p>
+            <span className="inline-block rounded-xl bg-emerald-50 px-5 py-2.5 text-sm font-bold text-emerald-700 group-hover:bg-emerald-100 transition">
+              Buat Penerimaan →
+            </span>
+          </button>
+
+          {/* Uang Keluar */}
+          <button onClick={() => selectTipe('uang_keluar')}
+            className={`${br} p-6 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
+            <div className="flex items-center justify-center h-16 w-16 rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 text-white mb-4 shadow-lg shadow-rose-500/20">
+              <ArrowUpFromLine size={28} />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 mb-1">Uang Keluar</h3>
+            <p className="text-[11px] font-semibold text-rose-600 uppercase tracking-wide mb-2">Pengeluaran</p>
+            <p className="text-sm text-slate-500 mb-5">
+              Bayar beban, utang, beli barang, atau pengeluaran lainnya
+            </p>
+            <span className="inline-block rounded-xl bg-rose-50 px-5 py-2.5 text-sm font-bold text-rose-700 group-hover:bg-rose-100 transition">
+              Buat Pengeluaran →
+            </span>
+          </button>
         </div>
+      )}
+
+      {/* Loading */}
+      {!loaded && (
+        <div className="text-center py-12 text-sm text-slate-400">Memuat data akun...</div>
       )}
 
       {/* Form View */}
       {view === 'form' && activeTipe && loaded && (
-        <GuidedForm
+        <TransactionForm
           key={activeTipe + '-' + Date.now()}
           tipe={activeTipe}
-          contacts={contacts}
-          items={items}
-          kasAccounts={kasAccounts}
+          accounts={accounts}
           onSuccess={onSuccess}
           onBack={goMenu}
         />
@@ -573,12 +550,7 @@ export default function TransaksiCepatPage() {
         />
       )}
 
-      {/* Loading */}
-      {!loaded && (
-        <div className="text-center py-12 text-sm text-slate-400">Memuat data...</div>
-      )}
-
-      <p className="text-[10px] text-slate-400 text-right">Transaksi Cepat · auto-jurnal tanpa pengetahuan akuntansi</p>
+      <p className="text-[10px] text-slate-400 text-right">Kas &amp; Bank · penerimaan &amp; pengeluaran BUM Desa</p>
     </div>
   );
 }
