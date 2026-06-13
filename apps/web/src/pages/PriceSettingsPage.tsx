@@ -44,34 +44,48 @@ export default function PriceSettingsPage() {
   ]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('pricing_config');
-    if (saved) setConfig(JSON.parse(saved));
+    // Load from backend first, fallback to localStorage
+    fetch('/api/pricing').then(r => r.json()).then(data => {
+      if (data && data.monthly) setConfig(data);
+    }).catch(() => {
+      const saved = localStorage.getItem('pricing_config');
+      if (saved) setConfig(JSON.parse(saved));
+    });
   }, []);
 
   const effectiveYearly = Math.round(config.monthly * 12 * (1 - config.discountPercent / 100));
   const savings = config.monthly * 12 - effectiveYearly;
 
-  const handleSave = () => {
+  const getToken = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
+
+  const handleSave = async () => {
     setSaving(true);
-    const oldConfig = localStorage.getItem('pricing_config');
-    const oldPrice = oldConfig ? JSON.parse(oldConfig).monthly : DEFAULT_CONFIG.monthly;
-
-    setTimeout(() => {
-      localStorage.setItem('pricing_config', JSON.stringify(config));
-
-      if (oldPrice !== config.monthly) {
+    const oldPrice = config.monthly;
+    try {
+      const res = await fetch('/api/admin/pricing', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
+        body: JSON.stringify(config),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan');
+      if (data.config) setConfig(data.config);
+      localStorage.setItem('pricing_config', JSON.stringify(data.config || config));
+      if (oldPrice !== (data.config?.monthly || config.monthly)) {
         setHistory(prev => [{
           date: new Date().toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
           oldPrice,
-          newPrice: config.monthly,
+          newPrice: data.config?.monthly || config.monthly,
           by: 'admin@silabu.ondesa.id',
         }, ...prev]);
       }
-
-      setSaving(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    }, 800);
+    } catch (e: any) {
+      alert('Gagal menyimpan: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

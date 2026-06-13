@@ -78,15 +78,23 @@ function LanggananPage() {
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [error, setError] = useState('');
+  const [pricingConfig, setPricingConfig] = useState<{ monthly: number; yearly: number; trialDays: number; discountPercent: number } | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
     setLoading(true);
-    fetch('/api/subscription/status', { headers: { Authorization: 'Bearer ' + token } })
-      .then(async r => {
-        const data = await r.json();
-        if (!r.ok || data.error) throw new Error(data.error || 'Gagal memuat status langganan');
-        setSubscription(data);
+    // Fetch pricing config (public) and subscription status (auth) in parallel
+    Promise.all([
+      fetch('/api/pricing').then(r => r.json()).catch(() => null),
+      fetch('/api/subscription/status', { headers: { Authorization: 'Bearer ' + token } })
+        .then(async r => {
+          const data = await r.json();
+          if (!r.ok || data.error) throw new Error(data.error || 'Gagal memuat status langganan');
+          return data;
+        }),
+    ]).then(([pricing, subData]) => {
+      if (pricing && pricing.monthly) setPricingConfig(pricing);
+      setSubscription(subData);
       })
       .catch(e => setError(e.message || 'Gagal memuat status langganan'))
       .finally(() => setLoading(false));
@@ -115,7 +123,7 @@ function LanggananPage() {
   const isActive = status === 'active' || subscription?.active;
   const isExpired = status === 'expired';
   const daysLeft = Math.max(0, subscription?.daysLeft ?? 0);
-  const price = subscription?.price || 1000000;
+  const price = pricingConfig?.yearly || subscription?.price || 1000000;
   const progress = isActive ? Math.max(0, Math.min(100, (daysLeft / 365) * 100)) : status === 'trial' ? Math.max(0, Math.min(100, (daysLeft / 14) * 100)) : 0;
   const payments = subscription?.payments || [];
 
@@ -136,7 +144,7 @@ function LanggananPage() {
                 {isActive ? 'Active' : isExpired ? 'Expired' : 'Trial'}
               </span>
               <h2 className="mt-4 text-xl font-bold text-slate-900">Status Langganan</h2>
-              <p className="mt-1 text-sm text-slate-500">Harga paket: <span className="font-semibold text-slate-700">{formatRupiah(price)}/tahun</span></p>
+              <p className="mt-1 text-sm text-slate-500">Harga: <span className="font-semibold text-slate-700">{formatRupiah(pricingConfig?.monthly || 100000)}/bulan</span> · <span className="text-slate-500">{formatRupiah(price)}/tahun</span></p>
             </div>
             <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-600 px-6 py-5 text-white shadow-lg shadow-emerald-500/20">
               <p className="text-xs font-semibold uppercase tracking-wider text-white/70">Hari tersisa</p>

@@ -5,7 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import path from 'path';
-import { initDatabase } from './db.js';
+import { initDatabase, pool } from './db.js';
 import { authRoutes } from './auth-routes.js';
 import { registerRoutes } from './register-routes.js';
 import { settingsRoutes } from './settings-routes.js';
@@ -41,6 +41,16 @@ app.get('/api/health', async () => ({
   app: 'silabu-digi',
   timestamp: new Date().toISOString(),
 }));
+
+// Public pricing endpoint (no auth)
+app.get('/api/pricing', async () => {
+  const DEFAULT = { monthly: 100000, yearly: 1000000, trialDays: 30, discountPercent: 17, currency: 'IDR', note: '' };
+  try {
+    const r = await pool.query("SELECT value_encrypted FROM app_settings WHERE key='pricing_config'");
+    if (r.rowCount && r.rows[0].value_encrypted) return JSON.parse(r.rows[0].value_encrypted);
+  } catch {}
+  return DEFAULT;
+});
 
 app.listen({ port: PORT, host: '0.0.0.0' }).catch((err) => {
   app.log.error(err);

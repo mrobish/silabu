@@ -429,4 +429,32 @@ export async function adminRoutes(app: FastifyInstance) {
     );
     return { success: true, user: result.rows[0], message: 'Super Admin berhasil dibuat' };
   });
+
+  // ── Pricing Config (app_settings) ──────────────────────────
+  const PRICING_KEY = 'pricing_config';
+  const DEFAULT_PRICING = { monthly: 100000, yearly: 1000000, trialDays: 30, discountPercent: 17, currency: 'IDR', note: '' };
+
+  // GET /admin/pricing — public read (no auth needed for display)
+  app.get('/pricing', async () => {
+    const r = await pool.query('SELECT value_encrypted FROM app_settings WHERE key=$1', [PRICING_KEY]);
+    if (r.rowCount && r.rows[0].value_encrypted) {
+      try { return JSON.parse(r.rows[0].value_encrypted); } catch {}
+    }
+    return DEFAULT_PRICING;
+  });
+
+  // PUT /admin/pricing — super admin only
+  app.put('/pricing', async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as any;
+    if (!body) return reply.code(400).send({ error: 'Body kosong' });
+    const config = { ...DEFAULT_PRICING, ...body };
+    if (typeof config.monthly !== 'number' || config.monthly < 0) return reply.code(400).send({ error: 'Harga bulanan tidak valid' });
+    config.yearly = Math.round(config.monthly * 12 * (1 - config.discountPercent / 100));
+    await pool.query(
+      `INSERT INTO app_settings (key, value_encrypted, updated_at) VALUES ($1, $2, NOW())
+       ON CONFLICT (key) DO UPDATE SET value_encrypted=$2, updated_at=NOW()`,
+      [PRICING_KEY, JSON.stringify(config)]
+    );
+    return { success: true, config };
+  });
 }
