@@ -565,6 +565,10 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
   const [deleteModal, setDeleteModal] = useState<JournalEntry | null>(null);
   const [confirmText, setConfirmText] = useState('');
 
+  // Custom confirmation modals (replace native confirm())
+  const [pendingTemplate, setPendingTemplate] = useState<TemplateDef | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
   // Dropdowns & popovers
   const [openDropdown, setOpenDropdown] = useState<number | null>(null);
   const [openTagPopover, setOpenTagPopover] = useState<number | null>(null);
@@ -806,7 +810,14 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
   // ── Smart Templates ─────────────────────────────────────
   function applyTemplate(tmpl: TemplateDef) {
     const hasData = lines.some(l => l.akun_id || parseCurrencyInput(l.debit) > 0 || parseCurrencyInput(l.kredit) > 0);
-    if (hasData && !confirm('Template akan mengganti baris yang sudah ada. Lanjutkan?')) return;
+    if (hasData) {
+      setPendingTemplate(tmpl);
+      return;
+    }
+    doApplyTemplate(tmpl);
+  }
+
+  function doApplyTemplate(tmpl: TemplateDef) {
     setHeader(prev => ({ ...prev, keterangan: tmpl.keterangan, tanggal: prev.tanggal || today() }));
     const newLines = tmpl.rows.map(r => {
       const account = coaAccounts.find(a => a.kode === r.kode);
@@ -820,6 +831,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
     setTemplateLinks(tmpl.links);
     setActiveTemplate(tmpl.id);
     setTemplateDropdownOpen(false);
+    setPendingTemplate(null);
     try { localStorage.removeItem(getDraftKeyV2()); } catch {}
     showToast('📋 Template "' + tmpl.name + '" diterapkan');
   }
@@ -831,7 +843,15 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
 
   // ── Clear form ──────────────────────────────────────────
   function handleClearForm() {
-    if (!confirm('Yakin kosongkan form? Draft yang tersimpan akan hilang.')) return;
+    const hasData = header.tanggal !== today() || header.no_bukti || header.keterangan || lines.some(l => l.akun_id || l.debit || l.kredit);
+    if (hasData) {
+      setShowClearConfirm(true);
+      return;
+    }
+    doClearForm();
+  }
+
+  function doClearForm() {
     setEditingId(null);
     setEditHeader(emptyHeader());
     setEditLines([]);
@@ -843,6 +863,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
     setFlatRows([emptyFlatRow(), emptyFlatRow()]);
     setBatchMode(false);
     clearTemplate();
+    setShowClearConfirm(false);
     try { localStorage.removeItem(getDraftKeyV2()); localStorage.removeItem(getDraftKeyLegacy()); } catch {}
   }
 
@@ -1572,6 +1593,83 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
               <button type="button" disabled={confirmText !== 'HAPUS' || submitting} onClick={handleDelete}
                 className="flex-1 rounded-2xl bg-red-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-red-500/20 transition hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed">
                 {submitting ? 'Menghapus...' : 'Hapus Jurnal'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Template Confirmation Modal ──────────────────────── */}
+      {pendingTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setPendingTemplate(null)}>
+          <div className="mx-4 w-full max-w-md rounded-3xl border border-white/70 bg-white p-6 shadow-2xl backdrop-blur-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center flex-shrink-0 text-2xl">
+                {pendingTemplate.icon}
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Ganti dengan Template?</h3>
+                <p className="text-sm text-slate-500">Data yang sudah ada akan ditimpa</p>
+              </div>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-4 mb-4 space-y-2">
+              <p className="text-sm font-semibold text-slate-700">Template: <span className="text-emerald-700">{pendingTemplate.name}</span></p>
+              <p className="text-xs text-slate-500">{pendingTemplate.description}</p>
+              <div className="border-t border-slate-200 pt-2 mt-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Akun yang akan diisi:</p>
+                {pendingTemplate.rows.map((r, i) => {
+                  const acc = coaAccounts.find(a => a.kode === r.kode);
+                  return (
+                    <div key={i} className="flex items-center gap-2 text-sm text-slate-600 py-0.5">
+                      <span className="font-mono text-xs text-slate-400 w-20">{r.kode}</span>
+                      <span>{acc?.nama || 'Tidak ditemukan'}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="border-t border-slate-200 pt-2 mt-2">
+                <p className="text-xs text-slate-400">Keterangan otomatis: <span className="font-medium text-slate-600">"{pendingTemplate.keterangan}"</span></p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setPendingTemplate(null)}
+                className="flex-1 rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                Batal
+              </button>
+              <button type="button" onClick={() => doApplyTemplate(pendingTemplate)}
+                className="flex-1 rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl">
+                Ya, Terapkan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Clear Form Confirmation Modal ───────────────────── */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowClearConfirm(false)}>
+          <div className="mx-4 w-full max-w-md rounded-3xl border border-white/70 bg-white p-6 shadow-2xl backdrop-blur-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" className="w-6 h-6 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Kosongkan Form?</h3>
+                <p className="text-sm text-slate-500">Semua data input dan draft tersimpan akan hilang</p>
+              </div>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-start gap-2">
+              <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+              <p className="text-sm text-amber-700">Draft auto-save juga akan dihapus. Anda tidak bisa memulihkan data ini.</p>
+            </div>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setShowClearConfirm(false)}
+                className="flex-1 rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                Batal
+              </button>
+              <button type="button" onClick={doClearForm}
+                className="flex-1 rounded-2xl bg-red-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-red-500/20 transition hover:bg-red-700">
+                Ya, Kosongkan
               </button>
             </div>
           </div>
