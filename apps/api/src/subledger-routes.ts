@@ -584,7 +584,7 @@ export async function subledgerRoutes(app: FastifyInstance) {
       let lineSql = `
         SELECT je.tanggal, je.no_jurnal AS "noJurnal", je.keterangan AS "entryKeterangan",
                je.referensi, je.tipetransaksi AS "tipeTransaksi",
-               jl.debit, jl.kredit, jl.keterangan AS "lineKeterangan"
+               jl.debit, jl.kredit, jl.keterangan AS "lineKeterangan", jl.qty
         FROM journal_lines jl
         JOIN journal_entries je ON je.id = jl.entry_id
         WHERE je.tenant_id=$1 AND jl.inventory_item_id=$2`;
@@ -597,18 +597,30 @@ export async function subledgerRoutes(app: FastifyInstance) {
       const linesRes = await pool.query(lineSql, lineParams);
 
       const saldoAwal = Number(item.saldoAwal);
+      const qtyAwal = Number(item.qtyAwal);
       let running = saldoAwal; // Persediaan = debit normal
+      let qtyRunning = qtyAwal; // Running quantity
       const transactions = linesRes.rows.map((l: any) => {
-        running += Number(l.debit) - Number(l.kredit);
+        const debit = Number(l.debit);
+        const kredit = Number(l.kredit);
+        const lineQty = l.qty ? Number(l.qty) : 0;
+        running += debit - kredit;
+        // Debit = barang masuk (qty +), Kredit = barang keluar (qty -)
+        if (debit > 0) qtyRunning += lineQty;
+        else if (kredit > 0) qtyRunning -= lineQty;
         return {
           tanggal: l.tanggal,
           noJurnal: l.noJurnal,
           keterangan: l.lineKeterangan || l.entryKeterangan,
           referensi: l.referensi,
           tipeTransaksi: l.tipeTransaksi,
-          debit: Number(l.debit),
-          kredit: Number(l.kredit),
+          debit,
+          kredit,
+          qty: lineQty,
+          qtyMasuk: debit > 0 ? lineQty : 0,
+          qtyKeluar: kredit > 0 ? lineQty : 0,
           saldo: running,
+          qtySaldo: qtyRunning,
         };
       });
 
@@ -623,6 +635,7 @@ export async function subledgerRoutes(app: FastifyInstance) {
         akunNama: item.akunNama,
         saldoAwal,
         saldoAkhir: running,
+        qtyAkhir: qtyRunning,
         transactions,
       });
     }

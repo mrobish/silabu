@@ -361,9 +361,9 @@ export async function accountingRoutes(app: FastifyInstance) {
 
       for (const l of lines) {
         await client.query(
-          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, contact_id, inventory_item_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [entryId, l.akun_id, String(l.debit || '0'), String(l.kredit || '0'), l.keterangan || null, l.contact_id || null, l.inventory_item_id || null]
+          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, contact_id, inventory_item_id, qty)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [entryId, l.akun_id, String(l.debit || '0'), String(l.kredit || '0'), l.keterangan || null, l.contact_id || null, l.inventory_item_id || null, l.qty || null]
         );
       }
 
@@ -504,9 +504,9 @@ export async function accountingRoutes(app: FastifyInstance) {
 
         for (const r of groupRows) {
           await client.query(
-            `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, contact_id, inventory_item_id)
-             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-            [entryId, r.akun_id, String(r.debit || '0'), String(r.kredit || '0'), r.keterangan || null, r.contact_id || null, r.inventory_item_id || null]
+            `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, contact_id, inventory_item_id, qty)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [entryId, r.akun_id, String(r.debit || '0'), String(r.kredit || '0'), r.keterangan || null, r.contact_id || null, r.inventory_item_id || null, r.qty || null]
           );
         }
 
@@ -602,6 +602,7 @@ export async function accountingRoutes(app: FastifyInstance) {
         unitUsaha: l.unit_usaha,
         contactId: l.contact_id || null,
         inventoryItemId: l.inventory_item_id || null,
+        qty: l.qty || null,
       })),
     }));
 

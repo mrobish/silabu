@@ -42,6 +42,9 @@ interface Row {
   debit: string;
   kredit: string;
   searchTerm: string;
+  contact_id: string;
+  inventory_item_id: string;
+  qty: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -76,7 +79,7 @@ function makeRowId(): string {
 }
 
 function emptyRow(): Row {
-  return { id: makeRowId(), tanggal: '', no_bukti: '', keterangan: '', akun_id: '', debit: '', kredit: '', searchTerm: '' };
+  return { id: makeRowId(), tanggal: '', no_bukti: '', keterangan: '', akun_id: '', debit: '', kredit: '', searchTerm: '', contact_id: '', inventory_item_id: '', qty: '' };
 }
 
 function today(): string {
@@ -182,10 +185,14 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [openDropdown, setOpenDropdown] = useState<number | null>(null);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [openTagPopover, setOpenTagPopover] = useState<number | null>(null);
 
   // Focus management
   const refMap = useRef<Map<string, HTMLInputElement | null>>(new Map());
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const tagPopoverRef = useRef<HTMLDivElement | null>(null);
 
   function setRef(key: string, el: HTMLInputElement | null) {
     refMap.current.set(key, el);
@@ -212,11 +219,15 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
     Promise.all([
       fetch('/api/accounting/coa', { headers: { Authorization: 'Bearer ' + t } }).then(r => r.json()),
       fetch('/api/accounting/jurnal-umum?limit=20', { headers: { Authorization: 'Bearer ' + t } }).then(r => r.json()),
+      fetch('/api/accounting/contacts', { headers: { Authorization: 'Bearer ' + t } }).then(r => r.json()).catch(() => ({ contacts: [] })),
+      fetch('/api/accounting/inventory-items', { headers: { Authorization: 'Bearer ' + t } }).then(r => r.json()).catch(() => ({ items: [] })),
     ])
-      .then(([coaData, jurnalData]) => {
+      .then(([coaData, jurnalData, contactData, itemData]) => {
         const all: CoAAccount[] = (Array.isArray(coaData) ? coaData : coaData.coa || coaData.accounts || []);
         setCoaAccounts(all.filter((a: CoAAccount) => a.isPostable ?? a.is_postable));
         setEntries(Array.isArray(jurnalData) ? jurnalData : jurnalData.entries || jurnalData.data || []);
+        setContacts(Array.isArray(contactData) ? contactData : contactData.contacts || []);
+        setInventoryItems(Array.isArray(itemData) ? itemData : itemData.items || []);
       })
       .catch(e => setError(e.message || 'Gagal memuat data'))
       .finally(() => {
@@ -240,6 +251,9 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
     function handleClick(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setOpenDropdown(null);
+      }
+      if (tagPopoverRef.current && !tagPopoverRef.current.contains(e.target as Node)) {
+        setOpenTagPopover(null);
       }
     }
     document.addEventListener('mousedown', handleClick);
@@ -405,6 +419,9 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
       debit: type === 'penerimaan' ? '' : '',
       kredit: type === 'pengeluaran' ? '' : '',
       searchTerm: bankSearch,
+      contact_id: '',
+      inventory_item_id: '',
+      qty: '',
     };
     const newRow2 = emptyRow();
 
@@ -468,6 +485,9 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
           akun_id: r.akun_id,
           debit: parseCurrencyInput(r.debit),
           kredit: parseCurrencyInput(r.kredit),
+          contact_id: r.contact_id || undefined,
+          inventory_item_id: r.inventory_item_id || undefined,
+          qty: r.qty ? parseFloat(r.qty) : undefined,
         };
       });
 
@@ -1007,6 +1027,119 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
 
                       {/* Aksi */}
                       <div className="flex items-center justify-center gap-1">
+                        {/* Tag button */}
+                        <div className="relative" ref={openTagPopover === i ? tagPopoverRef : undefined}>
+                          <button type="button" onClick={() => setOpenTagPopover(openTagPopover === i ? null : i)}
+                            className={"w-7 h-7 flex items-center justify-center rounded-lg transition text-xs font-bold relative " + (
+                              (row.contact_id || row.inventory_item_id)
+                                ? 'bg-emerald-50 text-emerald-500 hover:bg-emerald-100'
+                                : 'bg-slate-50 text-slate-300 hover:bg-slate-100 hover:text-slate-500'
+                            )} title="Tag kontak/persediaan">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}>
+                              <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
+                              <line x1="7" y1="7" x2="7.01" y2="7" />
+                            </svg>
+                            {row.contact_id && (
+                              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-blue-500 ring-1 ring-white" />
+                            )}
+                            {row.inventory_item_id && (
+                              <span className={"absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500 ring-1 ring-white" + (row.contact_id ? ' -right-0.5' : '')} />
+                            )}
+                          </button>
+                          {/* Tag Popover */}
+                          {openTagPopover === i && (
+                            <div className="absolute z-50 top-full right-0 mt-1 w-[280px] bg-white rounded-xl shadow-xl border border-slate-200 p-3 space-y-3">
+                              {/* Contact Section */}
+                              <div>
+                                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" /></svg>
+                                  Kontak (Opsional)
+                                </label>
+                                <div className="relative">
+                                  <select
+                                    value={row.contact_id}
+                                    onChange={e => updateRow(i, 'contact_id', e.target.value)}
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none pr-7 appearance-none"
+                                  >
+                                    <option value="">— Pilih Kontak —</option>
+                                    {contacts.map((c: any) => (
+                                      <option key={c.id} value={c.id}>{c.nama} ({c.tipe})</option>
+                                    ))}
+                                  </select>
+                                  {row.contact_id && (
+                                    <button type="button" onClick={() => updateRow(i, 'contact_id', '')}
+                                      className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-red-100 hover:text-red-500 transition">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Inventory Section */}
+                              <div>
+                                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" /><polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" /></svg>
+                                  Persediaan (Opsional)
+                                </label>
+                                <div className="relative">
+                                  <select
+                                    value={row.inventory_item_id}
+                                    onChange={e => updateRow(i, 'inventory_item_id', e.target.value)}
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none pr-7 appearance-none"
+                                  >
+                                    <option value="">— Pilih Barang —</option>
+                                    {inventoryItems.map((item: any) => (
+                                      <option key={item.id} value={item.id}>{item.nama} ({item.kode}) — {item.satuan}</option>
+                                    ))}
+                                  </select>
+                                  {row.inventory_item_id && (
+                                    <button type="button" onClick={() => { updateRow(i, 'inventory_item_id', ''); updateRow(i, 'qty', ''); }}
+                                      className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-red-100 hover:text-red-500 transition">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* QTY Section - only when inventory item selected */}
+                              {row.inventory_item_id && (
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                                    Jumlah Barang
+                                  </label>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="number"
+                                      inputMode="numeric"
+                                      placeholder="0"
+                                      value={row.qty}
+                                      onChange={e => updateRow(i, 'qty', e.target.value)}
+                                      className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 placeholder-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                                      min="0"
+                                      step="any"
+                                    />
+                                    {(() => {
+                                      const debitVal = parseCurrencyInput(row.debit);
+                                      const kreditVal = parseCurrencyInput(row.kredit);
+                                      if (debitVal > 0) {
+                                        return <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Barang Masuk</span>;
+                                      } else if (kreditVal > 0) {
+                                        return <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700">Barang Keluar</span>;
+                                      }
+                                      return <span className="text-[10px] text-slate-400 italic">Isi Debit/Kredit dulu</span>;
+                                    })()}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Close button */}
+                              <button type="button" onClick={() => setOpenTagPopover(null)}
+                                className="w-full py-1.5 text-xs font-semibold text-slate-400 hover:text-slate-600 transition rounded-lg hover:bg-slate-50">
+                                Tutup
+                              </button>
+                            </div>
+                          )}
+                        </div>
                         {/* Insert row */}
                         <button type="button" onClick={() => addRow(i)} disabled={rows.length >= 50}
                           className="w-7 h-7 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-500 hover:bg-emerald-100 transition text-xs font-bold disabled:opacity-30" title="Sisipkan baris">
