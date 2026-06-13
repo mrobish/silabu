@@ -464,6 +464,7 @@ const DetailRowInner = React.memo(function DetailRowInner({
             <button
               type="button"
               onClick={() => onAutoFill(index)}
+              data-help-target="btn-auto-balance"
               className="flex-shrink-0 w-7 h-7 rounded-lg bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition text-xs font-bold flex items-center justify-center"
               title={`Isi selisih: ${formatRupiah(selisih)}`}
             >⚡</button>

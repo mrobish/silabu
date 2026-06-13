@@ -12,28 +12,22 @@ import { tutupBukuHelp } from './tutup-buku';
 import { pengaturanHelp } from './pengaturan';
 
 const helpRegistry: Record<string, HelpDoc> = {
-  '/': dashboardHelp,
-  '/jurnal-umum': jurnalUmumHelp,
-  '/pos': posHelp,
-  '/persediaan': inventoryHelp,
-  '/buku-kas': bukuKasHelp,
-  '/neraca-saldo': neracaSaldoHelp,
-  '/laba-rugi': labaRugiHelp,
-  '/neraca': neracaHelp,
-  '/perubahan-modal': perubahanModalHelp,
-  '/tutup-buku': tutupBukuHelp,
-  '/pengaturan': pengaturanHelp,
+  'dashboard': dashboardHelp,
+  'jurnal': jurnalUmumHelp,
+  'penjualan': posHelp,
+  'persediaan': inventoryHelp,
+  'arus-kas': bukuKasHelp,
+  'neraca-saldo': neracaSaldoHelp,
+  'laba-rugi': labaRugiHelp,
+  'neraca': neracaHelp,
+  'perubahan-modal': perubahanModalHelp,
+  'tutup-buku': tutupBukuHelp,
+  'pengaturan': pengaturanHelp,
 };
 
-export function getHelpDoc(pathname: string): HelpDoc {
-  return helpRegistry[pathname] || {
-    title: '📖 Pusat Bantuan',
-    sections: [
-      {
-        icon: '💡',
-        title: 'Halaman Ini',
-        content: 'Panduan untuk halaman ini belum tersedia. Hubungi admin untuk informasi lebih lanjut.',
-      },
-    ],
+export function getHelpDoc(pageName: string): HelpDoc {
+  return helpRegistry[pageName] || {
+    title: '📘 Pusat Bantuan',
+    sections: [],
   };
 }

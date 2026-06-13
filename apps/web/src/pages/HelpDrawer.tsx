@@ -1,11 +1,9 @@
-import { useLocation } from 'react-router-dom';
 import { useHelp } from './HelpContext';
 import { getHelpDoc } from '../content/help-docs';
 
 export default function HelpDrawer() {
-  const { isOpen, closeHelp } = useHelp();
-  const location = useLocation();
-  const doc = getHelpDoc(location.pathname);
+  const { isOpen, closeHelp, helpPage } = useHelp();
+  const doc = getHelpDoc(helpPage);
 
   if (!isOpen) return null;
 
@@ -25,18 +23,22 @@ export default function HelpDrawer() {
           </button>
         </div>
 
-        {/* Content — dynamically rendered from help-docs registry */}
+        {/* Content */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-          {doc.sections.map((section, i) => (
-            <div key={i}>
-              <h4 className="font-bold text-slate-900 text-sm mb-2">
-                {section.icon} {section.title}
-              </h4>
-              <div className="text-sm text-slate-600 leading-relaxed">
-                {section.content}
+          {doc.sections.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-8">Panduan untuk halaman ini belum tersedia.</p>
+          ) : (
+            doc.sections.map((section, i) => (
+              <div key={i}>
+                <h4 className="font-bold text-slate-900 text-sm mb-2">
+                  {section.icon} {section.title}
+                </h4>
+                <div className="text-sm text-slate-600 leading-relaxed">
+                  {section.content}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
         {/* Footer */}

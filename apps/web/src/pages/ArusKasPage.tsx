@@ -115,7 +115,7 @@ export default function ArusKasPage() {
       {/* Filter */}
       <div className={`${br} p-5 relative z-10`}>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-2" data-help-target="filter-periode">
             <DateRangePicker
               startDate={start}
               endDate={end}
@@ -150,7 +150,7 @@ export default function ArusKasPage() {
           </div>
 
           {/* Ringkasan Kas */}
-          <div className="rounded-3xl bg-gradient-to-br from-emerald-600 to-cyan-600 p-5 text-white shadow-xl shadow-emerald-500/20">
+          <div className="rounded-3xl bg-gradient-to-br from-emerald-600 to-cyan-600 p-5 text-white shadow-xl shadow-emerald-500/20" data-help-target="saldo-kas">
             <div className="flex items-center gap-2 mb-4">
               <DollarSign size={18} />
               <h3 className="text-sm font-bold">Ringkasan Kas</h3>

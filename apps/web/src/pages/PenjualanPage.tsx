@@ -472,6 +472,7 @@ export default function PenjualanPage({ setPage }: { setPage: (p: any) => void }
                 if (selectedItemId) setSelectedItemId('');
               }}
               placeholder="Cari barang..."
+              data-help-target="pos-search"
               className={`${inputCls} pl-9`}
             />
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -540,6 +541,7 @@ export default function PenjualanPage({ setPage }: { setPage: (p: any) => void }
               value={qty}
               onChange={e => setQty(e.target.value)}
               placeholder="0"
+              data-help-target="pos-qty"
               className={inputCls}
             />
           </div>
@@ -663,6 +665,7 @@ export default function PenjualanPage({ setPage }: { setPage: (p: any) => void }
         <button
           onClick={handleSubmit}
           disabled={saving || cart.length === 0}
+          data-help-target="btn-bayar"
           className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-3 text-sm font-bold text-white shadow-lg hover:shadow-xl disabled:opacity-40 transition flex items-center justify-center gap-2"
         >
           {saving ? (

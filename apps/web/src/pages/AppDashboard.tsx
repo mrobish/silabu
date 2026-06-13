@@ -1465,6 +1465,13 @@ function SaldoAwalPage({ setPage }: { setPage: (p: Page) => void }) {
   );
 }
 
+// ─── Sync helpPage with current page ─────────────────────
+function HelpPageSync({ page }: { page: string }) {
+  const { setHelpPage } = useHelp();
+  useEffect(() => { setHelpPage(page); }, [page]);
+  return null;
+}
+
 // ─── Help Button (must be inside HelpProvider) ─────────────
 function HelpButton() {
   const { toggleHelp } = useHelp();
@@ -1607,6 +1614,7 @@ export default function AppDashboard() {
 
   return (
     <HelpProvider>
+    <HelpPageSync page={page} />
     <div className="min-h-screen bg-slate-50">
       {/* Mobile overlay */}
       {sidebarOpen && (
