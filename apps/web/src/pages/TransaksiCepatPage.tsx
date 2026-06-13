@@ -524,6 +524,74 @@ export default function TransaksiCepatPage() {
         </div>
       )}
 
+      {/* Quick Transactions Section */}
+      {view === 'menu' && loaded && (
+        <div className="mt-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500/20 to-indigo-500/20 text-blue-600">
+              <CheckCircle size={16} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Transaksi Cepat</h3>
+              <p className="text-xs text-slate-500">Panduan otomatis untuk transaksi umum</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Bayar Utang */}
+            <button onClick={() => {/* TODO: implement bayar_utang form */}}
+              className={`${br} p-5 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
+              <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 text-white mb-3 shadow-lg shadow-orange-500/20">
+                <ArrowUpFromLine size={22} />
+              </div>
+              <h4 className="text-sm font-bold text-slate-900 mb-1">Bayar Utang</h4>
+              <p className="text-[11px] text-slate-500 mb-3">Bayar tagihan ke supplier</p>
+              <span className="inline-block rounded-lg bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 group-hover:bg-orange-100 transition">
+                Bayar →
+              </span>
+            </button>
+
+            {/* Terima Piutang */}
+            <button onClick={() => {/* TODO: implement terima_piutang form */}}
+              className={`${br} p-5 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
+              <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white mb-3 shadow-lg shadow-teal-500/20">
+                <ArrowDownToLine size={22} />
+              </div>
+              <h4 className="text-sm font-bold text-slate-900 mb-1">Terima Piutang</h4>
+              <p className="text-[11px] text-slate-500 mb-3">Terima pembayaran dari pelanggan</p>
+              <span className="inline-block rounded-lg bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 group-hover:bg-teal-100 transition">
+                Terima →
+              </span>
+            </button>
+
+            {/* Beli Persediaan */}
+            <button onClick={() => {/* TODO: implement beli_persediaan form */}}
+              className={`${br} p-5 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
+              <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white mb-3 shadow-lg shadow-blue-500/20">
+                <Landmark size={22} />
+              </div>
+              <h4 className="text-sm font-bold text-slate-900 mb-1">Beli Persediaan</h4>
+              <p className="text-[11px] text-slate-500 mb-3">Catat pembelian barang/stok</p>
+              <span className="inline-block rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 group-hover:bg-blue-100 transition">
+                Beli →
+              </span>
+            </button>
+
+            {/* Jual Persediaan */}
+            <button onClick={() => {/* TODO: implement jual_persediaan form */}}
+              className={`${br} p-5 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
+              <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 text-white mb-3 shadow-lg shadow-purple-500/20">
+                <Wallet size={22} />
+              </div>
+              <h4 className="text-sm font-bold text-slate-900 mb-1">Jual Persediaan</h4>
+              <p className="text-[11px] text-slate-500 mb-3">Catat penjualan barang/stok</p>
+              <span className="inline-block rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 group-hover:bg-purple-100 transition">
+                Jual →
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Loading */}
       {!loaded && (
         <div className="text-center py-12 text-sm text-slate-400">Memuat data akun...</div>
@@ -550,7 +618,7 @@ export default function TransaksiCepatPage() {
         />
       )}
 
-      <p className="text-[10px] text-slate-400 text-right">Kas &amp; Bank · penerimaan &amp; pengeluaran BUM Desa</p>
+      <p className="text-[10px] text-slate-400 text-right">Transaksi Cepat · penerimaan, pengeluaran, dan transaksi umum BUM Desa</p>
     </div>
   );
 }
