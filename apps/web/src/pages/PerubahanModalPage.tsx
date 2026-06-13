@@ -125,7 +125,7 @@ export default function PerubahanModalPage() {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 <tr className="bg-slate-50/40">
-                  <td className="px-4 py-3 font-semibold text-slate-800">Modal Awal per 1 Januari {tahun}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-800">Modal Awal per {fmtIdDate(startDate)}</td>
                   <R v={data.modalAwal} bold />
                 </tr>
                 <tr>
@@ -139,7 +139,7 @@ export default function PerubahanModalPage() {
                   </tr>
                 ))}
                 <tr>
-                  <td className="px-4 py-3 pl-8 text-slate-600">(+) Laba Bersih Tahun {tahun}</td>
+                  <td className="px-4 py-3 pl-8 text-slate-600">(+) Laba Bersih Periode</td>
                   <R v={data.labaBersih} />
                 </tr>
                 <tr className="bg-slate-50/30">
@@ -161,7 +161,7 @@ export default function PerubahanModalPage() {
                   </tr>
                 ))}
                 <tr className="bg-emerald-50/50 border-t-2 border-emerald-200">
-                  <td className="px-4 py-4 font-bold text-emerald-800 text-base">Modal Akhir per 31 Desember {tahun}</td>
+                  <td className="px-4 py-4 font-bold text-emerald-800 text-base">Modal Akhir per {fmtIdDate(endDate)}</td>
                   <td className="px-4 py-4 text-right font-bold text-emerald-800 text-base tabular-nums">{formatRupiah(data.modalAkhir)}</td>
                 </tr>
               </tbody>
@@ -191,7 +191,7 @@ export default function PerubahanModalPage() {
 
       {/* Print Layout */}
       {data && (
-        <ReportPrintLayout title={`Laporan Perubahan Modal Tahun ${data.tahun}`} isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={`Per 31 Desember ${data.tahun}`}>
+        <ReportPrintLayout title={`Laporan Perubahan Modal`} isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={`${fmtIdDate(startDate)} s.d ${fmtIdDate(endDate)}`}>
           <table className="w-full text-[11px] border-collapse">
             <thead>
               <tr className="border-b-2 border-slate-300">
@@ -200,11 +200,11 @@ export default function PerubahanModalPage() {
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b border-slate-200"><td className="py-1.5 font-semibold">Modal Awal per 1 Januari {data.tahun}</td><td className="text-right py-1.5 tabular-nums">{formatRupiah(data.modalAwal)}</td></tr>
+              <tr className="border-b border-slate-200"><td className="py-1.5 font-semibold">Modal Awal per {fmtIdDate(startDate)}</td><td className="text-right py-1.5 tabular-nums">{formatRupiah(data.modalAwal)}</td></tr>
               <tr className="border-b border-slate-100"><td className="py-1.5 pl-4">(+) Tambahan Modal</td><td className="text-right py-1.5 tabular-nums">{formatRupiah(data.tambahanModal)}</td></tr>
-              <tr className="border-b border-slate-100"><td className="py-1.5 pl-4">(+) Laba Bersih Tahun {data.tahun}</td><td className="text-right py-1.5 tabular-nums">{formatRupiah(data.labaBersih)}</td></tr>
+              <tr className="border-b border-slate-100"><td className="py-1.5 pl-4">(+) Laba Bersih Periode</td><td className="text-right py-1.5 tabular-nums">{formatRupiah(data.labaBersih)}</td></tr>
               <tr className="border-b border-slate-100"><td className="py-1.5 pl-4">(−) Prive / Penarikan Modal</td><td className="text-right py-1.5 tabular-nums text-red-600">({formatRupiah(data.prive)})</td></tr>
-              <tr className="border-t-2 border-slate-300 bg-emerald-50/50"><td className="py-2 font-bold">Modal Akhir per 31 Desember {data.tahun}</td><td className="text-right py-2 font-bold tabular-nums">{formatRupiah(data.modalAkhir)}</td></tr>
+              <tr className="border-t-2 border-slate-300 bg-emerald-50/50"><td className="py-2 font-bold">Modal Akhir per {fmtIdDate(endDate)}</td><td className="text-right py-2 font-bold tabular-nums">{formatRupiah(data.modalAkhir)}</td></tr>
             </tbody>
           </table>
         </ReportPrintLayout>
