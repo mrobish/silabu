@@ -288,6 +288,7 @@ function ProfilPage({ setPage }: { setPage: (p: Page) => void }) {
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Gagal upload logo');
       setLogoFile(null);
+      if (data.logo_url) setLogoPreview(data.logo_url);
       setMessage({ type: 'success', text: 'Logo berhasil diupload' });
     } catch (e: any) {
       setMessage({ type: 'error', text: e.message || 'Gagal upload logo' });

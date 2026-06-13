@@ -80,7 +80,7 @@ export async function tenantRoutes(app: FastifyInstance) {
     if (buffer.length > 2 * 1024 * 1024) return { error: 'Ukuran maksimal 2MB' };
     await fs.writeFile(path.join(LOGO_DIR, filename), buffer);
 
-    const logoUrl = `${APP_URL}/uploads/logos/${filename}`;
+    const logoUrl = `/uploads/logos/${filename}`;
     await pool.query('UPDATE tenants SET logo_url=$1, updated_at=now() WHERE id=$2', [logoUrl, a.tenantId]);
     return { success: true, logo_url: logoUrl };
   });
