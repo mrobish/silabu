@@ -287,7 +287,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const body = req.body as any;
     if (!body) return reply.status(400).send({ error: 'Body request kosong' });
 
-    const { tanggal, keterangan, referensi, lines, tipeTransaksi } = body;
+    const { tanggal, keterangan, referensi, lines, tipeTransaksi, idempotency_key } = body;
     // Allow GENERAL (default) and ADJUSTMENT
     const journalType = (tipeTransaksi === 'ADJUSTMENT') ? 'ADJUSTMENT' : 'GENERAL';
 
@@ -318,11 +318,11 @@ export async function accountingRoutes(app: FastifyInstance) {
       if (debit > 0 && kredit > 0) return reply.status(400).send({ error: 'Satu baris hanya boleh debit ATAU kredit, tidak keduanya' });
     }
 
-    // Validate debit = credit
-    const totalDebit = lines.reduce((s: number, l: any) => s + parseFloat(l.debit || '0'), 0);
-    const totalKredit = lines.reduce((s: number, l: any) => s + parseFloat(l.kredit || '0'), 0);
-    if (Math.abs(totalDebit - totalKredit) > 0.01) {
-      return reply.status(400).send({ error: `Total debit (${totalDebit}) tidak sama dengan total kredit (${totalKredit})` });
+    // Validate debit = credit (zero tolerance — satu perak pun ditolak)
+    const totalDebit = lines.reduce((s: number, l: any) => s + Math.round(parseFloat(l.debit || '0') * 100), 0) / 100;
+    const totalKredit = lines.reduce((s: number, l: any) => s + Math.round(parseFloat(l.kredit || '0') * 100), 0) / 100;
+    if (totalDebit !== totalKredit) {
+      return reply.status(400).send({ error: `Total debit (${totalDebit.toLocaleString('id-ID')}) tidak sama dengan total kredit (${totalKredit.toLocaleString('id-ID')})` });
     }
 
     // Validate all akun belong to tenant, are active, and isPostable
@@ -340,6 +340,22 @@ export async function accountingRoutes(app: FastifyInstance) {
       if (!(row as any).isPostable) return reply.status(400).send({ error: `Akun ${(row as any).kode} tidak dapat diposting` });
     }
 
+    // Idempotency check — prevent double submit
+    if (idempotency_key) {
+      const dup = await pool.query(
+        `SELECT id, no_jurnal AS "noJurnal", tanggal, keterangan FROM journal_entries
+         WHERE tenant_id=$1 AND idempotency_key=$2 AND created_at > NOW() - INTERVAL '10 minutes'
+         LIMIT 1`,
+        [a.tenantId, idempotency_key]
+      );
+      if (dup.rowCount) {
+        const existingLines = await pool.query(
+          `SELECT * FROM journal_lines WHERE entry_id=$1 ORDER BY created_at`, [dup.rows[0].id]
+        );
+        return { idempotent: true, jurnal: { ...dup.rows[0], lines: existingLines.rows } };
+      }
+    }
+
     // Generate no_jurnal and ensure period
     const no_jurnal = await nextJurnalNo(a.tenantId!, tahun, bulan);
     await ensurePeriod(a.tenantId!, tahun);
@@ -352,10 +368,10 @@ export async function accountingRoutes(app: FastifyInstance) {
 
       const entryRes = await client.query(
         `INSERT INTO journal_entries
-           (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, referensi, tipeTransaksi, isPosted, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9)
+           (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, referensi, tipeTransaksi, isPosted, created_by, idempotency_key)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$10)
          RETURNING id`,
-        [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan || null, referensi || null, journalType, a.userId]
+        [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan || null, referensi || null, journalType, a.userId, idempotency_key || null]
       );
       const entryId = entryRes.rows[0].id as string;
 
@@ -393,7 +409,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const body = req.body as any;
     if (!body) return reply.status(400).send({ error: 'Body request kosong' });
 
-    const { rows } = body;
+    const { rows, idempotency_key } = body;
     if (!rows || !Array.isArray(rows) || rows.length < 2) {
       return reply.status(400).send({ error: 'Minimal 2 baris jurnal' });
     }
@@ -446,11 +462,13 @@ export async function accountingRoutes(app: FastifyInstance) {
     for (const [key, groupRows] of groups) {
       const gDebit = groupRows.reduce((s: number, r: any) => s + parseFloat(r.debit || '0'), 0);
       const gKredit = groupRows.reduce((s: number, r: any) => s + parseFloat(r.kredit || '0'), 0);
-      if (Math.abs(gDebit - gKredit) > 0.01) {
+      const gDebitRounded = Math.round(gDebit * 100) / 100;
+      const gKreditRounded = Math.round(gKredit * 100) / 100;
+      if (gDebitRounded !== gKreditRounded) {
         const tanggal = groupRows[0]?.tanggal || '?';
         const noBukti = groupRows[0]?.no_bukti || '(tanpa bukti)';
         return reply.status(400).send({
-          error: `Jurnal "${noBukti}" tanggal ${tanggal} tidak balance. Debit: ${gDebit}, Kredit: ${gKredit}`,
+          error: `Jurnal "${noBukti}" tanggal ${tanggal} tidak balance. Debit: ${gDebitRounded.toLocaleString('id-ID')}, Kredit: ${gKreditRounded.toLocaleString('id-ID')}`,
           code: 'GROUP_NOT_BALANCED'
         });
       }
@@ -474,12 +492,29 @@ export async function accountingRoutes(app: FastifyInstance) {
       }
     }
 
+    // Idempotency check — prevent double submit
+    if (idempotency_key) {
+      const dup = await pool.query(
+        `SELECT id, no_jurnal AS "noJurnal", tanggal, keterangan FROM journal_entries
+         WHERE tenant_id=$1 AND idempotency_key=$2 AND created_at > NOW() - INTERVAL '10 minutes'
+         LIMIT 1`,
+        [a.tenantId, idempotency_key]
+      );
+      if (dup.rowCount) {
+        const existingLines = await pool.query(
+          `SELECT * FROM journal_lines WHERE entry_id=$1 ORDER BY created_at`, [dup.rows[0].id]
+        );
+        return { idempotent: true, jurnal: { ...dup.rows[0], lines: existingLines.rows } };
+      }
+    }
+
     // Transaction: create one journal entry per group
     const client = await pool.connect();
     const createdEntries: any[] = [];
     try {
       await client.query('BEGIN');
 
+      let isFirstGroup = true;
       for (const [key, groupRows] of groups) {
         const tanggal = groupRows[0].tanggal;
         const [tahunStr, bulanStr] = tanggal.split('-');
@@ -494,10 +529,10 @@ export async function accountingRoutes(app: FastifyInstance) {
 
         const entryRes = await client.query(
           `INSERT INTO journal_entries
-             (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, referensi, tipeTransaksi, isPosted, created_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,'GENERAL',true,$8)
+             (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, referensi, tipeTransaksi, isPosted, created_by, idempotency_key)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'GENERAL',true,$8,$9)
            RETURNING id, no_jurnal AS "noJurnal"`,
-          [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan, noBukti, a.userId]
+          [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan, noBukti, a.userId, isFirstGroup ? (idempotency_key || null) : null]
         );
         const entryId = entryRes.rows[0].id as string;
         const entryNoJurnal = entryRes.rows[0].noJurnal as string;
@@ -519,6 +554,7 @@ export async function accountingRoutes(app: FastifyInstance) {
           lineCount: groupRows.length,
           total: totalDebit,
         });
+        isFirstGroup = false;
       }
 
       await client.query('COMMIT');
@@ -1509,7 +1545,9 @@ export async function accountingRoutes(app: FastifyInstance) {
     const lr = await computeLabaRugi(a.tenantId as string, startDate, endDate);
     const labaBersih = lr.labaBersih;
 
-    // 2. Modal Awal: saldo Gol 3 dari OPENING_BALANCE entries atau saldo awal
+    // 2. Modal Awal: saldo Gol 3 dari SEMUA entries SEBELUM periode berjalan
+    //    Termasuk OPENING_BALANCE (apapun tanggalnya) + jurnal umum dari tahun sebelumnya
+    //    + CLOSING dari tahun sebelumnya (Laba Ditahan / Retained Earnings)
     const modalAwalRes = await pool.query(
       `SELECT COALESCE(SUM(
          CASE WHEN c.saldonormal = 'D'
@@ -1523,14 +1561,20 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_lines jl
          JOIN journal_entries je ON je.id = jl.entry_id
               AND je.tenant_id = $1
-              AND je.tipetransaksi = 'OPENING_BALANCE'
+              AND (
+                je.tipetransaksi = 'OPENING_BALANCE'
+                OR je.tanggal < $2
+              )
        ) m ON m.akun_id = c.id
        WHERE c.tenant_id = $1 AND c.ispostable = true AND LEFT(c.kode,1) = '3'`,
-      [a.tenantId]
+      [a.tenantId, startDate]
     );
     const modalAwal = Number(modalAwalRes.rows[0]?.saldo || 0);
 
-    // 3. Mutasi Gol 3 selama tahun berjalan (EXCLUDE OPENING_BALANCE dan CLOSING)
+    // 3. Mutasi Gol 3 selama tahun berjalan (EXCLUDE OPENING_BALANCE only)
+    //    Termasuk CLOSING — karena CLOSING mentransfer Laba ke Saldo Laba (Gol 3),
+    //    dan Laba Rugi (computeLabaRugi) sudah memasukkan efek CLOSING,
+    //    jadi CLOSING credit ke Saldo Laba harus masuk Tambahan Modal agar balanced.
     //    Tambahan Modal = kredit bersih positif pada akun Gol 3
     //    Prive/Penarikan = debit bersih pada akun Gol 3
     const mutasiRes = await pool.query(
@@ -1543,7 +1587,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_lines jl
          JOIN journal_entries je ON je.id = jl.entry_id
               AND je.tenant_id = $1
-              AND je.tipetransaksi NOT IN ('OPENING_BALANCE', 'CLOSING')
+              AND je.tipetransaksi <> 'OPENING_BALANCE'
               AND je.tanggal >= $2 AND je.tanggal <= $3
        ) m ON m.akun_id = c.id
        WHERE c.tenant_id = $1 AND c.ispostable = true AND LEFT(c.kode,1) = '3'
@@ -2410,8 +2454,9 @@ export async function accountingRoutes(app: FastifyInstance) {
     const labaBersih = totalPendapatan - totalBeban;
 
     // Cari akun Laba Ditahan (Saldo Laba Tidak Dicadangkan — 3.3.01.01)
+    // FIX: tambah ispostable=true agar tidak salah pilih 3.3.01.00 (parent, not postable)
     const labaDitahan = await pool.query(
-      `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND (kode='3.3.01.01' OR kode LIKE '3.3.01%') ORDER BY kode LIMIT 1`,
+      `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode='3.3.01.01' AND ispostable=true LIMIT 1`,
       [tid]
     );
     if (!labaDitahan.rows.length) {
@@ -2745,6 +2790,46 @@ export async function accountingRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── Dynamic account finder (resolves account by semantic role, not hardcoded kode) ──
+  type AccountRole = 'PENDAPATAN_PENJUALAN' | 'HPP' | 'PERSEDIAAN';
+
+  async function findAccountByRole(tenantId: string, role: AccountRole): Promise<{ id: string; kode: string; nama: string } | null> {
+    let query: string;
+    switch (role) {
+      case 'PENDAPATAN_PENJUALAN':
+        // Find first active postable Level 4 under kelompok penjualan_barang_dagangan (4.2.x),
+        // fallback to pendapatan_jasa (4.1.x), fallback to any pendapatan
+        query = `SELECT id, kode, nama FROM chart_of_accounts
+          WHERE tenant_id=$1 AND level=4 AND isactive=true AND ispostable=true
+            AND (kelompok='penjualan_barang_dagangan' OR kelompok='pendapatan_jasa' OR jenisAkun='pendapatan')
+          ORDER BY CASE kelompok
+            WHEN 'penjualan_barang_dagangan' THEN 1
+            WHEN 'pendapatan_jasa' THEN 2
+            ELSE 3 END, kode LIMIT 1`;
+        break;
+      case 'HPP':
+        // Find first active postable Level 4 under kelompok hpp_barang_dagangan (5.1.x),
+        // fallback to hpp_barang_jadi, fallback to any hpp
+        query = `SELECT id, kode, nama FROM chart_of_accounts
+          WHERE tenant_id=$1 AND level=4 AND isactive=true AND ispostable=true
+            AND (kelompok='hpp_barang_dagangan' OR kelompok='hpp_barang_jadi' OR jenisAkun='hpp')
+          ORDER BY CASE kelompok
+            WHEN 'hpp_barang_dagangan' THEN 1
+            WHEN 'hpp_barang_jadi' THEN 2
+            ELSE 3 END, kode LIMIT 1`;
+        break;
+      case 'PERSEDIAAN':
+        // Find first active postable Level 4 under 1.1.05.x (Persediaan)
+        query = `SELECT id, kode, nama FROM chart_of_accounts
+          WHERE tenant_id=$1 AND level=4 AND isactive=true AND ispostable=true
+            AND kode LIKE '1.1.05.%'
+          ORDER BY kode LIMIT 1`;
+        break;
+    }
+    const r = await pool.query(query, [tenantId]);
+    return r.rowCount ? r.rows[0] : null;
+  }
+
   // ─── MINI POS PENJUALAN ─────────────────────────────────────
   // GET /accounting/penjualan/stock-check — current stock for all inventory items
   app.get('/penjualan/stock-check', tenantGuard, async (req: FastifyRequest) => {
@@ -2755,7 +2840,7 @@ export async function accountingRoutes(app: FastifyInstance) {
         COALESCE(SUM(CASE WHEN jl.kredit > 0 THEN jl.qty ELSE 0 END), 0) AS stok
        FROM inventory_items ii
        LEFT JOIN journal_lines jl ON jl.inventory_item_id = ii.id
-       LEFT JOIN journal_entries je ON jl.journal_entry_id = je.id AND je.isposted = true AND je.tenant_id = ii.tenant_id
+       LEFT JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = ii.tenant_id
        WHERE ii.tenant_id = $1
        GROUP BY ii.id, ii.nama, ii.kode, ii.satuan, ii.harga_satuan
        ORDER BY ii.kode`,
@@ -2800,29 +2885,20 @@ export async function accountingRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'Akun kas/bank tidak ditemukan' });
     }
 
-    // Find required accounts by kode
-    const [pendapatanRes, hppRes, persediaanRes] = await Promise.all([
-      pool.query(
-        `SELECT id, kode, nama FROM chart_of_accounts WHERE tenant_id=$1 AND kode='4.1.01.01' AND isactive=true LIMIT 1`,
-        [a.tenantId]
-      ),
-      pool.query(
-        `SELECT id, kode, nama FROM chart_of_accounts WHERE tenant_id=$1 AND kode='5.1.01.01' AND isactive=true LIMIT 1`,
-        [a.tenantId]
-      ),
-      pool.query(
-        `SELECT id, kode, nama FROM chart_of_accounts WHERE tenant_id=$1 AND kode='1.1.05.01' AND isactive=true LIMIT 1`,
-        [a.tenantId]
-      ),
+    // Find required accounts dynamically (by semantic role, not hardcoded kode)
+    const [pendapatanAkun, hppAkun, persediaanAkun] = await Promise.all([
+      findAccountByRole(a.tenantId!, 'PENDAPATAN_PENJUALAN'),
+      findAccountByRole(a.tenantId!, 'HPP'),
+      findAccountByRole(a.tenantId!, 'PERSEDIAAN'),
     ]);
 
-    if (!pendapatanRes.rowCount) return reply.code(400).send({ error: 'Akun Pendapatan (4.1.01.01) tidak ditemukan' });
-    if (!hppRes.rowCount) return reply.code(400).send({ error: 'Akun HPP (5.1.01.01) tidak ditemukan' });
-    if (!persediaanRes.rowCount) return reply.code(400).send({ error: 'Akun Persediaan (1.1.05.01) tidak ditemukan' });
+    if (!pendapatanAkun) return reply.code(400).send({ error: 'Akun Pendapatan Penjualan tidak ditemukan. Aktifkan akun di Golongan 4 (Pendapatan) melalui Pengaturan CoA.' });
+    if (!hppAkun) return reply.code(400).send({ error: 'Akun HPP tidak ditemukan. Aktifkan akun di Golongan 5 (HPP) melalui Pengaturan CoA.' });
+    if (!persediaanAkun) return reply.code(400).send({ error: 'Akun Persediaan (1.1.05.01) tidak ditemukan. Aktifkan akun melalui Pengaturan CoA.' });
 
-    const pendapatanAkunId = pendapatanRes.rows[0].id;
-    const hppAkunId = hppRes.rows[0].id;
-    const persediaanAkunId = persediaanRes.rows[0].id;
+    const pendapatanAkunId = pendapatanAkun.id;
+    const hppAkunId = hppAkun.id;
+    const persediaanAkunId = persediaanAkun.id;
 
     // Validate items and compute stock/HPP for each
     const itemDetails: Array<{
@@ -2859,7 +2935,7 @@ export async function accountingRoutes(app: FastifyInstance) {
            COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) -
            COALESCE(SUM(CASE WHEN jl.kredit > 0 THEN jl.qty ELSE 0 END), 0) AS stok
          FROM journal_lines jl
-         JOIN journal_entries je ON jl.journal_entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
+         JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
          WHERE jl.inventory_item_id = $1`,
         [item.inventory_item_id, a.tenantId]
       );
@@ -2871,7 +2947,7 @@ export async function accountingRoutes(app: FastifyInstance) {
            COALESCE(SUM(jl.debit), 0) AS total_cost,
            COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) AS total_qty
          FROM journal_lines jl
-         JOIN journal_entries je ON jl.journal_entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
+         JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
          WHERE jl.inventory_item_id = $1`,
         [item.inventory_item_id, a.tenantId]
       );
