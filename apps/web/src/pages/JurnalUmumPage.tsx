@@ -98,6 +98,72 @@ function isGhostCell(rows: Row[], i: number, field: 'tanggal' | 'no_bukti' | 'ke
   return i > 0 && !rows[i][field] && !!getInheritedValue(rows, i, field);
 }
 
+// ─── Smart Templates ─────────────────────────────────────
+interface TemplateLink {
+  from: { row: number; field: 'debit' | 'kredit' };
+  to: { row: number; field: 'debit' | 'kredit' };
+}
+interface TemplateDef {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  keterangan: string;
+  rows: { kode: string }[];
+  links: TemplateLink[];
+  kasRowIndex: number;
+}
+const TEMPLATES: TemplateDef[] = [
+  {
+    id: 'penjualan',
+    name: 'Penjualan Tunai',
+    icon: '💰',
+    description: 'Penjualan + HPP otomatis (4 baris)',
+    keterangan: 'Penjualan Barang Dagangan',
+    rows: [
+      { kode: '1.1.01.01' },  // Kas Tunai
+      { kode: '4.1.01.01' },  // Pendapatan Tiket
+      { kode: '5.1.01.01' },  // HPP Barang Dagangan
+      { kode: '1.1.05.01' },  // Persediaan Barang Dagangan
+    ],
+    links: [
+      { from: { row: 0, field: 'debit' }, to: { row: 1, field: 'kredit' } },
+      { from: { row: 2, field: 'debit' }, to: { row: 3, field: 'kredit' } },
+    ],
+    kasRowIndex: 0,
+  },
+  {
+    id: 'pembelian',
+    name: 'Pembelian Persediaan',
+    icon: '📦',
+    description: 'Beli stok dari kas/bank (2 baris)',
+    keterangan: 'Pembelian Stok Persediaan',
+    rows: [
+      { kode: '1.1.05.01' },  // Persediaan
+      { kode: '1.1.01.01' },  // Kas Tunai
+    ],
+    links: [
+      { from: { row: 0, field: 'debit' }, to: { row: 1, field: 'kredit' } },
+    ],
+    kasRowIndex: 1,
+  },
+  {
+    id: 'beban',
+    name: 'Beban Operasional',
+    icon: '🏢',
+    description: 'Catat beban dari kas/bank (2 baris)',
+    keterangan: 'Beban Operasional',
+    rows: [
+      { kode: '6.1.01.01' },  // Beban Gaji
+      { kode: '1.1.01.01' },  // Kas Tunai
+    ],
+    links: [
+      { from: { row: 0, field: 'debit' }, to: { row: 1, field: 'kredit' } },
+    ],
+    kasRowIndex: 1,
+  },
+];
+
 function safeMathEval(expr: string): number | null {
   try {
     const cleaned = expr.replace(/\./g, '').replace(/,/g, '.');
@@ -192,11 +258,15 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
   const [contacts, setContacts] = useState<any[]>([]);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [openTagPopover, setOpenTagPopover] = useState<number | null>(null);
+  const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
+  const [templateLinks, setTemplateLinks] = useState<TemplateLink[]>([]);
+  const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
 
   // Focus management
   const refMap = useRef<Map<string, HTMLInputElement | null>>(new Map());
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const tagPopoverRef = useRef<HTMLDivElement | null>(null);
+  const templateDropdownRef = useRef<HTMLDivElement | null>(null);
 
   function setRef(key: string, el: HTMLInputElement | null) {
     refMap.current.set(key, el);
@@ -258,6 +328,9 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
       }
       if (tagPopoverRef.current && !tagPopoverRef.current.contains(e.target as Node)) {
         setOpenTagPopover(null);
+      }
+      if (templateDropdownRef.current && !templateDropdownRef.current.contains(e.target as Node)) {
+        setTemplateDropdownOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClick);
@@ -335,6 +408,16 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
         if (field === 'kredit' && parseCurrencyInput(val) > 0) updated.debit = '';
         return updated;
       });
+      // Smart Link: propagate changes to linked cells
+      for (const link of templateLinks) {
+        if (link.from.row === i && link.from.field === field) {
+          const sourceVal = next[i][field];
+          next = next.map((r, idx) => {
+            if (idx !== link.to.row) return r;
+            return { ...r, [link.to.field]: sourceVal };
+          });
+        }
+      }
       // Auto-add row on last row fill (up to 50)
       const last = next[next.length - 1];
       const lastTouched = last.akun_id || last.tanggal || last.no_bukti || last.keterangan || last.debit || last.kredit;
@@ -390,6 +473,51 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
     const val = getInheritedValue(rows, i, field);
     updateRow(i, field, val);
     setTimeout(() => refMap.current.get(field + '-' + i)?.focus(), 50);
+  }
+
+  // ── Smart Template functions ────────────────────────────────
+  function applyTemplate(tmpl: TemplateDef) {
+    const hasData = rows.some(r => r.akun_id || parseCurrencyInput(r.debit) > 0 || parseCurrencyInput(r.kredit) > 0);
+    if (hasData && !confirm('Template akan mengganti baris yang sudah ada. Lanjutkan?')) return;
+    const todayStr = today();
+    const newRows = tmpl.rows.map((r, idx) => {
+      const account = coaAccounts.find(a => a.kode === r.kode);
+      return {
+        ...emptyRow(),
+        tanggal: todayStr,
+        keterangan: idx === 0 ? tmpl.keterangan : '',
+        akun_id: account ? String(account.id) : '',
+        searchTerm: account ? account.kode + ' — ' + account.nama : '',
+      };
+    });
+    setRows(newRows);
+    setTemplateLinks(tmpl.links);
+    setActiveTemplate(tmpl.id);
+    setTemplateDropdownOpen(false);
+    try { localStorage.removeItem(getDraftKey()); } catch {}
+    showToast('📋 Template "' + tmpl.name + '" diterapkan');
+  }
+
+  function clearTemplate() {
+    setTemplateLinks([]);
+    setActiveTemplate(null);
+  }
+
+  function isAutoFilled(rowIdx: number, field: 'debit' | 'kredit'): boolean {
+    return templateLinks.some(l => l.to.row === rowIdx && l.to.field === field);
+  }
+
+  function getKasBankAccounts(): CoAAccount[] {
+    return coaAccounts.filter(a => a.kode?.startsWith('1.1.01.') && (a.isPostable ?? a.is_postable));
+  }
+
+  function changeKasAccount(rowIdx: number, newAkunId: string) {
+    const account = coaAccounts.find(a => String(a.id) === newAkunId);
+    if (!account) return;
+    setRows(prev => prev.map((r, idx) => {
+      if (idx !== rowIdx) return r;
+      return { ...r, akun_id: newAkunId, searchTerm: account.kode + ' — ' + account.nama };
+    }));
   }
 
   // ── Handle Enter in last cell ───────────────────────────────
@@ -803,9 +931,47 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
       ) : (
         /* ── BATCH INPUT MODE ────────────────────────────────────── */
         <form onSubmit={handleSubmit} className="rounded-3xl border border-white/70 bg-white/80 p-4 sm:p-6 shadow-sm backdrop-blur-xl space-y-4">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <Icon d={jurnalIcon} className="w-5 h-5 text-emerald-600" />
             <h2 className="text-lg font-bold text-slate-900">Input Jurnal Batch</h2>
+
+            {/* Template Dropdown */}
+            <div className="relative ml-2" ref={templateDropdownRef}>
+              <button type="button" onClick={() => setTemplateDropdownOpen(!templateDropdownOpen)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition border border-emerald-200">
+                📋 Template
+                <svg className={"w-3 h-3 transition-transform " + (templateDropdownOpen ? 'rotate-180' : '')} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {templateDropdownOpen && (
+                <div className="absolute z-50 top-full left-0 mt-1 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 overflow-hidden">
+                  <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pilih Template</div>
+                  {TEMPLATES.map(t => (
+                    <button key={t.id} type="button" onClick={() => applyTemplate(t)}
+                      className="w-full text-left px-3 py-2.5 text-sm hover:bg-emerald-50 transition flex items-start gap-3 group">
+                      <span className="text-lg mt-0.5">{t.icon}</span>
+                      <div>
+                        <div className="font-semibold text-slate-900 group-hover:text-emerald-700 transition">{t.name}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">{t.description}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Active Template Badge */}
+            {activeTemplate && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-semibold border border-amber-200">
+                {TEMPLATES.find(t => t.id === activeTemplate)?.icon}
+                {TEMPLATES.find(t => t.id === activeTemplate)?.name}
+                <span className="text-amber-400 mx-0.5">•</span>
+                <span className="text-[10px] text-amber-500">Smart Link aktif</span>
+                <button type="button" onClick={clearTemplate}
+                  className="ml-1 w-4 h-4 flex items-center justify-center rounded-full hover:bg-amber-200 transition text-amber-500 hover:text-amber-700"
+                  title="Hapus template">✕</button>
+              </span>
+            )}
+
             <span className="ml-auto text-xs text-slate-400">{rows.length} baris</span>
           </div>
 
@@ -911,6 +1077,21 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
 
                       {/* Akun */}
                       <div className="relative" ref={openDropdown === i ? dropdownRef : undefined}>
+                        {/* Kas/Bank quick selector when template active */}
+                        {activeTemplate && (() => {
+                          const tmpl = TEMPLATES.find(t => t.id === activeTemplate);
+                          return tmpl && tmpl.kasRowIndex === i;
+                        })() && (
+                          <select
+                            value={row.akun_id}
+                            onChange={e => changeKasAccount(i, e.target.value)}
+                            className="w-full rounded-lg border border-emerald-200 bg-emerald-50/50 px-2 py-1 text-xs text-emerald-800 font-medium mb-1 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none appearance-none cursor-pointer"
+                          >
+                            {getKasBankAccounts().map(a => (
+                              <option key={a.id} value={a.id}>{a.kode} — {a.nama}</option>
+                            ))}
+                          </select>
+                        )}
                         <input
                           type="text"
                           placeholder="Cari akun..."
@@ -975,7 +1156,10 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
                       )}
 
                       {/* Debit */}
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 relative">
+                        {isAutoFilled(i, 'debit') && (
+                          <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-amber-400 pointer-events-none z-10">🔗</span>
+                        )}
                         <input
                           type="text"
                           inputMode="numeric"
@@ -985,12 +1169,15 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
                           onBlur={() => handleCellBlur(i, 'debit')}
                           onKeyDown={e => handleCellKeyDown(i, 'debit', e)}
                           ref={el => setRef('debit-' + i, el)}
-                          className={cellCls + ' text-right tabular-nums'}
+                          className={cellCls + ' text-right tabular-nums' + (isAutoFilled(i, 'debit') ? ' bg-amber-50/50 border-amber-200/50' : '')}
                         />
                       </div>
 
                       {/* Kredit */}
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 relative">
+                        {isAutoFilled(i, 'kredit') && (
+                          <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-amber-400 pointer-events-none z-10">🔗</span>
+                        )}
                         <input
                           type="text"
                           inputMode="numeric"
@@ -1000,7 +1187,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
                           onBlur={() => handleCellBlur(i, 'kredit')}
                           onKeyDown={e => handleCellKeyDown(i, 'kredit', e)}
                           ref={el => setRef('kredit-' + i, el)}
-                          className={cellCls + ' text-right tabular-nums'}
+                          className={cellCls + ' text-right tabular-nums' + (isAutoFilled(i, 'kredit') ? ' bg-amber-50/50 border-amber-200/50' : '')}
                         />
                         {/* Auto-Balance Smart Fill button */}
                         {i === rows.length - 1 && selisih >= 1 && (
