@@ -1479,6 +1479,18 @@ export default function AppDashboard() {
   const navigate = useNavigate();
   const [dashData, setDashData] = useState<{ totalPemasukan: number; totalPengeluaran: number; saldoKas: number; labaBersih: number; transaksiBulanIni: number; monthly: Array<{ month: string; pemasukan: number; pengeluaran: number }> } | null>(null);
   const [impersonationInfo, setImpersonationInfo] = useState<{ nama_bumdes?: string; email?: string } | null>(null);
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
+    try { const s = localStorage.getItem('sidebarGroups'); if (s) return new Set(JSON.parse(s)); } catch {}
+    return new Set(['menu-utama', 'transaksi']);
+  });
+  function toggleGroup(id: string) {
+    setOpenGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      try { localStorage.setItem('sidebarGroups', JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
   const [announcements, setAnnouncements] = useState<Array<{ id: string; message: string; type: 'info' | 'warning' | 'success'; active: boolean }>>([]);
   const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('dismissedAnnouncements') || '[]'); } catch { return []; }
@@ -1604,154 +1616,115 @@ export default function AppDashboard() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          <p className={'px-2.5 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider ' + (collapsed ? 'text-center' : '')}>{collapsed ? 'M' : 'Menu'}</p>
+        {/* Navigation — Accordion Groups */}
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+          {(() => {
+            const mi = (pid: string, label: string, icon: string, opts?: { hl?: boolean; sub?: boolean; violet?: boolean; cyan?: boolean; subtitle?: string }) => {
+              const active = page === pid;
+              const bgCls = active ? (opts?.hl ? 'bg-amber-50 text-amber-700' : opts?.violet ? 'bg-violet-50 text-violet-700' : opts?.cyan ? 'bg-cyan-50 text-cyan-700' : 'bg-emerald-50 text-emerald-700') : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800';
+              const dotCls = opts?.hl ? 'bg-amber-500' : opts?.violet ? 'bg-violet-500' : opts?.cyan ? 'bg-cyan-500' : 'bg-emerald-500';
+              return (
+                <button key={pid} onClick={() => { setPage(pid as any); setSidebarOpen(false); }}
+                  className={'relative w-full flex items-center gap-3 rounded-xl text-sm font-semibold transition-all duration-200 ' + (opts?.sub ? 'pl-10 pr-3 py-2' : 'px-3 py-2.5') + ' ' + bgCls + (collapsed ? ' justify-center px-0' : '')}>
+                  <span className="relative shrink-0">
+                    <Icon d={icon} className={'w-5 h-5 shrink-0'} />
+                    {active && <span className={'absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 rounded-full ' + dotCls} />}
+                  </span>
+                  {!collapsed && <span className="flex-1 text-left">{label}{opts?.subtitle && <span className="text-[10px] text-slate-400 font-normal ml-1">{opts.subtitle}</span>}</span>}
+                </button>
+              );
+            };
+            const gh = (id: string, emoji: string, label: string) => (
+              <button onClick={() => toggleGroup(id)}
+                className={'w-full flex items-center gap-2 px-2.5 pt-4 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider hover:text-slate-600 transition-colors ' + (collapsed ? 'justify-center px-0 pt-2' : '')}>
+                {!collapsed && <span className="text-xs">{emoji}</span>}
+                {!collapsed && <span className="flex-1 text-left">{label}</span>}
+                {!collapsed && (
+                  <svg className={'w-3 h-3 transition-transform duration-200 ' + (openGroups.has(id) ? 'rotate-180' : '')} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 9l-7 7-7-7" />
+                  </svg>
+                )}
+              </button>
+            );
+            return (
+              <>
+                {/* 🏠 MENU UTAMA */}
+                <p className={'px-2.5 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider ' + (collapsed ? 'text-center' : '')}>{collapsed ? '🏠' : '🏠 Menu Utama'}</p>
+                {mi('dashboard', 'Dashboard', 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6')}
+                {mi('langganan', 'Langganan', creditCardIcon)}
+                {mi('profil', 'Profil BUM Desa', officeIcon)}
 
-          <button onClick={() => { setPage('dashboard'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'dashboard' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              {page === 'dashboard' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>Dashboard</span>}
-          </button>
+                {/* 🚀 SETUP & MASTER DATA */}
+                {gh('setup', '🚀', 'Setup & Master Data')}
+                {(openGroups.has('setup') || collapsed) && (
+                  <div className={'space-y-0.5 ' + (collapsed ? '' : 'animate-fade-in')}>
+                    {mi('coa', 'CoA (Bagan Akun)', coaIcon)}
+                    {mi('saldo-awal', 'Saldo Awal', 'M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z')}
+                    {mi('rincian-saldo', 'Rincian Saldo Awal', 'M4 6h16M4 10h16M4 14h10M4 18h10')}
+                    <div className="my-1.5 border-t border-slate-200/40" />
+                    {mi('kontak', 'Kontak (Utang/Piutang)', 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z')}
+                    {mi('persediaan', 'Persediaan', 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4')}
+                  </div>
+                )}
 
-          <button onClick={() => { setPage('langganan'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'langganan' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d={creditCardIcon} />
-              {page === 'langganan' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>Langganan</span>}
-          </button>
+                {/* 💸 TRANSAKSI */}
+                {gh('transaksi', '💸', 'Transaksi')}
+                {(openGroups.has('transaksi') || collapsed) && (
+                  <div className={'space-y-0.5 ' + (collapsed ? '' : 'animate-fade-in')}>
+                    {mi('transaksi-cepat', 'Transaksi Cepat', 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', { hl: true })}
+                    {mi('jurnal', 'Jurnal Umum', jurnalIcon, { subtitle: '(Advanced)' })}
+                    {mi('penyesuaian', 'Jurnal Penyesuaian', 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9h6m-3-3v6')}
+                    {mi('aset-tetap', 'Aset & Inventaris', 'M12 2l9 4.5v11L12 22l-9-4.5v-11L12 2z M12 6v6.5 M7.5 9l9 4.5')}
+                  </div>
+                )}
 
-          <button onClick={() => { setPage('profil'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'profil' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d={officeIcon} />
-              {page === 'profil' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>Profil BUM Desa</span>}
-          </button>
+                {/* 📖 BUKU & REKAP */}
+                {gh('buku', '📖', 'Buku & Rekap')}
+                {(openGroups.has('buku') || collapsed) && (
+                  <div className={'space-y-0.5 ' + (collapsed ? '' : 'animate-fade-in')}>
+                    {mi('buku-besar', 'Buku Besar', 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253')}
+                    {!collapsed && (
+                      <button onClick={() => toggleGroup('buku-pembantu')}
+                        className="w-full flex items-center gap-3 pl-10 pr-3 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-colors">
+                        <span className="flex-1 text-left">Buku Pembantu</span>
+                        <svg className={'w-3 h-3 transition-transform duration-200 ' + (openGroups.has('buku-pembantu') ? 'rotate-180' : '')} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                    )}
+                    {(openGroups.has('buku-pembantu') || collapsed) && (
+                      <div className="space-y-0.5">
+                        {mi('buku-pembantu-utang', 'Utang', 'M3 10h18M7 15h1m4 0h3M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z', { sub: !collapsed })}
+                        {mi('buku-pembantu-piutang', 'Piutang', 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z', { sub: !collapsed })}
+                        {mi('buku-pembantu-persediaan', 'Persediaan', 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4', { sub: !collapsed })}
+                      </div>
+                    )}
+                    {mi('rekap-jurnal', 'Rekap Jurnal', 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 8h3m-3 4h3m-6-4h.01M9 16h.01')}
+                  </div>
+                )}
 
-          {!collapsed && <p className="px-2.5 pt-4 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Setup Saldo Awal</p>}
-          <button onClick={() => { setPage('coa'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'coa' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d={coaIcon} />
-              {page === 'coa' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>CoA</span>}
-          </button>
-          <button onClick={() => { setPage('saldo-awal'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'saldo-awal' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
-              {page === 'saldo-awal' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>Saldo Awal</span>}
-          </button>
-          <button onClick={() => { setPage('rincian-saldo'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'rincian-saldo' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d="M4 6h16M4 10h16M4 14h10M4 18h10" />
-              {page === 'rincian-saldo' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>Rincian Saldo Awal</span>}
-          </button>
+                {/* 📊 LAPORAN KEUANGAN */}
+                {gh('laporan', '📊', 'Laporan Keuangan')}
+                {(openGroups.has('laporan') || collapsed) && (
+                  <div className={'space-y-0.5 ' + (collapsed ? '' : 'animate-fade-in')}>
+                    {mi('laba-rugi', 'Laba Rugi', 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z')}
+                    {mi('neraca', 'Neraca', 'M21 7.5l-2.25-1.313M21 7.5v2.25m0-2.25l-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3l2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75l2.25-1.313M12 21.75V19.5m0 2.25l-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25')}
+                    {mi('neraca-saldo', 'Neraca Saldo', 'M10 3H3v18h7v-8h3v8h7V3h-7v6h-3z')}
+                    {mi('arus-kas', 'Arus Kas', 'M21 12a9 9 0 11-18 0 9 9 0 0118 0z M9 10l6 4 M9 14l6-4')}
+                    {mi('perubahan-modal', 'Perubahan Modal', 'M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7M4 7h16M4 7l2-3h12l2 3m-6 4v6m-2-3h4')}
+                    {mi('calk', 'CALK', 'M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7c-2 0-3 1-3 3z M10 3v4h4V3')}
+                  </div>
+                )}
 
-          <div className="my-2 border-t border-slate-200/60" />
-          {!collapsed && <p className="px-2.5 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Master Data</p>}
-          <button onClick={() => { setPage('kontak'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'kontak' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-              {page === 'kontak' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>Kontak</span>}
-          </button>
-          <button onClick={() => { setPage('persediaan'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'persediaan' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              {page === 'persediaan' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>Persediaan</span>}
-          </button>
-
-          <div className="my-2 border-t border-slate-200/60" />
-          {!collapsed && <p className="px-2.5 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Keuangan</p>}
-          <button onClick={() => { setPage('transaksi-cepat'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'transaksi-cepat' ? 'bg-amber-50 text-amber-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              {page === 'transaksi-cepat' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-amber-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>Transaksi Cepat</span>}
-          </button>
-          <button onClick={() => { setPage('jurnal'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'jurnal' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d={jurnalIcon} />
-              {page === 'jurnal' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>Jurnal Umum <span className="text-[10px] text-slate-400 font-normal">(Advanced)</span></span>}
-          </button>
-          <button onClick={() => { setPage('buku-besar'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'buku-besar' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              {page === 'buku-besar' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>Buku Besar</span>}
-          </button>
-          <button onClick={() => { setPage('penyesuaian'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'penyesuaian' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9h6m-3-3v6" />
-              {page === 'penyesuaian' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>Jurnal Penyesuaian</span>}
-          </button>
-          {financeMenus.map((m, i) => (
-            m.soon ? (
-            <span key={i} className={'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-400 cursor-not-allowed ' + (collapsed ? 'justify-center px-0' : '')}>
-              <Icon d={m.icon} className="w-5 h-5 text-slate-300 shrink-0" />
-              {!collapsed && <span className="flex-1">{m.label}</span>}
-              {!collapsed && <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full font-medium">Segera</span>}
-            </span>
-            ) : (
-            <button key={i} onClick={() => { setPage(m.page as Page); setSidebarOpen(false); }}
-              className={'relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === m.page ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-              {page === m.page && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-500 rounded-full" />}
-              <Icon d={m.icon} className="w-5 h-5 shrink-0" />
-              {!collapsed && <span>{m.label}</span>}
-            </button>
-            )
-          ))}
-
-          {/* Separator + Tutup Buku */}
-          <div className="my-2 border-t border-slate-200/60" />
-          {!collapsed && <p className="px-2.5 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pengaturan</p>}
-          <button onClick={() => { setPage('tutup-buku'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'tutup-buku' ? 'bg-violet-50 text-violet-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              {page === 'tutup-buku' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-violet-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>Tutup Buku</span>}
-          </button>
-
-          {/* Bantuan */}
-          <div className="my-2 border-t border-slate-200/60" />
-          <button onClick={() => { setPage('bantuan'); setSidebarOpen(false); }}
-            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'bantuan' ? 'bg-cyan-50 text-cyan-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
-            <span className="relative">
-              <Icon d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              {page === 'bantuan' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-cyan-500 rounded-full" />}
-            </span>
-            {!collapsed && <span>Panduan</span>}
-          </button>
+                {/* ⚙️ PENGATURAN & BANTUAN */}
+                {gh('pengaturan', '⚙️', 'Pengaturan & Bantuan')}
+                {(openGroups.has('pengaturan') || collapsed) && (
+                  <div className={'space-y-0.5 ' + (collapsed ? '' : 'animate-fade-in')}>
+                    {mi('tutup-buku', 'Tutup Buku Tahunan', 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z', { violet: true })}
+                    {mi('bantuan', 'Panduan Penggunaan', 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253', { cyan: true })}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </nav>
 
 
