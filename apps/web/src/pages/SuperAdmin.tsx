@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PasswordForm from './PasswordForm';
+import PaymentGatewaysPage from './PaymentGatewaysPage';
 
 type Settings = { smtp: any; oauth: any; tripay: any; security: any };
 type TabKey = 'smtp' | 'oauth' | 'tripay' | 'security';
-type Page = 'dashboard' | 'users' | 'settings' | 'password' | 'broadcast' | 'profile' | 'addAdmin';
+type Page = 'dashboard' | 'users' | 'settings' | 'password' | 'broadcast' | 'profile' | 'addAdmin' | 'payment-gateways';
 type ModalAction = 'delete' | 'clear' | 'toggle' | 'reset' | 'impersonate' | 'subscription' | 'addAdmin' | null;
 
 type AdminUser = {
@@ -53,6 +54,7 @@ const menu = [
   { page: 'users' as Page, label: 'Management User', icon: 'M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m0-4a4 4 0 100-8 4 4 0 000 8zm8 0a4 4 0 100-8 4 4 0 000 8z' },
   { page: 'broadcast' as Page, label: 'Broadcast', icon: 'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z' },
   { page: 'settings' as Page, label: 'Settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' },
+  { page: 'payment-gateways' as Page, label: 'Payment Gateways', icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z' },
 ];
 
 export default function SuperAdmin() {
@@ -306,7 +308,7 @@ export default function SuperAdmin() {
     return users.filter(u => [u.nama_lengkap, u.email, u.nama_bumdes, u.role, u.auth_provider, u.subscription_status].some(v => String(v || '').toLowerCase().includes(q)));
   }, [users, search]);
 
-  const pageTitle = page === 'password' ? 'Ubah Password' : page === 'dashboard' ? 'Dashboard' : page === 'users' ? 'Management User' : page === 'broadcast' ? 'Broadcast' : page === 'profile' ? 'Profil Saya' : page === 'addAdmin' ? 'Tambah Admin' : 'Settings';
+  const pageTitle = page === 'password' ? 'Ubah Password' : page === 'dashboard' ? 'Dashboard' : page === 'users' ? 'Management User' : page === 'broadcast' ? 'Broadcast' : page === 'profile' ? 'Profil Saya' : page === 'addAdmin' ? 'Tambah Admin' : page === 'payment-gateways' ? 'Payment Gateways' : 'Settings';
   const formatDate = (v?: string | null) => v ? new Date(v).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
   const money = (n?: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n || 0);
   const statusClass = (s?: string | null) => s === 'active' ? 'bg-cyan-50 text-cyan-700 ring-cyan-100' : s === 'expired' ? 'bg-amber-50 text-amber-700 ring-amber-100' : 'bg-emerald-50 text-emerald-700 ring-emerald-100';
@@ -383,6 +385,10 @@ export default function SuperAdmin() {
           {tab === 'oauth' && <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-100 space-y-4"><h3 className="text-lg font-bold text-slate-900">Google OAuth</h3><p className="text-sm text-slate-500">Redirect URI: <code className="bg-slate-100 px-2 py-0.5 rounded text-xs break-all">https://silabu.ondesa.id/api/auth/google/callback</code></p><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.oauth.googleEnabled || false} onChange={e => update('oauth', 'googleEnabled', e.target.checked)} /> Enable Google Login</label><div><label className="text-sm font-semibold text-slate-700">Client ID</label><input value={settings.oauth.googleClientId || ''} onChange={e => update('oauth', 'googleClientId', e.target.value)} className={input} /></div><div><label className="text-sm font-semibold text-slate-700">Client Secret</label><input type="password" value={settings.oauth.googleClientSecret || ''} onChange={e => update('oauth', 'googleClientSecret', e.target.value)} className={input} /></div><button onClick={() => save('oauth', settings.oauth)} disabled={loading} className="w-full px-4 py-3 bg-gradient-to-r from-emerald-500 to-cyan-600 text-white rounded-xl font-semibold text-sm disabled:opacity-50">Simpan OAuth</button></div>}
           {tab === 'tripay' && <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-100 space-y-4"><h3 className="text-lg font-bold text-slate-900">Tripay Payment Gateway</h3><p className="text-sm text-slate-500">QRIS, Virtual Account, E-wallet via Tripay.</p>{['merchantId', 'apiKey', 'secretKey'].map(f => <div key={f}><label className="text-sm font-semibold text-slate-700">{f}</label><input type={f === 'merchantId' ? 'text' : 'password'} value={settings.tripay[f] || ''} onChange={e => update('tripay', f, e.target.value)} className={input} /></div>)}<button onClick={() => save('tripay', settings.tripay)} disabled={loading} className="w-full px-4 py-3 bg-gradient-to-r from-emerald-500 to-cyan-600 text-white rounded-xl font-semibold text-sm disabled:opacity-50">Simpan Tripay</button></div>}
           {tab === 'security' && <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-100 space-y-4"><h3 className="text-lg font-bold text-slate-900">Keamanan — Cloudflare Turnstile</h3><p className="text-sm text-slate-500">CAPTCHA anti-bot di halaman Login, Register, dan Lupa Password.</p><div><label className="text-sm font-semibold text-slate-700">Site Key</label><input value={settings.security.turnstile_site_key || ''} onChange={e => update('security', 'turnstile_site_key', e.target.value)} className={input} /></div><div><label className="text-sm font-semibold text-slate-700">Secret Key</label><input type="password" value={settings.security.turnstile_secret_key || ''} onChange={e => update('security', 'turnstile_secret_key', e.target.value)} className={input} /></div><button onClick={() => save('security', settings.security)} disabled={loading} className="w-full px-4 py-3 bg-gradient-to-r from-emerald-500 to-cyan-600 text-white rounded-xl font-semibold text-sm disabled:opacity-50">Simpan Keamanan</button></div>}
+        </div>}
+
+        {page === 'payment-gateways' && <div className="max-w-4xl animate-fade-in">
+          <PaymentGatewaysPage />
         </div>}
 
         {page === 'broadcast' && <div className="space-y-8 animate-fade-in">
