@@ -45,6 +45,11 @@ function InventoryCard({ item, onEdit, onDelete }: { item: InventoryItem; onEdit
               </span>
             )}
             {item.satuan && <p className="text-xs text-slate-500">{item.satuan}</p>}
+            {isNegative && (
+              <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200 animate-pulse">
+                {stok.toLocaleString('id-ID')} {item.satuan} ⚠️
+              </span>
+            )}
           </div>
         </div>
         <div className="flex gap-1 shrink-0">
@@ -58,8 +63,11 @@ function InventoryCard({ item, onEdit, onDelete }: { item: InventoryItem; onEdit
       </div>
       <div className="mt-4 space-y-2">
         <div className="flex justify-between text-xs">
-          <span className="text-slate-500">Qty Awal</span>
-          <span className="font-semibold text-slate-800 tabular-nums">{Number(item.qtyAwal).toLocaleString('id-ID')} {item.satuan}</span>
+          <span className="text-slate-500">{currentStock !== undefined ? 'Stok Saat Ini' : 'Qty Awal'}</span>
+          <span className={'font-semibold tabular-nums ' + (isNegative ? 'text-red-600 font-bold' : 'text-slate-800')}>
+            {stok.toLocaleString('id-ID')} {item.satuan}
+            {isNegative && ' ⚠️'}
+          </span>
         </div>
         <div className="flex justify-between text-xs">
           <span className="text-slate-500">Harga Satuan</span>
@@ -253,6 +261,19 @@ export default function InventoryPage() {
   const [deleteItem, setDeleteItem] = useState<InventoryItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [stockData, setStockData] = useState<Record<string, number>>({});
+
+  const fetchStock = useCallback(async () => {
+    try {
+      const r = await fetch('/api/accounting/penjualan/stock-check', { headers: { Authorization: 'Bearer ' + token() } });
+      if (r.ok) {
+        const d = await r.json();
+        const map: Record<string, number> = {};
+        for (const s of (d.items || [])) map[s.id] = Number(s.stok) || 0;
+        setStockData(map);
+      }
+    } catch {}
+  }, []);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -273,7 +294,7 @@ export default function InventoryPage() {
     } catch {}
   }, []);
 
-  useEffect(() => { fetchItems(); fetchAccounts(); }, [fetchItems, fetchAccounts]);
+  useEffect(() => { fetchItems(); fetchAccounts(); fetchStock(); }, [fetchItems, fetchAccounts, fetchStock]);
 
   const handleDelete = async () => {
     if (!deleteItem) return;
@@ -365,6 +386,7 @@ export default function InventoryPage() {
             <InventoryCard
               key={it.id}
               item={it}
+              currentStock={stockData[it.id]}
               onEdit={() => { setEditItem(it); setModalOpen(true); }}
               onDelete={() => setDeleteItem(it)}
             />

@@ -2744,4 +2744,241 @@ export async function accountingRoutes(app: FastifyInstance) {
       client.release();
     }
   });
+
+  // ─── MINI POS PENJUALAN ─────────────────────────────────────
+  // GET /accounting/penjualan/stock-check — current stock for all inventory items
+  app.get('/penjualan/stock-check', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const r = await pool.query(
+      `SELECT ii.id, ii.nama, ii.kode, ii.satuan, ii.harga_satuan AS "hargaSatuan",
+        COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) -
+        COALESCE(SUM(CASE WHEN jl.kredit > 0 THEN jl.qty ELSE 0 END), 0) AS stok
+       FROM inventory_items ii
+       LEFT JOIN journal_lines jl ON jl.inventory_item_id = ii.id
+       LEFT JOIN journal_entries je ON jl.journal_entry_id = je.id AND je.isposted = true AND je.tenant_id = ii.tenant_id
+       WHERE ii.tenant_id = $1
+       GROUP BY ii.id, ii.nama, ii.kode, ii.satuan, ii.harga_satuan
+       ORDER BY ii.kode`,
+      [a.tenantId]
+    );
+    return { items: r.rows };
+  });
+
+  // POST /accounting/penjualan — Mini POS sales transaction
+  app.post('/penjualan', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const b = req.body as any;
+
+    if (!b.items || !Array.isArray(b.items) || b.items.length === 0) {
+      return reply.code(400).send({ error: 'items wajib diisi dan tidak boleh kosong' });
+    }
+    if (!b.kas_akun_id) {
+      return reply.code(400).send({ error: 'kas_akun_id wajib dipilih' });
+    }
+    if (!b.tanggal) {
+      return reply.code(400).send({ error: 'tanggal wajib diisi' });
+    }
+
+    const tanggal = b.tanggal as string;
+    const kasAkunId = b.kas_akun_id as string;
+    const keterangan = b.keterangan || 'Penjualan POS';
+
+    // Parse tanggal
+    const [tahunStr, bulanStr] = tanggal.split('-');
+    const tahun = parseInt(tahunStr, 10);
+    const bulan = parseInt(bulanStr, 10);
+    if (isNaN(tahun) || isNaN(bulan)) {
+      return reply.code(400).send({ error: 'Format tanggal tidak valid' });
+    }
+
+    // Validate kas akun
+    const kasRes = await pool.query(
+      'SELECT id, kode, nama FROM chart_of_accounts WHERE id=$1 AND tenant_id=$2',
+      [kasAkunId, a.tenantId]
+    );
+    if (!kasRes.rowCount) {
+      return reply.code(400).send({ error: 'Akun kas/bank tidak ditemukan' });
+    }
+
+    // Find required accounts by kode
+    const [pendapatanRes, hppRes, persediaanRes] = await Promise.all([
+      pool.query(
+        `SELECT id, kode, nama FROM chart_of_accounts WHERE tenant_id=$1 AND kode='4.1.01.01' AND isactive=true LIMIT 1`,
+        [a.tenantId]
+      ),
+      pool.query(
+        `SELECT id, kode, nama FROM chart_of_accounts WHERE tenant_id=$1 AND kode='5.1.01.01' AND isactive=true LIMIT 1`,
+        [a.tenantId]
+      ),
+      pool.query(
+        `SELECT id, kode, nama FROM chart_of_accounts WHERE tenant_id=$1 AND kode='1.1.05.01' AND isactive=true LIMIT 1`,
+        [a.tenantId]
+      ),
+    ]);
+
+    if (!pendapatanRes.rowCount) return reply.code(400).send({ error: 'Akun Pendapatan (4.1.01.01) tidak ditemukan' });
+    if (!hppRes.rowCount) return reply.code(400).send({ error: 'Akun HPP (5.1.01.01) tidak ditemukan' });
+    if (!persediaanRes.rowCount) return reply.code(400).send({ error: 'Akun Persediaan (1.1.05.01) tidak ditemukan' });
+
+    const pendapatanAkunId = pendapatanRes.rows[0].id;
+    const hppAkunId = hppRes.rows[0].id;
+    const persediaanAkunId = persediaanRes.rows[0].id;
+
+    // Validate items and compute stock/HPP for each
+    const itemDetails: Array<{
+      inventory_item_id: string;
+      nama: string;
+      qty: number;
+      harga_jual: number;
+      hpp: number;
+      stok_sekarang: number;
+      stok_sesudah: number;
+      is_negative: boolean;
+    }> = [];
+
+    let totalPenjualan = 0;
+    let totalHpp = 0;
+
+    for (const item of b.items) {
+      if (!item.inventory_item_id || !item.qty || item.qty <= 0 || !item.harga_jual || item.harga_jual <= 0) {
+        return reply.code(400).send({ error: 'Setiap item wajib memiliki inventory_item_id, qty > 0, dan harga_jual > 0' });
+      }
+
+      // Get item name
+      const itemRes = await pool.query(
+        'SELECT id, nama FROM inventory_items WHERE id=$1 AND tenant_id=$2',
+        [item.inventory_item_id, a.tenantId]
+      );
+      if (!itemRes.rowCount) {
+        return reply.code(400).send({ error: `Barang dengan id ${item.inventory_item_id} tidak ditemukan` });
+      }
+
+      // Calculate current stock
+      const stockRes = await pool.query(
+        `SELECT
+           COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) -
+           COALESCE(SUM(CASE WHEN jl.kredit > 0 THEN jl.qty ELSE 0 END), 0) AS stok
+         FROM journal_lines jl
+         JOIN journal_entries je ON jl.journal_entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
+         WHERE jl.inventory_item_id = $1`,
+        [item.inventory_item_id, a.tenantId]
+      );
+      const stokSekarang = Number(stockRes.rows[0].stok) || 0;
+
+      // Calculate HPP (moving average): total debit cost / total debit qty for this item
+      const hppRes = await pool.query(
+        `SELECT
+           COALESCE(SUM(jl.debit), 0) AS total_cost,
+           COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) AS total_qty
+         FROM journal_lines jl
+         JOIN journal_entries je ON jl.journal_entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
+         WHERE jl.inventory_item_id = $1`,
+        [item.inventory_item_id, a.tenantId]
+      );
+      const totalCost = Number(hppRes.rows[0].total_cost) || 0;
+      const totalQty = Number(hppRes.rows[0].total_qty) || 0;
+      const hpp = totalQty > 0 ? Math.round(totalCost / totalQty) : 0;
+
+      const stokSesudah = stokSekarang - item.qty;
+      const isNegative = stokSesudah < 0;
+
+      itemDetails.push({
+        inventory_item_id: item.inventory_item_id,
+        nama: itemRes.rows[0].nama,
+        qty: item.qty,
+        harga_jual: item.harga_jual,
+        hpp,
+        stok_sekarang: stokSekarang,
+        stok_sesudah: stokSesudah,
+        is_negative: isNegative,
+      });
+
+      totalPenjualan += item.qty * item.harga_jual;
+      totalHpp += item.qty * hpp;
+    }
+
+    const labaKotor = totalPenjualan - totalHpp;
+
+    await checkPeriodLock(a.tenantId!, tahun);
+    await ensurePeriod(a.tenantId!, tahun);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const no_jurnal = await nextJurnalNo(a.tenantId!, tahun, bulan);
+
+      // Create journal entry with tipetransaksi='SALES'
+      const entryRes = await client.query(
+        `INSERT INTO journal_entries
+           (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, tipeTransaksi, isPosted, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,'SALES',true,$7)
+         RETURNING id, no_jurnal AS "noJurnal"`,
+        [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan, a.userId]
+      );
+      const entryId = entryRes.rows[0].id;
+
+      // Insert journal lines per item
+      for (const detail of itemDetails) {
+        const itemTotal = detail.qty * detail.harga_jual;
+        const itemHppTotal = detail.qty * detail.hpp;
+
+        // Line 1: Debit Kas (aggregated per item selling price)
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, inventory_item_id, qty)
+           VALUES ($1,$2,$3,'0',$4,NULL,NULL)`,
+          [entryId, kasAkunId, String(itemTotal), `Penjualan ${detail.nama}`]
+        );
+
+        // Line 2: Kredit Pendapatan
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, inventory_item_id, qty)
+           VALUES ($1,$2,'0',$3,$4,NULL,NULL)`,
+          [entryId, pendapatanAkunId, String(itemTotal), `Penjualan ${detail.nama}`]
+        );
+
+        // Line 3: Debit HPP
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, inventory_item_id, qty)
+           VALUES ($1,$2,$3,'0',$4,NULL,NULL)`,
+          [entryId, hppAkunId, String(itemHppTotal), `HPP ${detail.nama}`]
+        );
+
+        // Line 4: Kredit Persediaan (with inventory_item_id and qty)
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, inventory_item_id, qty)
+           VALUES ($1,$2,'0',$3,$4,$5,$6)`,
+          [entryId, persediaanAkunId, String(itemHppTotal), `HPP ${detail.nama}`, detail.inventory_item_id, String(detail.qty)]
+        );
+      }
+
+      await client.query('COMMIT');
+
+      return reply.code(201).send({
+        success: true,
+        entry: {
+          id: entryId,
+          noJurnal: entryRes.rows[0].noJurnal,
+          tanggal,
+          keterangan,
+        },
+        items: itemDetails.map(d => ({
+          nama: d.nama,
+          qty: d.qty,
+          harga_jual: d.harga_jual,
+          hpp: d.hpp,
+          stok_sesudah: d.stok_sesudah,
+          is_negative: d.is_negative,
+        })),
+        total_penjualan: totalPenjualan,
+        total_hpp: totalHpp,
+        laba_kotor: labaKotor,
+      });
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return reply.code(500).send({ error: e.message });
+    } finally {
+      client.release();
+    }
+  });
 }
