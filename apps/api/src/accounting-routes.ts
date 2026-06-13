@@ -854,16 +854,16 @@ export async function accountingRoutes(app: FastifyInstance) {
       [a.tenantId]
     );
 
-    // Check lock status from tenants table
-    const lockRes = await pool.query(
-      `SELECT saldo_awal_locked AS locked, saldo_awal_locked_at AS locked_at,
-              u.nama AS locked_by_name
+    // Check status from tenants table (DRAFT / POSTED)
+    const statusRes = await pool.query(
+      `SELECT status_saldo_awal AS status, saldo_awal_locked_at AS posted_at,
+              u.nama AS posted_by_name
        FROM tenants t
        LEFT JOIN users u ON u.id = t.saldo_awal_locked_by
        WHERE t.id = $1`,
       [a.tenantId]
     );
-    const lockStatus = lockRes.rows[0] || { locked: false, locked_at: null, locked_by_name: null };
+    const statusRow = statusRes.rows[0] || { status: 'DRAFT', posted_at: null, posted_by_name: null };
 
     let existingLines: Record<string, { debit: string; kredit: string }> = {};
     let entry: any = null;
@@ -884,9 +884,9 @@ export async function accountingRoutes(app: FastifyInstance) {
       entry,
       existingLines,
       lockStatus: {
-        locked: lockStatus.locked || false,
-        locked_at: lockStatus.locked_at,
-        locked_by_name: lockStatus.locked_by_name,
+        status: statusRow.status || 'DRAFT',
+        posted_at: statusRow.posted_at,
+        posted_by_name: statusRow.posted_by_name,
       },
     };
   });
@@ -897,13 +897,13 @@ export async function accountingRoutes(app: FastifyInstance) {
     const body = req.body as any;
     if (!body) return reply.status(400).send({ error: 'Body request kosong' });
 
-    // Check if saldo awal is locked
-    const lockCheck = await pool.query(
-      `SELECT saldo_awal_locked FROM tenants WHERE id = $1`,
+    // Check if saldo awal is posted (locked)
+    const statusCheck = await pool.query(
+      `SELECT status_saldo_awal FROM tenants WHERE id = $1`,
       [a.tenantId]
     );
-    if (lockCheck.rows[0]?.saldo_awal_locked) {
-      return reply.status(403).send({ error: 'Saldo awal terkunci. Buka kunci terlebih dahulu untuk mengubah.' });
+    if (statusCheck.rows[0]?.status_saldo_awal === 'POSTED') {
+      return reply.status(403).send({ error: 'Saldo awal sudah diposting. Unpost terlebih dahulu untuk mengubah.' });
     }
 
     const { tanggal, lines } = body;
@@ -1008,13 +1008,13 @@ export async function accountingRoutes(app: FastifyInstance) {
   app.delete('/saldo-awal', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
 
-    // Check if saldo awal is locked
-    const lockCheck = await pool.query(
-      `SELECT saldo_awal_locked FROM tenants WHERE id = $1`,
+    // Check if saldo awal is posted (locked)
+    const statusCheck = await pool.query(
+      `SELECT status_saldo_awal FROM tenants WHERE id = $1`,
       [a.tenantId]
     );
-    if (lockCheck.rows[0]?.saldo_awal_locked) {
-      return reply.status(403).send({ error: 'Saldo awal terkunci. Buka kunci terlebih dahulu untuk mereset.' });
+    if (statusCheck.rows[0]?.status_saldo_awal === 'POSTED') {
+      return reply.status(403).send({ error: 'Saldo awal sudah diposting. Unpost terlebih dahulu untuk mereset.' });
     }
 
     const entries = await pool.query(
@@ -1042,12 +1042,12 @@ export async function accountingRoutes(app: FastifyInstance) {
     }
   });
 
-  // GET /accounting/saldo-awal/lock-status — check if saldo awal is locked
+  // GET /accounting/saldo-awal/lock-status — check saldo awal status (DRAFT / POSTED)
   app.get('/saldo-awal/lock-status', tenantGuard, async (req: FastifyRequest) => {
     const a = (req as any).auth as AuthPayload;
     const result = await pool.query(
-      `SELECT saldo_awal_locked AS locked, saldo_awal_locked_at AS locked_at, 
-              saldo_awal_locked_by AS locked_by, u.nama AS locked_by_name
+      `SELECT status_saldo_awal AS status, saldo_awal_locked_at AS posted_at, 
+              saldo_awal_locked_by AS posted_by, u.nama AS posted_by_name
        FROM tenants t
        LEFT JOIN users u ON u.id = t.saldo_awal_locked_by
        WHERE t.id = $1`,
@@ -1055,24 +1055,24 @@ export async function accountingRoutes(app: FastifyInstance) {
     );
     const row = result.rows[0] || {};
     return {
-      locked: row.locked || false,
-      locked_at: row.locked_at || null,
-      locked_by: row.locked_by || null,
-      locked_by_name: row.locked_by_name || null,
+      status: row.status || 'DRAFT',
+      posted_at: row.posted_at || null,
+      posted_by: row.posted_by || null,
+      posted_by_name: row.posted_by_name || null,
     };
   });
 
-  // POST /accounting/saldo-awal/lock — lock saldo awal (prevent editing)
-  app.post('/saldo-awal/lock', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+  // POST /accounting/saldo-awal/post — post saldo awal (set status to POSTED, prevent editing)
+  app.post('/saldo-awal/post', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
     
-    // Check if already locked
+    // Check if already posted
     const check = await pool.query(
-      `SELECT saldo_awal_locked FROM tenants WHERE id = $1`,
+      `SELECT status_saldo_awal FROM tenants WHERE id = $1`,
       [a.tenantId]
     );
-    if (check.rows[0]?.saldo_awal_locked) {
-      return reply.status(400).send({ error: 'Saldo awal sudah terkunci' });
+    if (check.rows[0]?.status_saldo_awal === 'POSTED') {
+      return reply.status(400).send({ error: 'Saldo awal sudah diposting' });
     }
     
     // Check if saldo awal exists
@@ -1081,46 +1081,61 @@ export async function accountingRoutes(app: FastifyInstance) {
       [a.tenantId]
     );
     if (!entries.rowCount) {
-      return reply.status(400).send({ error: 'Belum ada saldo awal untuk dikunci' });
+      return reply.status(400).send({ error: 'Belum ada saldo awal untuk diposting' });
+    }
+
+    // Validate journal is balanced before posting
+    const balanceCheck = await pool.query(
+      `SELECT COALESCE(SUM(debit),0) AS total_debit, COALESCE(SUM(kredit),0) AS total_kredit
+       FROM journal_lines jl
+       JOIN journal_entries je ON je.id = jl.entry_id
+       WHERE je.tenant_id=$1 AND je.tipetransaksi='OPENING_BALANCE'`,
+      [a.tenantId]
+    );
+    const { total_debit, total_kredit } = balanceCheck.rows[0];
+    if (parseFloat(total_debit) !== parseFloat(total_kredit)) {
+      return reply.status(400).send({ error: 'Jurnal tidak balance. Periksa kembali debit dan kredit.' });
     }
     
-    // Lock it
+    // Post it (set status to POSTED, keep backward compat boolean in sync)
     await pool.query(
       `UPDATE tenants 
-       SET saldo_awal_locked = true, 
+       SET status_saldo_awal = 'POSTED',
+           saldo_awal_locked = true, 
            saldo_awal_locked_at = now(), 
            saldo_awal_locked_by = $2
        WHERE id = $1`,
       [a.tenantId, a.userId]
     );
     
-    return { message: 'Saldo awal berhasil dikunci', locked: true };
+    return { message: 'Saldo awal berhasil diposting', status: 'POSTED' };
   });
 
-  // POST /accounting/saldo-awal/unlock — unlock saldo awal (allow editing)
-  app.post('/saldo-awal/unlock', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+  // POST /accounting/saldo-awal/unpost — unpost saldo awal (set status back to DRAFT, allow editing)
+  app.post('/saldo-awal/unpost', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
     
-    // Check if actually locked
+    // Check if actually posted
     const check = await pool.query(
-      `SELECT saldo_awal_locked FROM tenants WHERE id = $1`,
+      `SELECT status_saldo_awal FROM tenants WHERE id = $1`,
       [a.tenantId]
     );
-    if (!check.rows[0]?.saldo_awal_locked) {
-      return reply.status(400).send({ error: 'Saldo awal tidak dalam keadaan terkunci' });
+    if (check.rows[0]?.status_saldo_awal !== 'POSTED') {
+      return reply.status(400).send({ error: 'Saldo awal tidak dalam keadaan diposting' });
     }
     
-    // Unlock it
+    // Unpost it (set status to DRAFT, keep backward compat boolean in sync)
     await pool.query(
       `UPDATE tenants 
-       SET saldo_awal_locked = false, 
+       SET status_saldo_awal = 'DRAFT',
+           saldo_awal_locked = false, 
            saldo_awal_locked_at = NULL, 
            saldo_awal_locked_by = NULL
        WHERE id = $1`,
       [a.tenantId]
     );
     
-    return { message: 'Saldo awal berhasil dibuka', locked: false };
+    return { message: 'Saldo awal berhasil diunpost', status: 'DRAFT' };
   });
 
   // GET /accounting/buku-besar — General Ledger dengan running balance
