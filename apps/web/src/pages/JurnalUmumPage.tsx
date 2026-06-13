@@ -1107,7 +1107,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
       const updated = { ...r, [field]: storeVal };
       if (field === 'debit' && parseCurrencyInput(val) > 0) updated.kredit = '';
       if (field === 'kredit' && parseCurrencyInput(val) > 0) updated.debit = '';
-      return r;
+      return updated;
     }));
   }
 
