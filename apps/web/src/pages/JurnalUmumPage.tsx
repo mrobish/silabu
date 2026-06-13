@@ -94,6 +94,10 @@ function getInheritedValue(rows: Row[], index: number, field: 'tanggal' | 'no_bu
   return '';
 }
 
+function isGhostCell(rows: Row[], i: number, field: 'tanggal' | 'no_bukti' | 'keterangan'): boolean {
+  return i > 0 && !rows[i][field] && !!getInheritedValue(rows, i, field);
+}
+
 function safeMathEval(expr: string): number | null {
   try {
     const cleaned = expr.replace(/\./g, '').replace(/,/g, '.');
@@ -294,10 +298,10 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
         next.splice(index + 1, 0, nr);
         return next;
       });
-      setTimeout(() => refMap.current.get('tanggal-' + (index + 1))?.focus(), 50);
+      setTimeout(() => refMap.current.get('akun-' + (index + 1))?.focus(), 50);
     } else {
       setRows(prev => [...prev, nr]);
-      setTimeout(() => refMap.current.get('tanggal-' + rows.length)?.focus(), 50);
+      setTimeout(() => refMap.current.get('akun-' + rows.length)?.focus(), 50);
     }
   }
 
@@ -381,21 +385,31 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
     }
   }
 
+  // ── Ghost cell click → make editable ───────────────────────
+  function handleGhostClick(i: number, field: 'tanggal' | 'no_bukti' | 'keterangan') {
+    const val = getInheritedValue(rows, i, field);
+    updateRow(i, field, val);
+    setTimeout(() => refMap.current.get(field + '-' + i)?.focus(), 50);
+  }
+
   // ── Handle Enter in last cell ───────────────────────────────
   function handleCellKeyDown(i: number, field: string, e: React.KeyboardEvent) {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (field === 'kredit') {
-        if (rows.length < 50) {
-          addRow();
-        }
+        if (rows.length < 50) addRow();
       } else {
-        // Move to next cell in the same row
-        const fields = ['tanggal', 'no_bukti', 'keterangan', 'akun', 'debit', 'kredit'];
-        const idx = fields.indexOf(field);
-        if (idx >= 0 && idx < fields.length - 1) {
-          const nextField = fields[idx + 1];
-          refMap.current.get(nextField + '-' + i)?.focus();
+        const fields = ['tanggal', 'no_bukti', 'akun', 'keterangan', 'debit', 'kredit'];
+        const ghostFields = new Set(['tanggal', 'no_bukti', 'keterangan']);
+        let idx = fields.indexOf(field);
+        while (idx < fields.length - 1) {
+          idx++;
+          const nextField = fields[idx];
+          const isGhost = i > 0 && ghostFields.has(nextField) && !rows[i][nextField as keyof Row] && !!getInheritedValue(rows, i, nextField as 'tanggal' | 'no_bukti' | 'keterangan');
+          if (!isGhost) {
+            refMap.current.get(nextField + '-' + i)?.focus();
+            break;
+          }
         }
       }
     }
@@ -853,29 +867,47 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
                         ⠿
                       </div>
 
-                      {/* Tanggal */}
-                      <input
-                        type="date"
-                        value={row.tanggal}
-                        placeholder={inheritedTanggal}
-                        onChange={e => updateRow(i, 'tanggal', e.target.value)}
-                        onKeyDown={e => handleCellKeyDown(i, 'tanggal', e)}
-                        ref={el => setRef('tanggal-' + i, el)}
-                        className={cellCls + (!row.tanggal && inheritedTanggal ? ' text-slate-400' : '')}
-                        style={!row.tanggal && inheritedTanggal ? { color: '#94a3b8' } : undefined}
-                        title={inheritedTanggal || undefined}
-                      />
+                      {/* Tanggal — ghost cell if inherited on row > 0 */}
+                      {isGhostCell(rows, i, 'tanggal') ? (
+                        <div
+                          className={cellCls + ' bg-slate-50/60 text-slate-400 border-slate-200/40 cursor-pointer hover:bg-slate-100/60 hover:text-slate-500 flex items-center select-none'}
+                          onClick={() => handleGhostClick(i, 'tanggal')}
+                          title="Klik untuk mengubah"
+                        >
+                          {inheritedTanggal}
+                        </div>
+                      ) : (
+                        <input
+                          type="date"
+                          value={row.tanggal}
+                          placeholder={inheritedTanggal}
+                          onChange={e => updateRow(i, 'tanggal', e.target.value)}
+                          onKeyDown={e => handleCellKeyDown(i, 'tanggal', e)}
+                          ref={el => setRef('tanggal-' + i, el)}
+                          className={cellCls}
+                        />
+                      )}
 
-                      {/* No. Bukti */}
-                      <input
-                        type="text"
-                        value={row.no_bukti}
-                        placeholder={inheritedBukti || 'No. bukti'}
-                        onChange={e => updateRow(i, 'no_bukti', e.target.value)}
-                        onKeyDown={e => handleCellKeyDown(i, 'no_bukti', e)}
-                        ref={el => setRef('no_bukti-' + i, el)}
-                        className={cellCls + (!row.no_bukti && inheritedBukti ? ' text-slate-400 italic' : '')}
-                      />
+                      {/* No. Bukti — ghost cell if inherited on row > 0 */}
+                      {isGhostCell(rows, i, 'no_bukti') ? (
+                        <div
+                          className={cellCls + ' bg-slate-50/60 text-slate-400 border-slate-200/40 cursor-pointer hover:bg-slate-100/60 hover:text-slate-500 flex items-center select-none italic'}
+                          onClick={() => handleGhostClick(i, 'no_bukti')}
+                          title="Klik untuk mengubah"
+                        >
+                          {inheritedBukti}
+                        </div>
+                      ) : (
+                        <input
+                          type="text"
+                          value={row.no_bukti}
+                          placeholder={inheritedBukti || 'No. bukti'}
+                          onChange={e => updateRow(i, 'no_bukti', e.target.value)}
+                          onKeyDown={e => handleCellKeyDown(i, 'no_bukti', e)}
+                          ref={el => setRef('no_bukti-' + i, el)}
+                          className={cellCls}
+                        />
+                      )}
 
                       {/* Akun */}
                       <div className="relative" ref={openDropdown === i ? dropdownRef : undefined}>
@@ -921,16 +953,26 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
                         )}
                       </div>
 
-                      {/* Keterangan */}
-                      <input
-                        type="text"
-                        value={row.keterangan}
-                        placeholder={inheritedKet || 'Keterangan'}
-                        onChange={e => updateRow(i, 'keterangan', e.target.value)}
-                        onKeyDown={e => handleCellKeyDown(i, 'keterangan', e)}
-                        ref={el => setRef('keterangan-' + i, el)}
-                        className={cellCls + (!row.keterangan && inheritedKet ? ' text-slate-400 italic' : '')}
-                      />
+                      {/* Keterangan — ghost cell if inherited on row > 0 */}
+                      {isGhostCell(rows, i, 'keterangan') ? (
+                        <div
+                          className={cellCls + ' bg-slate-50/60 text-slate-400 border-slate-200/40 cursor-pointer hover:bg-slate-100/60 hover:text-slate-500 flex items-center select-none italic'}
+                          onClick={() => handleGhostClick(i, 'keterangan')}
+                          title="Klik untuk mengubah"
+                        >
+                          {inheritedKet}
+                        </div>
+                      ) : (
+                        <input
+                          type="text"
+                          value={row.keterangan}
+                          placeholder={inheritedKet || 'Keterangan'}
+                          onChange={e => updateRow(i, 'keterangan', e.target.value)}
+                          onKeyDown={e => handleCellKeyDown(i, 'keterangan', e)}
+                          ref={el => setRef('keterangan-' + i, el)}
+                          className={cellCls}
+                        />
+                      )}
 
                       {/* Debit */}
                       <div className="flex items-center gap-1">
