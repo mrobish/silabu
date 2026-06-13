@@ -21,8 +21,9 @@ import InventoryPage from './InventoryPage';
 import BukuPembantuUtangPage from './BukuPembantuUtangPage';
 import BukuPembantuPiutangPage from './BukuPembantuPiutangPage';
 import BukuPembantuPersediaanPage from './BukuPembantuPersediaanPage';
+import TransaksiCepatPage from './TransaksiCepatPage';
 
-type Page = 'dashboard' | 'password' | 'langganan' | 'profil' | 'coa' | 'saldo-awal' | 'jurnal' | 'rekap-jurnal' | 'penyesuaian' | 'rincian-saldo' | 'buku-besar' | 'laba-rugi' | 'neraca' | 'neraca-saldo' | 'arus-kas' | 'perubahan-modal' | 'aset-tetap' | 'tutup-buku' | 'calk' | 'bantuan' | 'kontak' | 'persediaan' | 'buku-pembantu-utang' | 'buku-pembantu-piutang' | 'buku-pembantu-persediaan';
+type Page = 'dashboard' | 'password' | 'langganan' | 'profil' | 'coa' | 'saldo-awal' | 'jurnal' | 'rekap-jurnal' | 'penyesuaian' | 'rincian-saldo' | 'buku-besar' | 'laba-rugi' | 'neraca' | 'neraca-saldo' | 'arus-kas' | 'perubahan-modal' | 'aset-tetap' | 'tutup-buku' | 'calk' | 'bantuan' | 'kontak' | 'persediaan' | 'buku-pembantu-utang' | 'buku-pembantu-piutang' | 'buku-pembantu-persediaan' | 'transaksi-cepat';
 
 const officeIcon = 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m6-14h.01M9 11h.01M9 15h.01M15 7h.01M15 11h.01M15 15h.01M12 21v-4a1 1 0 011-1h-2a1 1 0 011 1v4z';
 
@@ -1407,7 +1408,7 @@ export default function AppDashboard() {
   const [collapsed, setCollapsed] = useState(false);
   const [page, setPageRaw] = useState<Page>(() => {
     const saved = localStorage.getItem('activePage');
-    const valid: Page[] = ['dashboard', 'password', 'langganan', 'profil', 'coa', 'saldo-awal', 'jurnal', 'rekap-jurnal', 'penyesuaian', 'rincian-saldo', 'buku-besar', 'laba-rugi', 'neraca', 'neraca-saldo', 'arus-kas', 'perubahan-modal', 'aset-tetap', 'tutup-buku', 'calk', 'bantuan', 'kontak', 'persediaan', 'buku-pembantu-utang', 'buku-pembantu-piutang', 'buku-pembantu-persediaan'];
+    const valid: Page[] = ['dashboard', 'password', 'langganan', 'profil', 'coa', 'saldo-awal', 'jurnal', 'rekap-jurnal', 'penyesuaian', 'rincian-saldo', 'buku-besar', 'laba-rugi', 'neraca', 'neraca-saldo', 'arus-kas', 'perubahan-modal', 'aset-tetap', 'tutup-buku', 'calk', 'bantuan', 'kontak', 'persediaan', 'buku-pembantu-utang', 'buku-pembantu-piutang', 'buku-pembantu-persediaan', 'transaksi-cepat'];
     return (saved && valid.includes(saved as Page)) ? (saved as Page) : 'dashboard';
   });
   const setPage = (p: Page) => { localStorage.setItem('activePage', p); setPageRaw(p); };
@@ -1619,6 +1620,14 @@ export default function AppDashboard() {
 
           <div className="my-2 border-t border-slate-200/60" />
           {!collapsed && <p className="px-2.5 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Keuangan</p>}
+          <button onClick={() => { setPage('transaksi-cepat'); setSidebarOpen(false); }}
+            className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'transaksi-cepat' ? 'bg-amber-50 text-amber-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
+            <span className="relative">
+              <Icon d="M13 10V3L4 14h7v7l9-11h-7z" />
+              {page === 'transaksi-cepat' && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 bg-amber-500 rounded-full" />}
+            </span>
+            {!collapsed && <span>Transaksi Cepat</span>}
+          </button>
           <button onClick={() => { setPage('jurnal'); setSidebarOpen(false); }}
             className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ' + (page === 'jurnal' ? 'bg-emerald-50 text-emerald-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800') + (collapsed ? ' justify-center px-0' : '')}>
             <span className="relative">
@@ -1694,7 +1703,7 @@ export default function AppDashboard() {
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-slate-600 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 transition" aria-label="Buka menu">
             <Icon d="M4 6h16M4 12h16M4 18h16" className="w-6 h-6" />
           </button>
-          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : page === 'profil' ? 'Profil BUM Desa' : page === 'coa' ? 'Bagan Akun (CoA)' : page === 'saldo-awal' ? 'Setup Saldo Awal' : page === 'jurnal' ? 'Jurnal Umum' : page === 'rekap-jurnal' ? 'Rekap Transaksi Jurnal' : page === 'penyesuaian' ? 'Jurnal Penyesuaian' : page === 'rincian-saldo' ? 'Rincian Saldo Awal' : page === 'buku-besar' ? 'Buku Besar' : page === 'laba-rugi' ? 'Laba Rugi' : page === 'neraca' ? 'Neraca' : page === 'neraca-saldo' ? 'Neraca Saldo' : page === 'arus-kas' ? 'Arus Kas' : page === 'aset-tetap' ? 'Aset & Inventaris' : page === 'tutup-buku' ? 'Tutup Buku Tahunan' : page === 'calk' ? 'CALK' : page === 'bantuan' ? 'Panduan' : page === 'kontak' ? 'Kontak' : page === 'persediaan' ? 'Persediaan' : page === 'buku-pembantu-utang' ? 'Buku Pembantu Utang' : page === 'buku-pembantu-piutang' ? 'Buku Pembantu Piutang' : page === 'buku-pembantu-persediaan' ? 'Buku Pembantu Persediaan' : 'Dashboard'}</h2>
+          <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : page === 'profil' ? 'Profil BUM Desa' : page === 'coa' ? 'Bagan Akun (CoA)' : page === 'saldo-awal' ? 'Setup Saldo Awal' : page === 'jurnal' ? 'Jurnal Umum' : page === 'rekap-jurnal' ? 'Rekap Transaksi Jurnal' : page === 'penyesuaian' ? 'Jurnal Penyesuaian' : page === 'rincian-saldo' ? 'Rincian Saldo Awal' : page === 'buku-besar' ? 'Buku Besar' : page === 'laba-rugi' ? 'Laba Rugi' : page === 'neraca' ? 'Neraca' : page === 'neraca-saldo' ? 'Neraca Saldo' : page === 'arus-kas' ? 'Arus Kas' : page === 'aset-tetap' ? 'Aset & Inventaris' : page === 'tutup-buku' ? 'Tutup Buku Tahunan' : page === 'calk' ? 'CALK' : page === 'bantuan' ? 'Panduan' : page === 'kontak' ? 'Kontak' : page === 'persediaan' ? 'Persediaan' : page === 'buku-pembantu-utang' ? 'Buku Pembantu Utang' : page === 'buku-pembantu-piutang' ? 'Buku Pembantu Piutang' : page === 'buku-pembantu-persediaan' ? 'Buku Pembantu Persediaan' : page === 'transaksi-cepat' ? 'Transaksi Cepat' : 'Dashboard'}</h2>
           <div className="flex-1" />
           {/* Profile dropdown */}
           <div ref={profileRef} className="relative">
@@ -1741,7 +1750,7 @@ export default function AppDashboard() {
               <button onClick={() => dismissAnnouncement(a.id)} className="p-1 rounded-lg hover:bg-black/10 transition shrink-0" title="Tutup"><Icon d="M6 18L18 6M6 6l12 12" className="w-4 h-4" /></button>
             </div>
           ))}
-          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : page === 'profil' ? <ProfilPage setPage={setPage} /> : page === 'coa' ? <CoAPage /> : page === 'saldo-awal' ? <SaldoAwalPage setPage={setPage} /> : page === 'jurnal' ? <JurnalUmumPage setPage={setPage} /> : page === 'rekap-jurnal' ? <RekapJurnalPage /> : page === 'penyesuaian' ? <JurnalPenyesuaianPage /> : page === 'rincian-saldo' ? <RincianSaldoPage /> : page === 'buku-besar' ? <BukuBesarPage /> : page === 'laba-rugi' ? <LabaRugiPage /> : page === 'neraca' ? <NeracaPage /> : page === 'neraca-saldo' ? <NeracaSaldoPage /> : page === 'arus-kas' ? <ArusKasPage /> : page === 'perubahan-modal' ? <PerubahanModalPage /> : page === 'aset-tetap' ? <AsetTetapPage /> : page === 'tutup-buku' ? <TutupBukuPage /> : page === 'calk' ? <CalkPage /> : page === 'bantuan' ? <BantuanPage /> : page === 'kontak' ? <ContactsPage /> : page === 'persediaan' ? <InventoryPage /> : page === 'buku-pembantu-utang' ? <BukuPembantuUtangPage /> : page === 'buku-pembantu-piutang' ? <BukuPembantuPiutangPage /> : page === 'buku-pembantu-persediaan' ? <BukuPembantuPersediaanPage /> : (
+          {page === 'password' ? <PasswordForm /> : page === 'langganan' ? <LanggananPage /> : page === 'profil' ? <ProfilPage setPage={setPage} /> : page === 'coa' ? <CoAPage /> : page === 'saldo-awal' ? <SaldoAwalPage setPage={setPage} /> : page === 'jurnal' ? <JurnalUmumPage setPage={setPage} /> : page === 'rekap-jurnal' ? <RekapJurnalPage /> : page === 'penyesuaian' ? <JurnalPenyesuaianPage /> : page === 'rincian-saldo' ? <RincianSaldoPage /> : page === 'buku-besar' ? <BukuBesarPage /> : page === 'laba-rugi' ? <LabaRugiPage /> : page === 'neraca' ? <NeracaPage /> : page === 'neraca-saldo' ? <NeracaSaldoPage /> : page === 'arus-kas' ? <ArusKasPage /> : page === 'perubahan-modal' ? <PerubahanModalPage /> : page === 'aset-tetap' ? <AsetTetapPage /> : page === 'tutup-buku' ? <TutupBukuPage /> : page === 'calk' ? <CalkPage /> : page === 'bantuan' ? <BantuanPage /> : page === 'kontak' ? <ContactsPage /> : page === 'persediaan' ? <InventoryPage /> : page === 'buku-pembantu-utang' ? <BukuPembantuUtangPage /> : page === 'buku-pembantu-piutang' ? <BukuPembantuPiutangPage /> : page === 'buku-pembantu-persediaan' ? <BukuPembantuPersediaanPage /> : page === 'transaksi-cepat' ? <TransaksiCepatPage /> : (
             <div className="space-y-8 animate-fade-in">
               {/* Trial banner */}
               {trialEnds && !isTrialExpired && (

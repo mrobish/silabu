@@ -2526,4 +2526,185 @@ export async function accountingRoutes(app: FastifyInstance) {
       client.release();
     }
   });
+
+  // ─── TRANSAKSI CEPAT (Guided Transactions) ──────────────────
+  // POST /accounting/transaksi/quick — Auto-jurnal for guided transactions
+  app.post('/transaksi/quick', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const b = req.body as any;
+
+    // Validate required fields
+    if (!b.tipe || !b.tanggal || !b.nominal || !b.sumber_akun_id) {
+      return reply.code(400).send({ error: 'tipe, tanggal, nominal, dan sumber_akun_id wajib' });
+    }
+
+    const tipe = b.tipe as string;
+    const tanggal = b.tanggal as string;
+    const nominal = parseFloat(b.nominal);
+    const sumberAkunId = b.sumber_akun_id as string;
+    const keterangan = b.keterangan || '';
+    const contactId = b.contact_id || null;
+    const inventoryItemId = b.inventory_item_id || null;
+    const qty = b.qty ? parseFloat(b.qty) : null;
+
+    if (isNaN(nominal) || nominal <= 0) {
+      return reply.code(400).send({ error: 'Nominal harus lebih dari 0' });
+    }
+
+    // Parse tanggal
+    const [tahunStr, bulanStr] = tanggal.split('-');
+    const tahun = parseInt(tahunStr, 10);
+    const bulan = parseInt(bulanStr, 10);
+    if (isNaN(tahun) || isNaN(bulan)) {
+      return reply.code(400).send({ error: 'Format tanggal tidak valid' });
+    }
+
+    // Determine target akun based on transaction type
+    let targetAkunKode = '';
+    let tipeTransaksi = 'GENERAL';
+    let desc = keterangan;
+
+    switch (tipe) {
+      case 'bayar_utang':
+        targetAkunKode = '2.1.01'; // Utang Usaha
+        if (!contactId) return reply.code(400).send({ error: 'Supplier wajib dipilih' });
+        if (!desc) desc = 'Pembayaran utang';
+        break;
+      case 'terima_piutang':
+        targetAkunKode = '1.1.03'; // Piutang Usaha
+        if (!contactId) return reply.code(400).send({ error: 'Pelanggan wajib dipilih' });
+        if (!desc) desc = 'Penerimaan piutang';
+        break;
+      case 'beli_persediaan':
+        targetAkunKode = '1.1.05'; // Persediaan
+        if (!inventoryItemId) return reply.code(400).send({ error: 'Barang wajib dipilih' });
+        if (!qty || qty <= 0) return reply.code(400).send({ error: 'Jumlah barang wajib diisi' });
+        if (!desc) desc = 'Pembelian persediaan';
+        break;
+      case 'jual_persediaan':
+        targetAkunKode = '1.1.05'; // Persediaan
+        if (!inventoryItemId) return reply.code(400).send({ error: 'Barang wajib dipilih' });
+        if (!qty || qty <= 0) return reply.code(400).send({ error: 'Jumlah barang wajib diisi' });
+        if (!desc) desc = 'Penjualan persediaan';
+        break;
+      default:
+        return reply.code(400).send({ error: 'Tipe transaksi tidak valid' });
+    }
+
+    // Find target akun by kode prefix
+    const targetRes = await pool.query(
+      `SELECT id, kode, nama FROM chart_of_accounts 
+       WHERE tenant_id=$1 AND kode LIKE $2 AND isactive=true AND ispostable=true
+       ORDER BY kode LIMIT 1`,
+      [a.tenantId, targetAkunKode + '%']
+    );
+    if (!targetRes.rowCount) {
+      return reply.code(400).send({ error: `Akun ${targetAkunKode} tidak ditemukan atau tidak aktif` });
+    }
+    const targetAkun = targetRes.rows[0];
+
+    // Validate sumber akun exists
+    const sumberRes = await pool.query(
+      `SELECT id, kode, nama FROM chart_of_accounts WHERE id=$1 AND tenant_id=$2`,
+      [sumberAkunId, a.tenantId]
+    );
+    if (!sumberRes.rowCount) {
+      return reply.code(400).send({ error: 'Akun sumber tidak ditemukan' });
+    }
+
+    await checkPeriodLock(a.tenantId!, tahun);
+    await ensurePeriod(a.tenantId!, tahun);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const no_jurnal = await nextJurnalNo(a.tenantId!, tahun, bulan);
+
+      // Create journal entry
+      const entryRes = await client.query(
+        `INSERT INTO journal_entries
+           (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, tipeTransaksi, isPosted, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,'GENERAL',true,$7)
+         RETURNING id, no_jurnal AS "noJurnal"`,
+        [a.tenantId, no_jurnal, tanggal, bulan, tahun, desc, a.userId]
+      );
+      const entryId = entryRes.rows[0].id;
+
+      // Create journal lines based on transaction type
+      // Debit/Kredit logic:
+      // - bayar_utang: Debit Utang (kurangi hutang), Credit Kas/Bank (kurangi kas)
+      // - terima_piutang: Debit Kas/Bank (tambah kas), Credit Piutang (kurangi piutang)
+      // - beli_persediaan: Debit Persediaan (tambah stok), Credit Kas/Bank (kurangi kas)
+      // - jual_persediaan: Debit Kas/Bank (tambah kas), Credit Persediaan (kurangi stok)
+
+      let line1Debit = '0', line1Kredit = '0', line2Debit = '0', line2Kredit = '0';
+      let line1AkunId = '', line2AkunId = '';
+      let line1ContactId = null, line1InventoryItemId = null, line1Qty = null;
+      let line2ContactId = null, line2InventoryItemId = null, line2Qty = null;
+
+      const nominalStr = String(nominal);
+
+      switch (tipe) {
+        case 'bayar_utang':
+          // Debit Utang (kurangi hutang), Credit Kas/Bank
+          line1AkunId = targetAkun.id; line1Debit = nominalStr; line1Kredit = '0';
+          line1ContactId = contactId;
+          line2AkunId = sumberAkunId; line2Debit = '0'; line2Kredit = nominalStr;
+          break;
+        case 'terima_piutang':
+          // Debit Kas/Bank, Credit Piutang (kurangi piutang)
+          line1AkunId = sumberAkunId; line1Debit = nominalStr; line1Kredit = '0';
+          line2AkunId = targetAkun.id; line2Debit = '0'; line2Kredit = nominalStr;
+          line2ContactId = contactId;
+          break;
+        case 'beli_persediaan':
+          // Debit Persediaan (tambah stok), Credit Kas/Bank
+          line1AkunId = targetAkun.id; line1Debit = nominalStr; line1Kredit = '0';
+          line1InventoryItemId = inventoryItemId; line1Qty = String(qty);
+          line2AkunId = sumberAkunId; line2Debit = '0'; line2Kredit = nominalStr;
+          break;
+        case 'jual_persediaan':
+          // Debit Kas/Bank, Credit Persediaan (kurangi stok)
+          line1AkunId = sumberAkunId; line1Debit = nominalStr; line1Kredit = '0';
+          line2AkunId = targetAkun.id; line2Debit = '0'; line2Kredit = nominalStr;
+          line2InventoryItemId = inventoryItemId; line2Qty = String(qty);
+          break;
+      }
+
+      // Insert line 1 (Debit side)
+      await client.query(
+        `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, contact_id, inventory_item_id, qty)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [entryId, line1AkunId, line1Debit, line1Kredit, desc, line1ContactId, line1InventoryItemId, line1Qty]
+      );
+
+      // Insert line 2 (Kredit side)
+      await client.query(
+        `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, contact_id, inventory_item_id, qty)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [entryId, line2AkunId, line2Debit, line2Kredit, desc, line2ContactId, line2InventoryItemId, line2Qty]
+      );
+
+      await client.query('COMMIT');
+
+      return reply.code(201).send({
+        success: true,
+        message: 'Transaksi berhasil disimpan',
+        entry: {
+          id: entryId,
+          noJurnal: entryRes.rows[0].noJurnal,
+          tanggal,
+          tipe,
+          nominal,
+          keterangan: desc,
+        },
+      });
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return reply.code(500).send({ error: e.message });
+    } finally {
+      client.release();
+    }
+  });
 }
