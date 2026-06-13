@@ -489,36 +489,36 @@ export default function TransaksiCepatPage() {
 
       {/* Menu View — Two big cards */}
       {view === 'menu' && loaded && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div className="grid grid-cols-2 gap-3 sm:gap-5">
           {/* Uang Masuk */}
           <button onClick={() => selectTipe('uang_masuk')}
-            className={`${br} p-6 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
-            <div className="flex items-center justify-center h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 text-white mb-4 shadow-lg shadow-emerald-500/20">
-              <ArrowDownToLine size={28} />
+            className={`${br} p-4 sm:p-6 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
+            <div className="flex items-center justify-center h-11 w-11 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 text-white mb-2.5 sm:mb-4 shadow-lg shadow-emerald-500/20">
+              <ArrowDownToLine size={20} className="sm:w-7 sm:h-7" />
             </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-1">Uang Masuk</h3>
-            <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wide mb-2">Penerimaan</p>
-            <p className="text-sm text-slate-500 mb-5">
+            <h3 className="text-sm sm:text-lg font-bold text-slate-900 mb-0.5 sm:mb-1">Uang Masuk</h3>
+            <p className="text-[10px] sm:text-[11px] font-semibold text-emerald-600 uppercase tracking-wide mb-1.5 sm:mb-2">Penerimaan</p>
+            <p className="text-xs sm:text-sm text-slate-500 mb-3 sm:mb-5 leading-snug">
               Terima uang dari pelanggan, pendapatan, atau sumber lainnya
             </p>
-            <span className="inline-block rounded-xl bg-emerald-50 px-5 py-2.5 text-sm font-bold text-emerald-700 group-hover:bg-emerald-100 transition">
-              Buat Penerimaan →
+            <span className="inline-block rounded-lg sm:rounded-xl bg-emerald-50 px-3 py-1.5 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-bold text-emerald-700 group-hover:bg-emerald-100 transition">
+              Penerimaan →
             </span>
           </button>
 
           {/* Uang Keluar */}
           <button onClick={() => selectTipe('uang_keluar')}
-            className={`${br} p-6 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
-            <div className="flex items-center justify-center h-16 w-16 rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 text-white mb-4 shadow-lg shadow-rose-500/20">
-              <ArrowUpFromLine size={28} />
+            className={`${br} p-4 sm:p-6 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
+            <div className="flex items-center justify-center h-11 w-11 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 text-white mb-2.5 sm:mb-4 shadow-lg shadow-rose-500/20">
+              <ArrowUpFromLine size={20} className="sm:w-7 sm:h-7" />
             </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-1">Uang Keluar</h3>
-            <p className="text-[11px] font-semibold text-rose-600 uppercase tracking-wide mb-2">Pengeluaran</p>
-            <p className="text-sm text-slate-500 mb-5">
+            <h3 className="text-sm sm:text-lg font-bold text-slate-900 mb-0.5 sm:mb-1">Uang Keluar</h3>
+            <p className="text-[10px] sm:text-[11px] font-semibold text-rose-600 uppercase tracking-wide mb-1.5 sm:mb-2">Pengeluaran</p>
+            <p className="text-xs sm:text-sm text-slate-500 mb-3 sm:mb-5 leading-snug">
               Bayar beban, utang, beli barang, atau pengeluaran lainnya
             </p>
-            <span className="inline-block rounded-xl bg-rose-50 px-5 py-2.5 text-sm font-bold text-rose-700 group-hover:bg-rose-100 transition">
-              Buat Pengeluaran →
+            <span className="inline-block rounded-lg sm:rounded-xl bg-rose-50 px-3 py-1.5 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-bold text-rose-700 group-hover:bg-rose-100 transition">
+              Pengeluaran →
             </span>
           </button>
         </div>
@@ -536,55 +536,55 @@ export default function TransaksiCepatPage() {
               <p className="text-xs text-slate-500">Panduan otomatis untuk transaksi umum</p>
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {/* Bayar Utang */}
             <button onClick={() => {/* TODO: implement bayar_utang form */}}
-              className={`${br} p-5 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
-              <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 text-white mb-3 shadow-lg shadow-orange-500/20">
-                <ArrowUpFromLine size={22} />
+              className={`${br} p-3 sm:p-5 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
+              <div className="flex items-center justify-center h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 text-white mb-2 sm:mb-3 shadow-lg shadow-orange-500/20">
+                <ArrowUpFromLine size={18} className="sm:w-[22px] sm:h-[22px]" />
               </div>
-              <h4 className="text-sm font-bold text-slate-900 mb-1">Bayar Utang</h4>
-              <p className="text-[11px] text-slate-500 mb-3">Bayar tagihan ke supplier</p>
-              <span className="inline-block rounded-lg bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 group-hover:bg-orange-100 transition">
+              <h4 className="text-xs sm:text-sm font-bold text-slate-900 mb-0.5 sm:mb-1 leading-tight">Bayar Utang</h4>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 mb-2 sm:mb-3 leading-snug">Bayar tagihan ke supplier</p>
+              <span className="inline-block rounded-md sm:rounded-lg bg-orange-50 px-2 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-orange-700 group-hover:bg-orange-100 transition">
                 Bayar →
               </span>
             </button>
 
             {/* Terima Piutang */}
             <button onClick={() => {/* TODO: implement terima_piutang form */}}
-              className={`${br} p-5 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
-              <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white mb-3 shadow-lg shadow-teal-500/20">
-                <ArrowDownToLine size={22} />
+              className={`${br} p-3 sm:p-5 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
+              <div className="flex items-center justify-center h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white mb-2 sm:mb-3 shadow-lg shadow-teal-500/20">
+                <ArrowDownToLine size={18} className="sm:w-[22px] sm:h-[22px]" />
               </div>
-              <h4 className="text-sm font-bold text-slate-900 mb-1">Terima Piutang</h4>
-              <p className="text-[11px] text-slate-500 mb-3">Terima pembayaran dari pelanggan</p>
-              <span className="inline-block rounded-lg bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 group-hover:bg-teal-100 transition">
+              <h4 className="text-xs sm:text-sm font-bold text-slate-900 mb-0.5 sm:mb-1 leading-tight">Terima Piutang</h4>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 mb-2 sm:mb-3 leading-snug">Terima pembayaran dari pelanggan</p>
+              <span className="inline-block rounded-md sm:rounded-lg bg-teal-50 px-2 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-teal-700 group-hover:bg-teal-100 transition">
                 Terima →
               </span>
             </button>
 
             {/* Beli Persediaan */}
             <button onClick={() => {/* TODO: implement beli_persediaan form */}}
-              className={`${br} p-5 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
-              <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white mb-3 shadow-lg shadow-blue-500/20">
-                <Landmark size={22} />
+              className={`${br} p-3 sm:p-5 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
+              <div className="flex items-center justify-center h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white mb-2 sm:mb-3 shadow-lg shadow-blue-500/20">
+                <Landmark size={18} className="sm:w-[22px] sm:h-[22px]" />
               </div>
-              <h4 className="text-sm font-bold text-slate-900 mb-1">Beli Persediaan</h4>
-              <p className="text-[11px] text-slate-500 mb-3">Catat pembelian barang/stok</p>
-              <span className="inline-block rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 group-hover:bg-blue-100 transition">
+              <h4 className="text-xs sm:text-sm font-bold text-slate-900 mb-0.5 sm:mb-1 leading-tight">Beli Persediaan</h4>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 mb-2 sm:mb-3 leading-snug">Catat pembelian barang/stok</p>
+              <span className="inline-block rounded-md sm:rounded-lg bg-blue-50 px-2 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-blue-700 group-hover:bg-blue-100 transition">
                 Beli →
               </span>
             </button>
 
             {/* Jual Persediaan */}
             <button onClick={() => {/* TODO: implement jual_persediaan form */}}
-              className={`${br} p-5 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
-              <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 text-white mb-3 shadow-lg shadow-purple-500/20">
-                <Wallet size={22} />
+              className={`${br} p-3 sm:p-5 text-left transition hover:shadow-lg hover:-translate-y-0.5 group`}>
+              <div className="flex items-center justify-center h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 text-white mb-2 sm:mb-3 shadow-lg shadow-purple-500/20">
+                <Wallet size={18} className="sm:w-[22px] sm:h-[22px]" />
               </div>
-              <h4 className="text-sm font-bold text-slate-900 mb-1">Jual Persediaan</h4>
-              <p className="text-[11px] text-slate-500 mb-3">Catat penjualan barang/stok</p>
-              <span className="inline-block rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 group-hover:bg-purple-100 transition">
+              <h4 className="text-xs sm:text-sm font-bold text-slate-900 mb-0.5 sm:mb-1 leading-tight">Jual Persediaan</h4>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 mb-2 sm:mb-3 leading-snug">Catat penjualan barang/stok</p>
+              <span className="inline-block rounded-md sm:rounded-lg bg-purple-50 px-2 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-purple-700 group-hover:bg-purple-100 transition">
                 Jual →
               </span>
             </button>
