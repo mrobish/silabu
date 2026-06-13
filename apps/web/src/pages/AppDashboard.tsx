@@ -22,6 +22,8 @@ import BukuPembantuUtangPage from './BukuPembantuUtangPage';
 import BukuPembantuPiutangPage from './BukuPembantuPiutangPage';
 import BukuPembantuPersediaanPage from './BukuPembantuPersediaanPage';
 import PenjualanPage from './PenjualanPage';
+import { HelpProvider, useHelp } from './HelpContext';
+import HelpDrawer from './HelpDrawer';
 
 type Page = 'dashboard' | 'password' | 'langganan' | 'profil' | 'coa' | 'saldo-awal' | 'jurnal' | 'rekap-jurnal' | 'penyesuaian' | 'rincian-saldo' | 'buku-besar' | 'laba-rugi' | 'neraca' | 'neraca-saldo' | 'arus-kas' | 'perubahan-modal' | 'aset-tetap' | 'tutup-buku' | 'calk' | 'bantuan' | 'kontak' | 'persediaan' | 'buku-pembantu-utang' | 'buku-pembantu-piutang' | 'buku-pembantu-persediaan' | 'penjualan';
 
@@ -1463,6 +1465,20 @@ function SaldoAwalPage({ setPage }: { setPage: (p: Page) => void }) {
   );
 }
 
+// ─── Help Button (must be inside HelpProvider) ─────────────
+function HelpButton() {
+  const { toggleHelp } = useHelp();
+  return (
+    <button onClick={toggleHelp}
+      className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition-all"
+      title="Pusat Bantuan">
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}>
+        <path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    </button>
+  );
+}
+
 export default function AppDashboard() {
   const [user, setUser] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -1590,6 +1606,7 @@ export default function AppDashboard() {
   const MAIN_ML = collapsed ? 'lg:ml-20' : 'lg:ml-64';
 
   return (
+    <HelpProvider>
     <div className="min-h-screen bg-slate-50">
       {/* Mobile overlay */}
       {sidebarOpen && (
@@ -1739,8 +1756,10 @@ export default function AppDashboard() {
           </button>
           <h2 className="text-lg font-bold text-slate-900">{page === 'password' ? 'Ubah Password' : page === 'langganan' ? 'Langganan' : page === 'profil' ? 'Profil BUM Desa' : page === 'coa' ? 'Bagan Akun (CoA)' : page === 'saldo-awal' ? 'Setup Saldo Awal' : page === 'jurnal' ? 'Jurnal Umum' : page === 'rekap-jurnal' ? 'Rekap Transaksi Jurnal' : page === 'penyesuaian' ? 'Jurnal Penyesuaian' : page === 'rincian-saldo' ? 'Rincian Saldo Awal' : page === 'buku-besar' ? 'Buku Besar' : page === 'laba-rugi' ? 'Laba Rugi' : page === 'neraca' ? 'Neraca' : page === 'neraca-saldo' ? 'Neraca Saldo' : page === 'arus-kas' ? 'Arus Kas' : page === 'aset-tetap' ? 'Aset & Inventaris' : page === 'tutup-buku' ? 'Tutup Buku Tahunan' : page === 'calk' ? 'CALK' : page === 'bantuan' ? 'Panduan' : page === 'kontak' ? 'Kontak' : page === 'persediaan' ? 'Persediaan' : page === 'buku-pembantu-utang' ? 'Buku Pembantu Utang' : page === 'buku-pembantu-piutang' ? 'Buku Pembantu Piutang' : page === 'buku-pembantu-persediaan' ? 'Buku Pembantu Persediaan' : page === 'penjualan' ? 'Penjualan (Mini POS)' : 'Dashboard'}</h2>
           <div className="flex-1" />
-          {/* Profile dropdown */}
-          <div ref={profileRef} className="relative">
+          {/* Help button + Profile dropdown */}
+          <div className="flex items-center gap-2">
+            <HelpButton />
+            <div ref={profileRef} className="relative">
             <button onClick={() => setProfileOpen(!profileOpen)}
               className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center text-white font-bold text-sm shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200">
               {(user.nama_lengkap || user.email)[0].toUpperCase()}
@@ -1763,6 +1782,7 @@ export default function AppDashboard() {
                 </button>
               </div>
             )}
+          </div>
           </div>
         </header>
 
@@ -1948,5 +1968,7 @@ export default function AppDashboard() {
       )}
 
     </div>
+    <HelpDrawer />
+    </HelpProvider>
   );
 }

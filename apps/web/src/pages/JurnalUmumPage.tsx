@@ -385,7 +385,7 @@ const DetailRowInner = React.memo(function DetailRowInner({
             onKeyDown={e => {
               if (e.key === 'Enter') { e.preventDefault(); lineRefs.current.get('debit-' + index)?.focus(); }
             }}
-            ref={el => lineRefs.current.set('akun-' + index, el)}
+            ref={el => lineRefs.current.set('akun-' + index, el)} data-help-target={index === 0 ? "line-akun" : undefined}
             className={cellCls}
           />
           {openDropdown === index && (line.searchTerm || '').length > 0 && !line.akun_id && (
@@ -430,7 +430,7 @@ const DetailRowInner = React.memo(function DetailRowInner({
             onKeyDown={e => {
               if (e.key === 'Enter') { e.preventDefault(); lineRefs.current.get('kredit-' + index)?.focus(); }
             }}
-            ref={el => lineRefs.current.set('debit-' + index, el)}
+            ref={el => lineRefs.current.set('debit-' + index, el)} data-help-target={index === 0 ? "line-debit" : undefined}
             className={cellCls + ' text-right tabular-nums' + (isAutoFilled('debit') ? ' bg-amber-50/50 border-amber-200/50' : '')}
           />
         </div>
@@ -456,7 +456,7 @@ const DetailRowInner = React.memo(function DetailRowInner({
                 else document.dispatchEvent(new CustomEvent('jurnal-add-line'));
               }
             }}
-            ref={el => lineRefs.current.set('kredit-' + index, el)}
+            ref={el => lineRefs.current.set('kredit-' + index, el)} data-help-target={index === 0 ? "line-kredit" : undefined}
             className={cellCls + ' text-right tabular-nums' + (isAutoFilled('kredit') ? ' bg-amber-50/50 border-amber-200/50' : '')}
           />
           {/* ⚡ Auto-Balance */}
@@ -1374,7 +1374,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
             {/* Template Dropdown */}
             <div className="relative ml-2" ref={templateDropdownRef}>
               <button type="button" onClick={() => setTemplateDropdownOpen(!templateDropdownOpen)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition border border-emerald-200">
+                data-help-target="btn-template" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition border border-emerald-200">
                 📋 Template
                 <svg className={"w-3 h-3 transition-transform " + (templateDropdownOpen ? 'rotate-180' : '')} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </button>
@@ -1419,7 +1419,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">Tanggal <span className="text-red-400">*</span></label>
                   <input type="date" value={header.tanggal} onChange={e => updateHeader('tanggal', e.target.value)}
-                    ref={el => lineRefs.current.set('header-tanggal', el)}
+                    ref={el => lineRefs.current.set('header-tanggal', el)} data-help-target="header-tanggal"
                     className={inputCls} required />
                 </div>
                 <div>
@@ -1427,7 +1427,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
                   <input type="text" value={header.no_bukti} onChange={e => updateHeader('no_bukti', e.target.value)}
                     placeholder="No. kwitansi/nota"
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); lineRefs.current.get('header-keterangan')?.focus(); } }}
-                    ref={el => lineRefs.current.set('header-no_bukti', el)}
+                    ref={el => lineRefs.current.set('header-no_bukti', el)} data-help-target="header-no_bukti"
                     className={inputCls} />
                 </div>
                 <div>
@@ -1435,7 +1435,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
                   <input type="text" value={header.keterangan} onChange={e => updateHeader('keterangan', e.target.value)}
                     placeholder="Deskripsi transaksi..."
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); lineRefs.current.get('akun-0')?.focus(); } }}
-                    ref={el => lineRefs.current.set('header-keterangan', el)}
+                    ref={el => lineRefs.current.set('header-keterangan', el)} data-help-target="header-keterangan"
                     className={inputCls} required />
                 </div>
               </div>
@@ -1488,7 +1488,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
                   {lines.length < 50 && (
                     <button type="button" onClick={addLine}
                       className="w-full mt-2 py-2.5 border-2 border-dashed border-slate-300 rounded-xl text-sm font-semibold text-slate-500 hover:border-emerald-400 hover:text-emerald-600 hover:bg-emerald-50/50 transition">
-                      + Tambah Baris ({lines.length}/50)
+                      <span data-help-target="btn-tambah-baris">+ Tambah Baris ({lines.length}/50)</span>
                     </button>
                   )}
                   {lines.length >= 50 && <p className="text-xs text-amber-600 text-center font-medium mt-2">Maksimal 50 baris</p>}
@@ -1565,7 +1565,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
               <span className="text-xs text-slate-400">{validRowCount} baris valid</span>
               <button type="submit" disabled={submitting || !isBalanced || validRowCount < 2}
                 className="rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl disabled:opacity-40 disabled:cursor-not-allowed">
-                {submitting ? 'Menyimpan...' : 'Simpan Jurnal'}
+                {submitting ? 'Menyimpan...' : '<span data-help-target="btn-simpan">Simpan Jurnal</span>'}
               </button>
               <button type="button" onClick={handleClearForm}
                 className="text-sm text-red-500 hover:text-red-700 hover:underline font-medium transition">Kosongkan</button>
