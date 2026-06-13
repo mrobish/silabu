@@ -857,7 +857,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     // Check status from tenants table (DRAFT / POSTED)
     const statusRes = await pool.query(
       `SELECT status_saldo_awal AS status, saldo_awal_locked_at AS posted_at,
-              u.nama AS posted_by_name
+              u.nama_lengkap AS posted_by_name
        FROM tenants t
        LEFT JOIN users u ON u.id = t.saldo_awal_locked_by
        WHERE t.id = $1`,
@@ -1047,7 +1047,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const a = (req as any).auth as AuthPayload;
     const result = await pool.query(
       `SELECT status_saldo_awal AS status, saldo_awal_locked_at AS posted_at, 
-              saldo_awal_locked_by AS posted_by, u.nama AS posted_by_name
+              saldo_awal_locked_by AS posted_by, u.nama_lengkap AS posted_by_name
        FROM tenants t
        LEFT JOIN users u ON u.id = t.saldo_awal_locked_by
        WHERE t.id = $1`,
