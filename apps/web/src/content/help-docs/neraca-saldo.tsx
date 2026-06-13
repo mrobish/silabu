@@ -2,15 +2,15 @@ import React from 'react';
 import type { HelpDoc } from './types';
 
 export const neracaSaldoHelp: HelpDoc = {
-  title: '\u{1F4D6} Panduan Neraca Saldo',
+  title: '📖 Panduan Neraca Saldo',
   sections: [
     {
-      icon: '\u{1F4CA}',
+      icon: '📊',
       title: 'Tentang Neraca Saldo',
       content: 'Neraca Saldo menampilkan saldo semua akun dalam periode tertentu. Gunakan untuk memverifikasi bahwa total Debit = total Kredit di seluruh akun.',
     },
     {
-      icon: '\u{1F50D}',
+      icon: '🔍',
       title: 'Fitur Utama',
       content: (
         <ul className="list-disc list-inside space-y-1">
@@ -22,7 +22,7 @@ export const neracaSaldoHelp: HelpDoc = {
       ),
     },
     {
-      icon: '\u{1F4A1}',
+      icon: '💡',
       title: 'Tips',
       content: 'Jika Neraca Saldo tidak balance, periksa jurnal yang belum balance di Jurnal Umum. Gunakan filter tanggal untuk menyempitkan pencarian.',
     },

@@ -27,10 +27,10 @@ const helpRegistry: Record<string, HelpDoc> = {
 
 export function getHelpDoc(pathname: string): HelpDoc {
   return helpRegistry[pathname] || {
-    title: '\u{1F4D6} Pusat Bantuan',
+    title: '📖 Pusat Bantuan',
     sections: [
       {
-        icon: '\u{1F4A1}',
+        icon: '💡',
         title: 'Halaman Ini',
         content: 'Panduan untuk halaman ini belum tersedia. Hubungi admin untuk informasi lebih lanjut.',
       },
