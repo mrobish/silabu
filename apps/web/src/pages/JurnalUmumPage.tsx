@@ -576,6 +576,18 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
   // Draft recovery
   const [draftRecovery, setDraftRecovery] = useState<DraftV2 | null>(null);
 
+  // Onboarding Tour
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [tourStep, setTourStep] = useState(-1); // -1 = not active
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  const TOUR_KEY = 'silabu-tour-jurnal-seen';
+  const TOUR_STEPS = [
+    { target: '[data-tour="master-header"]', title: '📍 Cukup Isi Sekali', text: 'Masukkan Tanggal, No. Bukti, dan Keterangan di sini untuk seluruh rincian transaksi di bawahnya.' },
+    { target: '[data-tour="detail-table"]', title: '⚡ Otomatis & Pintar', text: 'Ketik nominal Debit, klik Tambah Baris, dan sistem akan otomatis mengisi nominal Kredit serta menyarankan akun lawannya!' },
+    { target: '[data-tour="mode-toggle"]', title: '📊 Lebih Suka Gaya Excel?', text: 'Aktifkan "Mode Batch" di sini untuk memasukkan puluhan transaksi sekaligus dalam satu layar penuh.' },
+  ];
+
   // Focus management
   const lineRefs = useRef<Map<string, HTMLElement | null>>(new Map());
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -654,7 +666,14 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
             const parsed = JSON.parse(draft);
             if (parsed.version === 2 && parsed.lines?.length > 0) {
               setDraftRecovery(parsed);
+              return; // Skip tour if draft exists
             }
+          }
+        } catch {}
+        // Check if tour has been seen
+        try {
+          if (!localStorage.getItem(TOUR_KEY)) {
+            setTimeout(() => setShowWelcome(true), 500);
           }
         } catch {}
       });
@@ -712,6 +731,38 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
     try { localStorage.removeItem(getDraftKeyV2()); } catch {}
     setDraftRecovery(null);
     showToast('🗑️ Draft dibuang');
+  }
+
+  // ── Tour controls ───────────────────────────────────────
+  function startTour() {
+    setShowWelcome(false);
+    setTourStep(0);
+  }
+
+  function skipTour() {
+    setShowWelcome(false);
+    setTourStep(-1);
+    try { localStorage.setItem(TOUR_KEY, '1'); } catch {}
+  }
+
+  function nextTourStep() {
+    if (tourStep < TOUR_STEPS.length - 1) {
+      setTourStep(tourStep + 1);
+    } else {
+      completeTour();
+    }
+  }
+
+  function completeTour() {
+    setTourStep(-1);
+    try { localStorage.setItem(TOUR_KEY, '1'); } catch {}
+    showToast('🎉 Bagus! Sekarang coba simpan jurnal pertama Anda.');
+  }
+
+  function getTourTargetRect(): DOMRect | null {
+    if (tourStep < 0 || tourStep >= TOUR_STEPS.length) return null;
+    const el = document.querySelector(TOUR_STEPS[tourStep].target);
+    return el ? el.getBoundingClientRect() : null;
   }
 
   // ── Header update ───────────────────────────────────────
@@ -958,6 +1009,16 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
       const count = data.entries?.length || 0;
       const nos = (data.entries || []).map((e: any) => e.noJurnal || e.no_jurnal || '').filter(Boolean);
       setShowSuccess(`${count} jurnal berhasil disimpan${nos.length ? ': ' + nos.join(', ') : ''}`);
+
+      // First save celebration
+      try {
+        const firstSaveKey = 'silabu-first-save-done';
+        if (!localStorage.getItem(firstSaveKey) && isBalanced) {
+          setShowConfetti(true);
+          localStorage.setItem(firstSaveKey, '1');
+          setTimeout(() => setShowConfetti(false), 4000);
+        }
+      } catch {}
 
       // Reset
       setHeader(emptyHeader());
@@ -1299,7 +1360,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
             <h2 className="text-lg font-bold text-slate-900">Input Jurnal</h2>
 
             {/* Mode Toggle */}
-            <div className="ml-4 flex items-center bg-slate-100 rounded-xl p-0.5">
+            <div data-tour="mode-toggle" className="ml-4 flex items-center bg-slate-100 rounded-xl p-0.5">
               <button type="button" onClick={() => setBatchMode(false)}
                 className={"px-3 py-1.5 rounded-lg text-xs font-semibold transition " + (!batchMode ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>
                 Master-Detail
@@ -1354,7 +1415,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
             /* ── MASTER-DETAIL MODE ─────────────────────────────── */
             <>
               {/* Master Header */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
+              <div data-tour="master-header" className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">Tanggal <span className="text-red-400">*</span></label>
                   <input type="date" value={header.tanggal} onChange={e => updateHeader('tanggal', e.target.value)}
@@ -1380,7 +1441,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
               </div>
 
               {/* Detail Table */}
-              <div className="overflow-x-auto -mx-4 sm:mx-0">
+              <div data-tour="detail-table" className="overflow-x-auto -mx-4 sm:mx-0">
                 <div className="min-w-[600px] px-4 sm:px-0">
                   <table className="w-full text-sm">
                     <thead>
@@ -1596,6 +1657,113 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Welcome Modal ─────────────────────────────────────── */}
+      {showWelcome && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-lg rounded-3xl border border-white/70 bg-white p-8 shadow-2xl backdrop-blur-xl text-center animate-fade-in">
+            <div className="text-6xl mb-4">🚀</div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">🎉 Selamat Datang di Wajah Baru SILABU DIGI!</h2>
+            <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto leading-relaxed">
+              Kami telah merombak Jurnal Umum menjadi jauh lebih pintar, cepat, dan rapi. Mari ikuti tur singkat selama <strong>30 detik</strong> untuk melihat fitur-fitur sakti yang akan mempermudah pekerjaan Anda!
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button type="button" onClick={startTour}
+                className="rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-8 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl">
+                🎯 Mulai Tur Singkat
+              </button>
+              <button type="button" onClick={skipTour}
+                className="rounded-2xl px-6 py-3 text-sm font-medium text-slate-400 hover:text-slate-600 transition">
+                Lewati, Saya Sudah Paham
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tour Tooltip Overlay ──────────────────────────────── */}
+      {tourStep >= 0 && tourStep < TOUR_STEPS.length && (() => {
+        const rect = getTourTargetRect();
+        const step = TOUR_STEPS[tourStep];
+        if (!rect) return null;
+        const pad = 12;
+        const top = rect.top - pad;
+        const left = rect.left - pad;
+        const width = rect.width + pad * 2;
+        const height = rect.height + pad * 2;
+        // Position tooltip below the target, or above if not enough space
+        const tooltipTop = rect.bottom + pad + 12 > window.innerHeight
+          ? top - 140
+          : top + height + 12;
+        return (
+          <div className="fixed inset-0 z-[200]" onClick={skipTour}>
+            {/* Dark overlay with cutout */}
+            <svg className="absolute inset-0 w-full h-full" style={{ pointerEvents: 'none' }}>
+              <defs>
+                <mask id="tour-mask">
+                  <rect width="100%" height="100%" fill="white" />
+                  <rect x={left} y={top} width={width} height={height} rx="16" fill="black" />
+                </mask>
+              </defs>
+              <rect width="100%" height="100%" fill="rgba(0,0,0,0.5)" mask="url(#tour-mask)" />
+              {/* Highlight border */}
+              <rect x={left} y={top} width={width} height={height} rx="16"
+                fill="none" stroke="#10b981" strokeWidth="3" strokeDasharray="6 3" />
+            </svg>
+            {/* Tooltip */}
+            <div className="absolute z-10 max-w-sm animate-fade-in"
+              style={{ top: tooltipTop, left: Math.max(16, Math.min(left, window.innerWidth - 360)) }}
+              onClick={e => e.stopPropagation()}>
+              <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                    {tourStep + 1}/{TOUR_STEPS.length}
+                  </span>
+                  <h4 className="text-sm font-bold text-slate-900">{step.title}</h4>
+                </div>
+                <p className="text-sm text-slate-600 leading-relaxed mb-4">{step.text}</p>
+                <div className="flex items-center justify-between">
+                  <button type="button" onClick={skipTour}
+                    className="text-xs text-slate-400 hover:text-slate-600 transition">Lewati</button>
+                  <button type="button" onClick={nextTourStep}
+                    className="rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2 text-xs font-bold text-white shadow-md hover:shadow-lg transition">
+                    {tourStep < TOUR_STEPS.length - 1 ? 'Selanjutnya →' : 'Selesai ✓'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Confetti ──────────────────────────────────────────── */}
+      {showConfetti && (
+        <div className="fixed inset-0 z-[300] pointer-events-none overflow-hidden">
+          {Array.from({ length: 60 }).map((_, i) => {
+            const left = Math.random() * 100;
+            const delay = Math.random() * 2;
+            const duration = 2 + Math.random() * 2;
+            const size = 6 + Math.random() * 8;
+            const colors = ['#10b981', '#06b6d4', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+            const color = colors[i % colors.length];
+            const rotate = Math.random() * 360;
+            return (
+              <div key={i} className="absolute animate-confetti"
+                style={{
+                  left: left + '%',
+                  top: '-20px',
+                  width: size + 'px',
+                  height: size * 0.6 + 'px',
+                  backgroundColor: color,
+                  borderRadius: '2px',
+                  transform: `rotate(${rotate}deg)`,
+                  animationDelay: delay + 's',
+                  animationDuration: duration + 's',
+                }} />
+            );
+          })}
         </div>
       )}
 
