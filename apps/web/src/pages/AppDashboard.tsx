@@ -1749,7 +1749,7 @@ export default function AppDashboard() {
       </aside>
 
       {/* Main */}
-      <main className={MAIN_ML + ' min-h-screen transition-all duration-300 ease-in-out'}>
+      <main className={MAIN_ML + ' min-h-screen flex flex-col transition-all duration-300 ease-in-out'}>
         {/* Header */}
         <header className="sticky top-0 z-50 h-16 bg-white/80 backdrop-blur-md border-b border-slate-100/60 flex items-center gap-3 px-4 sm:px-6">
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-slate-600 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 transition" aria-label="Buka menu">
@@ -1940,6 +1940,10 @@ export default function AppDashboard() {
             </div>
           )}
         </div>
+        {/* Footer */}
+        <footer className="mt-auto py-3 px-4 sm:px-6 text-center border-t border-slate-100/50">
+          <p className="text-[11px] text-slate-300 select-none">Powered by <span className="font-medium text-slate-400">CV. Microtech Riset Tasela</span></p>
+        </footer>
       </main>
       {/* Logout confirm modal */}
       {confirmLogout && (
