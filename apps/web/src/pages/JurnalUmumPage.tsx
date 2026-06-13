@@ -522,7 +522,7 @@ const DetailRowInner = React.memo(function DetailRowInner({
           </div>
           {/* Delete */}
           <button type="button" onClick={() => onRemove(index)}
-            className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition text-xs font-bold opacity-0 group-hover:opacity-100" title="Hapus baris">×</button>
+            className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition text-xs font-bold" title="Hapus baris">×</button>
         </div>
       </td>
     </tr>
