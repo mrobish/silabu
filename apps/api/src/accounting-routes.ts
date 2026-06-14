@@ -2359,7 +2359,16 @@ export async function accountingRoutes(app: FastifyInstance) {
       [tid, startDate || '1970-01-01', endDate]
     );
 
-    // ── Klasifikasi per aktivitas ──
+    // ── Klasifikasi per aktivitas (Fix #23: documented + 1.4 added) ──
+    // Klasifikasi berdasarkan prefix kode akun lawan kas (Kepmendesa 136):
+    //   Operasi   = akun lancar operasional + pendapatan/beban
+    //              Gol 1.1.03 (piutang), 1.1.05 (persediaan), 1.1.06 (biaya dimuka),
+    //              Gol 4 (pendapatan), 5 (HPP), 6 (beban), 7 (luar biasa)
+    //   Investasi = aset lain-lain, aset tetap, aset tak berwujud
+    //              Gol 1.2, 1.3, 1.4
+    //   Pendanaan = kewajiban dan ekuitas (termasuk prive)
+    //              Gol 2, 3
+    // Kas/bank (1.1.01, 1.1.02) adalah source — tidak masuk klasifikasi.
     type FlowItem = { kode: string; nama: string; masuk: number; keluar: number; net: number };
     const ops: FlowItem[] = [];
     const inv: FlowItem[] = [];
@@ -2371,12 +2380,12 @@ export async function accountingRoutes(app: FastifyInstance) {
         masuk: Number(r.masuk), keluar: Number(r.keluar),
         net: Number(r.masuk) - Number(r.keluar),
       };
-      // Operasi: Gol 1.1.03 (piutang), 1.1.05 (persediaan), 4, 5, 6, 7
-      // Investasi: Gol 1.3
-      // Pendanaan: Gol 2, 3
+      // Operasi: Gol 1.1.03 (piutang), 1.1.05 (persediaan), 1.1.06 (biaya dimuka), 4, 5, 6, 7
+      // Investasi: Gol 1.2 (aset lain), 1.3 (aset tetap), 1.4 (aset tak berwujud)
+      // Pendanaan: Gol 2 (kewajiban), 3 (ekuitas/prive)
       const g = r.kode[0];
       const sub2 = r.kode.slice(0, 3);
-      if (sub2 === '1.3' || sub2 === '1.2') {
+      if (sub2 === '1.2' || sub2 === '1.3' || sub2 === '1.4') {
         inv.push(item);
       } else if (g === '2' || g === '3') {
         dana.push(item);
