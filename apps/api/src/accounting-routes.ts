@@ -6,6 +6,14 @@ import { validateJournalBalance, validateJournalLine } from './utils/journal-bal
 import { parseYmdStrict, compareYmd, isValidYmd } from './utils/date-helpers.js';
 import { parseMoneyStrict, dbNumericToCents, MAX_AMOUNT } from './utils/money-helpers.js';
 import { calculateHppCents, validateHppNotZero } from './utils/hpp-helpers.js';
+import {
+  validateBaseKey,
+  computePayloadHash,
+  deriveGroupKey,
+  buildBatchLikePattern,
+  sortByGroupIndex,
+  IDEMPOTENCY_WINDOW,
+} from './utils/batch-idempotency.js';
 import ExcelJS from 'exceljs';
 
 const tenantGuard = { onRequest: [requireTenant] };
@@ -555,19 +563,87 @@ export async function accountingRoutes(app: FastifyInstance) {
       }
     }
 
-    // Idempotency check — prevent double submit
+    // Idempotency check — prevent double submit (Fix #13: derived key per group)
+    let payloadHash = '';
     if (idempotency_key) {
-      const dup = await pool.query(
-        `SELECT id, no_jurnal AS "noJurnal", tanggal, keterangan FROM journal_entries
-         WHERE tenant_id=$1 AND idempotency_key=$2 AND created_at > NOW() - INTERVAL '10 minutes'
-         LIMIT 1`,
-        [a.tenantId, idempotency_key]
+      // Validate base key format
+      const keyValidation = validateBaseKey(idempotency_key);
+      if (!keyValidation.valid) {
+        return reply.status(400).send({ error: keyValidation.error, code: 'INVALID_IDEMPOTENCY_KEY' });
+      }
+
+      // Compute payload fingerprint
+      payloadHash = computePayloadHash(cleanRows);
+
+      // Find ALL entries with matching baseKey:payloadHash pattern
+      const likePattern = buildBatchLikePattern(idempotency_key, payloadHash);
+      const existingEntries = await pool.query(
+        `SELECT id, no_jurnal AS "noJurnal", tanggal, keterangan, idempotency_key
+         FROM journal_entries
+         WHERE tenant_id=$1 AND idempotency_key LIKE $2 ESCAPE '\'
+           AND created_at > NOW() - INTERVAL '${IDEMPOTENCY_WINDOW}'
+         ORDER BY idempotency_key ASC`,
+        [a.tenantId, likePattern]
       );
-      if (dup.rowCount) {
-        const existingLines = await pool.query(
-          `SELECT * FROM journal_lines WHERE entry_id=$1 ORDER BY created_at`, [dup.rows[0].id]
-        );
-        return { idempotent: true, jurnal: { ...dup.rows[0], lines: existingLines.rows } };
+
+      if (existingEntries.rowCount && existingEntries.rowCount > 0) {
+        // Found entries with this batch key — check if it's a complete batch
+        const expectedGroupCount = groups.size;
+        const foundCount = existingEntries.rowCount;
+
+        if (foundCount === expectedGroupCount) {
+          // Complete batch found — return idempotent response
+          const entriesWithLines = await Promise.all(
+            existingEntries.rows.map(async (entry: any) => {
+              const lines = await pool.query(
+                `SELECT * FROM journal_lines WHERE entry_id=$1 ORDER BY created_at`,
+                [entry.id]
+              );
+              return { ...entry, lines: lines.rows };
+            })
+          );
+
+          // Sort by group index (numeric, not string)
+          const sortedEntries = sortByGroupIndex(entriesWithLines);
+
+          return {
+            idempotent: true,
+            message: `${sortedEntries.length} jurnal sudah ada (idempotent)`,
+            entries: sortedEntries,
+          };
+        } else {
+          // Partial state detected — this is a conflict
+          return reply.status(409).send({
+            error: `Konflik idempotency: ditemukan ${foundCount} dari ${expectedGroupCount} entri yang diharapkan. Kemungkinan batch sebelumnya tidak lengkap atau payload berbeda.`,
+            code: 'IDEMPOTENCY_CONFLICT',
+            details: {
+              expectedGroups: expectedGroupCount,
+              foundEntries: foundCount,
+              baseKey: idempotency_key,
+            },
+          });
+        }
+      }
+
+      // Check if same base key exists with DIFFERENT payload hash (key reuse attack)
+      const baseKeyOnly = idempotency_key;
+      const otherPayloadEntries = await pool.query(
+        `SELECT DISTINCT split_part(idempotency_key, ':', 2) AS payload_hash
+         FROM journal_entries
+         WHERE tenant_id=$1 
+           AND idempotency_key LIKE $2 || ':%'
+           AND idempotency_key NOT LIKE $3 ESCAPE '\'
+           AND created_at > NOW() - INTERVAL '${IDEMPOTENCY_WINDOW}'
+         LIMIT 1`,
+        [a.tenantId, baseKeyOnly, likePattern]
+      );
+
+      if (otherPayloadEntries.rowCount && otherPayloadEntries.rowCount > 0) {
+        return reply.status(409).send({
+          error: 'Konflik idempotency key: key yang sama digunakan untuk payload yang berbeda',
+          code: 'IDEMPOTENCY_KEY_CONFLICT',
+          details: { baseKey: idempotency_key },
+        });
       }
     }
 
@@ -577,7 +653,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     try {
       await client.query('BEGIN');
 
-      let isFirstGroup = true;
+      let groupIndex = 0;
       for (const [key, groupRows] of groups) {
         const tanggal = groupRows[0].tanggal;
         const [tahunStr, bulanStr] = tanggal.split('-');
@@ -590,12 +666,17 @@ export async function accountingRoutes(app: FastifyInstance) {
 
         const no_jurnal = await nextJurnalNo(a.tenantId!, tahun, bulan);
 
+        // Derive idempotency key for this group (Fix #13)
+        const derivedKey = idempotency_key
+          ? deriveGroupKey(idempotency_key, payloadHash, groupIndex)
+          : null;
+
         const entryRes = await client.query(
           `INSERT INTO journal_entries
              (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, referensi, tipeTransaksi, isPosted, created_by, idempotency_key)
            VALUES ($1,$2,$3,$4,$5,$6,$7,'GENERAL',true,$8,$9)
            RETURNING id, no_jurnal AS "noJurnal"`,
-          [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan, noBukti, a.userId, isFirstGroup ? (idempotency_key || null) : null]
+          [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan, noBukti, a.userId, derivedKey]
         );
         const entryId = entryRes.rows[0].id as string;
         const entryNoJurnal = entryRes.rows[0].noJurnal as string;
@@ -617,7 +698,7 @@ export async function accountingRoutes(app: FastifyInstance) {
           lineCount: groupRows.length,
           total: totalDebit,
         });
-        isFirstGroup = false;
+        groupIndex++;
       }
 
       await client.query('COMMIT');
