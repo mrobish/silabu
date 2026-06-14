@@ -295,9 +295,14 @@ function validateJournal(header: HeaderState, lines: LineState[]): string | null
   if (!header.keterangan.trim()) return 'Keterangan wajib diisi';
   const validLines = lines.filter(l => l.akun_id && (parseCurrencyInput(l.debit) > 0 || parseCurrencyInput(l.kredit) > 0));
   if (validLines.length < 2) return 'Minimal 2 baris dengan akun dan nominal diperlukan';
-  const totalD = validLines.reduce((s, l) => s + parseCurrencyInput(l.debit), 0);
-  const totalK = validLines.reduce((s, l) => s + parseCurrencyInput(l.kredit), 0);
-  if (Math.abs(totalD - totalK) >= 0.01) return 'Total debit dan kredit harus seimbang';
+
+  // Balance check using integer cents (same logic as backend)
+  const totalDebitCents = validLines.reduce((s, l) => s + Math.round(parseCurrencyInput(l.debit) * 100), 0);
+  const totalKreditCents = validLines.reduce((s, l) => s + Math.round(parseCurrencyInput(l.kredit) * 100), 0);
+  if (totalDebitCents !== totalKreditCents) {
+    const selisih = Math.abs(totalDebitCents - totalKreditCents) / 100;
+    return `Total debit dan kredit harus seimbang. Selisih: Rp ${selisih.toLocaleString('id-ID')}`;
+  }
   return null; // valid
 }
 
@@ -1121,9 +1126,15 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
 
     const cleanLines = editLines.filter(l => l.akun_id && (parseCurrencyInput(l.debit) > 0 || parseCurrencyInput(l.kredit) > 0));
     if (cleanLines.length < 2) { setError('Minimal 2 baris dengan akun dan nominal diperlukan'); return; }
-    const d = cleanLines.reduce((s, l) => s + parseCurrencyInput(l.debit), 0);
-    const k = cleanLines.reduce((s, l) => s + parseCurrencyInput(l.kredit), 0);
-    if (Math.abs(d - k) >= 0.01) { setError('Total debit dan kredit harus seimbang'); return; }
+
+    // Balance check using integer cents (same logic as backend)
+    const totalDebitCents = cleanLines.reduce((s, l) => s + Math.round(parseCurrencyInput(l.debit) * 100), 0);
+    const totalKreditCents = cleanLines.reduce((s, l) => s + Math.round(parseCurrencyInput(l.kredit) * 100), 0);
+    if (totalDebitCents !== totalKreditCents) {
+      const selisih = Math.abs(totalDebitCents - totalKreditCents) / 100;
+      setError(`Total debit dan kredit harus seimbang. Selisih: Rp ${selisih.toLocaleString('id-ID')}`);
+      return;
+    }
 
     setSubmitting(true);
     try {

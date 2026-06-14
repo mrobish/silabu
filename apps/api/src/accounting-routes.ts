@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { pool } from './db.js';
 import { requireTenant, requireActiveTrial, type AuthPayload } from './guards.js';
 import { seedDefaultCoa } from './coa-seed.js';
+import { validateJournalBalance, validateJournalLine } from './utils/journal-balance.js';
 import ExcelJS from 'exceljs';
 
 const tenantGuard = { onRequest: [requireTenant] };
@@ -370,22 +371,11 @@ export async function accountingRoutes(app: FastifyInstance) {
     await checkPeriodLock(a.tenantId!, tahun);
     await checkCutoffDate(a.tenantId!, tanggal as string);
 
-    // Validate each line
+    // Validate lines and balance using centralized helper
     const akunIds = lines.map((l: any) => l.akun_id);
-    for (const l of lines) {
-      const debit = parseFloat(l.debit || '0');
-      const kredit = parseFloat(l.kredit || '0');
-      if (isNaN(debit) || isNaN(kredit)) return reply.status(400).send({ error: 'Debit/kredit harus angka' });
-      if (debit < 0 || kredit < 0) return reply.status(400).send({ error: 'Debit/kredit tidak boleh negatif' });
-      if (debit === 0 && kredit === 0) return reply.status(400).send({ error: 'Setiap baris harus memiliki debit atau kredit' });
-      if (debit > 0 && kredit > 0) return reply.status(400).send({ error: 'Satu baris hanya boleh debit ATAU kredit, tidak keduanya' });
-    }
-
-    // Validate debit = credit (zero tolerance — satu perak pun ditolak)
-    const totalDebit = lines.reduce((s: number, l: any) => s + Math.round(parseFloat(l.debit || '0') * 100), 0) / 100;
-    const totalKredit = lines.reduce((s: number, l: any) => s + Math.round(parseFloat(l.kredit || '0') * 100), 0) / 100;
-    if (totalDebit !== totalKredit) {
-      return reply.status(400).send({ error: `Total debit (${totalDebit.toLocaleString('id-ID')}) tidak sama dengan total kredit (${totalKredit.toLocaleString('id-ID')})` });
+    const balanceResult = validateJournalBalance(lines);
+    if (!balanceResult.valid) {
+      return reply.status(400).send({ error: balanceResult.error, code: balanceResult.code });
     }
 
     // Validate all akun belong to tenant, are active, and isPostable
@@ -488,13 +478,10 @@ export async function accountingRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Minimal 2 baris dengan akun dan nominal' });
     }
 
-    // Validate each row
+    // Validate each row using centralized helper
     for (const r of cleanRows) {
-      const debit = parseFloat(r.debit || '0');
-      const kredit = parseFloat(r.kredit || '0');
-      if (isNaN(debit) || isNaN(kredit)) return reply.status(400).send({ error: 'Debit/kredit harus angka' });
-      if (debit < 0 || kredit < 0) return reply.status(400).send({ error: 'Debit/kredit tidak boleh negatif' });
-      if (debit > 0 && kredit > 0) return reply.status(400).send({ error: 'Satu baris hanya boleh debit ATAU kredit' });
+      const lineError = validateJournalLine(r);
+      if (lineError) return reply.status(400).send({ error: lineError, code: 'INVALID_LINE' });
     }
 
     // Collect all unique akun_ids and validate
@@ -524,17 +511,14 @@ export async function accountingRoutes(app: FastifyInstance) {
       groups.get(key)!.push(r);
     }
 
-    // Validate each group has balanced debit/kredit
+    // Validate each group has balanced debit/kredit using centralized helper
     for (const [key, groupRows] of groups) {
-      const gDebit = groupRows.reduce((s: number, r: any) => s + parseFloat(r.debit || '0'), 0);
-      const gKredit = groupRows.reduce((s: number, r: any) => s + parseFloat(r.kredit || '0'), 0);
-      const gDebitRounded = Math.round(gDebit * 100) / 100;
-      const gKreditRounded = Math.round(gKredit * 100) / 100;
-      if (gDebitRounded !== gKreditRounded) {
+      const balanceResult = validateJournalBalance(groupRows);
+      if (!balanceResult.valid) {
         const tanggal = groupRows[0]?.tanggal || '?';
         const noBukti = groupRows[0]?.no_bukti || '(tanpa bukti)';
         return reply.status(400).send({
-          error: `Jurnal "${noBukti}" tanggal ${tanggal} tidak balance. Debit: ${gDebitRounded.toLocaleString('id-ID')}, Kredit: ${gKreditRounded.toLocaleString('id-ID')}`,
+          error: `Jurnal "${noBukti}" tanggal ${tanggal}: ${balanceResult.error}`,
           code: 'GROUP_NOT_BALANCED'
         });
       }
@@ -791,22 +775,11 @@ export async function accountingRoutes(app: FastifyInstance) {
     }
     await checkCutoffDate(a.tenantId!, tanggal as string, { tipetransaksi: entry.tipeTransaksi });
 
-    // 5. Validasi per baris — XOR (hanya satu sisi), non-negatif, angka
+    // 5. Validate lines and balance using centralized helper
     const akunIds = lines.map((l: any) => l.akun_id);
-    for (const l of lines) {
-      const debit = parseFloat(l.debit || '0');
-      const kredit = parseFloat(l.kredit || '0');
-      if (isNaN(debit) || isNaN(kredit)) return reply.status(400).send({ error: 'Debit/kredit harus angka' });
-      if (debit < 0 || kredit < 0) return reply.status(400).send({ error: 'Debit/kredit tidak boleh negatif' });
-      if (debit === 0 && kredit === 0) return reply.status(400).send({ error: 'Setiap baris harus memiliki debit atau kredit' });
-      if (debit > 0 && kredit > 0) return reply.status(400).send({ error: 'Satu baris hanya boleh debit ATAU kredit, tidak keduanya' });
-    }
-
-    // 6. Validasi Math.round debit = kredit
-    const totalDebit = lines.reduce((s: number, l: any) => s + parseFloat(l.debit || '0'), 0);
-    const totalKredit = lines.reduce((s: number, l: any) => s + parseFloat(l.kredit || '0'), 0);
-    if (Math.abs(totalDebit - totalKredit) > 0.01) {
-      return reply.status(400).send({ error: `Total debit (${totalDebit}) tidak sama dengan total kredit (${totalKredit})` });
+    const balanceResult = validateJournalBalance(lines);
+    if (!balanceResult.valid) {
+      return reply.status(400).send({ error: balanceResult.error, code: balanceResult.code });
     }
 
     // 7. Validasi akun milik tenant, aktif, postable
