@@ -10,6 +10,7 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [captchaToken, setCaptchaToken] = useState('');
   const [captchaKey, setCaptchaKey] = useState(0);
+  const [captchaEnabled] = useState(false); // CAPTCHA disabled
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -82,7 +83,7 @@ export default function ForgotPassword() {
                     <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="email"
                       className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition" placeholder="Email yang terdaftar" />
                   </div>
-                  <TurnstileWidget key={captchaKey} onVerify={t => setCaptchaToken(t)} className="flex justify-center" />
+                  {captchaEnabled && <TurnstileWidget key={captchaKey} onVerify={t => setCaptchaToken(t)} className="flex justify-center" />}
                   <button type="submit" disabled={loading}
                     className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 py-3 text-sm font-semibold text-white shadow-sm hover:shadow-lg hover:shadow-cyan-500/25 hover:translate-y-[-1px] transition-all disabled:opacity-50 disabled:translate-y-0">
                     {loading ? 'Mengirim...' : 'Kirim Link Reset'}
