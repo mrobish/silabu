@@ -269,10 +269,12 @@ export async function initDatabase() {
   `);
   await pool.query(`
     DO $$ BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_coa_parent') THEN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_coa_parent' AND conrelid = 'chart_of_accounts'::regclass) THEN
         ALTER TABLE chart_of_accounts ADD CONSTRAINT fk_coa_parent
           FOREIGN KEY (parent_id) REFERENCES chart_of_accounts(id) ON DELETE RESTRICT;
       END IF;
+    EXCEPTION WHEN duplicate_object THEN
+      NULL;
     END $$;
   `);
 

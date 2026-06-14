@@ -129,10 +129,11 @@ export async function accountingRoutes(app: FastifyInstance) {
     if (parent.level !== 3) return reply.status(400).send({ error: 'Sub-akun baru hanya bisa ditambahkan di bawah kelompok akun (Level 3)' });
 
     // Find max child kode number, skip .98/.99
+    // MUST include inactive (soft-deleted) accounts to avoid duplicate kode
     const parentPrefix = parent.kode.slice(0, 6); // e.g. "1.1.01" (no trailing dot)
     const childrenRes = await pool.query(
       `SELECT kode FROM chart_of_accounts
-       WHERE tenant_id=$1 AND kode LIKE $2 AND isActive=true`,
+       WHERE tenant_id=$1 AND kode LIKE $2`,
       [a.tenantId, parentPrefix + '.%']
     );
 
@@ -149,15 +150,23 @@ export async function accountingRoutes(app: FastifyInstance) {
 
     const newKode = parentPrefix + '.' + String(nextNum).padStart(2, '0');
 
-    const insertRes = await pool.query(
-      `INSERT INTO chart_of_accounts
-         (tenant_id, kode, nama, jenisAkun, kelompok, saldoNormal, isPostable, parent_id, is_seeded, is_system_default, isActive, level)
-       VALUES ($1,$2,$3,$4,$5,$6,true,$7,false,false,true,4)
-       RETURNING id, kode, nama, is_seeded AS "isSeeded", is_system_default AS "isSystemDefault", ispostable AS "isPostable",
-                 parent_id AS "parentId", saldonormal AS "saldoNormal";`,
-      [a.tenantId, newKode, String(nama).trim(),
-       parent.jenisAkun, parent.kelompok, parent.saldoNormal || 'D', parent_id]
-    );
+    let insertRes;
+    try {
+      insertRes = await pool.query(
+        `INSERT INTO chart_of_accounts
+           (tenant_id, kode, nama, jenisAkun, kelompok, saldoNormal, isPostable, parent_id, is_seeded, is_system_default, isActive, level)
+         VALUES ($1,$2,$3,$4,$5,$6,true,$7,false,false,true,4)
+         RETURNING id, kode, nama, is_seeded AS "isSeeded", is_system_default AS "isSystemDefault", ispostable AS "isPostable",
+                   parent_id AS "parentId", saldonormal AS "saldoNormal";`,
+        [a.tenantId, newKode, String(nama).trim(),
+         parent.jenisAkun, parent.kelompok, parent.saldoNormal || 'D', parent_id]
+      );
+    } catch (e: any) {
+      if (e.code === '23505') {
+        return reply.status(409).send({ error: `Kode akun ${newKode} sudah ada. Silakan refresh dan coba lagi.` });
+      }
+      throw e;
+    }
 
     return reply.status(201).send({ akun: insertRes.rows[0], message: 'Sub-akun berhasil ditambahkan' });
   });
