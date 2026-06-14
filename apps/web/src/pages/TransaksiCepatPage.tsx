@@ -28,8 +28,11 @@ type Account = {
 
 type EntryResp = {
   success: boolean;
-  message: string;
+  message?: string;
+  idempotent?: boolean;
   entry?: { id: string; noJurnal: string; no_jurnal?: string; tanggal: string; tipe: string; nominal: number; keterangan: string };
+  jurnal?: { id: string; noJurnal: string; no_jurnal?: string; tanggal: string; tipe: string; nominal: number; keterangan: string };
+  error?: string;
 };
 
 type Tipe = 'uang_masuk' | 'uang_keluar';
@@ -278,7 +281,7 @@ function TransactionForm({
       if (r.ok && d.success && (d.entry || d.idempotent)) {
         // Fix #18: Handle both normal and idempotent success
         const entry = d.entry || d.jurnal;
-        onSuccess(entry);
+        if (entry) onSuccess(entry);
       } else {
         setErrors({ submit: d.error || d.message || 'Gagal menyimpan transaksi' });
       }

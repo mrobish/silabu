@@ -566,7 +566,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
   // Edit mode
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editHeader, setEditHeader] = useState<HeaderState>(emptyHeader());
-  const [editLines, setEditLines] = useState<{ akun_id: string; debit: string; kredit: string; keterangan: string; searchTerm: string }[]>([]);
+  const [editLines, setEditLines] = useState<{ akun_id: string; debit: string; kredit: string; keterangan: string; searchTerm: string; contact_id: string | null; inventory_item_id: string | null; qty: number | null }[]>([]);
   const [editReferensi, setEditReferensi] = useState('');
 
   // Delete modal
@@ -1604,8 +1604,9 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
             <div className="flex gap-3 flex-wrap items-center">
               <span className="text-xs text-slate-400">{validRowCount} baris valid</span>
               <button type="submit" disabled={submitting || !isBalanced || validRowCount < 2}
+                data-help-target="btn-simpan"
                 className="rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:shadow-xl disabled:opacity-40 disabled:cursor-not-allowed">
-                {submitting ? 'Menyimpan...' : '<span data-help-target="btn-simpan">Simpan Jurnal</span>'}
+                {submitting ? 'Menyimpan...' : 'Simpan Jurnal'}
               </button>
               <button type="button" onClick={handleClearForm}
                 className="text-sm text-red-500 hover:text-red-700 hover:underline font-medium transition">Kosongkan</button>

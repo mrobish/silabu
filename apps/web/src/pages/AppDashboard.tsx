@@ -27,7 +27,7 @@ import PenjualanPage from './PenjualanPage';
 import { HelpProvider, useHelp } from './HelpContext';
 import HelpDrawer from './HelpDrawer';
 
-type Page = 'dashboard' | 'password' | 'langganan' | 'profil' | 'coa' | 'saldo-awal' | 'jurnal' | 'rekap-jurnal' | 'penyesuaian' | 'rincian-saldo' | 'buku-besar' | 'laba-rugi' | 'neraca' | 'neraca-saldo' | 'arus-kas' | 'perubahan-modal' | 'aset-tetap' | 'tutup-buku' | 'calk' | 'bantuan' | 'kontak' | 'persediaan' | 'buku-pembantu-utang' | 'buku-pembantu-piutang' | 'buku-pembantu-persediaan' | 'penjualan';
+type Page = 'dashboard' | 'password' | 'langganan' | 'profil' | 'coa' | 'saldo-awal' | 'jurnal' | 'rekap-jurnal' | 'penyesuaian' | 'rincian-saldo' | 'buku-besar' | 'laba-rugi' | 'neraca' | 'neraca-saldo' | 'arus-kas' | 'perubahan-modal' | 'aset-tetap' | 'tutup-buku' | 'calk' | 'bantuan' | 'kontak' | 'persediaan' | 'buku-pembantu-utang' | 'buku-pembantu-piutang' | 'buku-pembantu-persediaan' | 'penjualan' | 'transaksi-cepat';
 
 const officeIcon = 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m6-14h.01M9 11h.01M9 15h.01M15 7h.01M15 11h.01M15 15h.01M12 21v-4a1 1 0 011-1h-2a1 1 0 011 1v4z';
 
@@ -36,7 +36,7 @@ type SubscriptionStatus = {
   active?: boolean;
   daysLeft?: number;
   price?: number;
-  payments?: Array<{ reference?: string; amount?: number; status?: string; created_at?: string; paid_at?: string; date?: string }>;
+  payments?: Array<{ id?: string; reference?: string; amount?: number; status?: string; created_at?: string; paid_at?: string; date?: string }>;
   trial_ends_at?: string;
   subscription_ends_at?: string;
 };

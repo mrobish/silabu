@@ -28,7 +28,9 @@ const br = 'rounded-2xl border border-white/70 bg-white/80 backdrop-blur-xl shad
 const token = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
 
 /* ─── Inventory Card ─── */
-function InventoryCard({ item, onEdit, onDelete }: { item: InventoryItem; onEdit: () => void; onDelete: () => void }) {
+function InventoryCard({ item, onEdit, onDelete, currentStock }: { item: InventoryItem; onEdit: () => void; onDelete: () => void; currentStock?: number }) {
+  const stok = currentStock !== undefined ? currentStock : item.qtyAwal;
+  const isNegative = stok < 0;
   const saldo = item.qtyAwal * item.hargaSatuan;
   return (
     <div className={`${br} p-4 sm:p-5 transition hover:shadow-md hover:-translate-y-0.5`}>

@@ -75,7 +75,7 @@ interface DatePickerProps {
   placeholder?: string;
   id?: string;
   required?: boolean;
-  minDate?: string;           // YYYY-MM-DD — dates before this are disabled (grayed out)
+  minDate?: string | null;    // YYYY-MM-DD — dates before this are disabled (grayed out)
 }
 
 export default function DatePicker({

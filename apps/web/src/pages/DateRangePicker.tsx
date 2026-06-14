@@ -43,7 +43,7 @@ interface DateRangePickerProps {
   onStartChange: (d: string) => void;
   onEndChange: (d: string) => void;
   className?: string;
-  minDate?: string;           // YYYY-MM-DD — disable dates before this
+  minDate?: string | null;    // YYYY-MM-DD — disable dates before this
 }
 
 const presetBtn = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap';
