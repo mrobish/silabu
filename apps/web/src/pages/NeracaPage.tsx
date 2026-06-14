@@ -284,58 +284,74 @@ export default function NeracaPage() {
 
               {/* Aset Lancar */}
               <p className="font-bold text-[11px] mt-2 mb-0.5">Aset Lancar</p>
-              {data.aktiva.asetLancar.detail.filter(a => a.saldo !== 0).map(a => (
-                <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
-                  <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
-                  <span className="tabular-nums">{fmt(a.saldo)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5 mt-0.5">
-                <span>Subtotal Aset Lancar</span>
-                <span className="tabular-nums">{fmt(data.aktiva.asetLancar.subtotal)}</span>
-              </div>
+              <table className="w-full text-[11px]">
+                <tbody>
+                  {data.aktiva.asetLancar.detail.filter(a => a.saldo !== 0).map(a => (
+                    <tr key={a.kode} className="print-row">
+                      <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                      <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
+                    </tr>
+                  ))}
+                  <tr className="font-bold border-t border-slate-400">
+                    <td className="pt-0.5">Subtotal Aset Lancar</td>
+                    <td className="text-right tabular-nums pt-0.5">{fmt(data.aktiva.asetLancar.subtotal)}</td>
+                  </tr>
+                </tbody>
+              </table>
 
               {/* Aset Tetap */}
               <p className="font-bold text-[11px] mt-2 mb-0.5">Aset Tetap</p>
-              {data.aktiva.asetTetap.bruto.akun.filter(a => a.saldo !== 0).map(a => (
-                <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
-                  <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
-                  <span className="tabular-nums">{fmt(a.saldo)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between text-[11px] py-0.5 italic border-t border-dashed border-slate-300">
-                <span className="text-slate-500 ml-3">Harga Perolehan</span>
-                <span className="tabular-nums">{fmt(data.aktiva.asetTetap.bruto.subtotal)}</span>
-              </div>
-              {data.aktiva.asetTetap.akumulasi.akun.filter(a => a.saldo !== 0).map(a => (
-                <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
-                  <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
-                  <span className="tabular-nums text-red-600">({fmt(Math.abs(a.saldo))})</span>
-                </div>
-              ))}
-              <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
-                <span>Nilai Buku Aset Tetap</span>
-                <span className="tabular-nums">{fmt(data.aktiva.asetTetap.nilaiBuku)}</span>
-              </div>
+              <table className="w-full text-[11px]">
+                <tbody>
+                  {data.aktiva.asetTetap.bruto.akun.filter(a => a.saldo !== 0).map(a => (
+                    <tr key={a.kode} className="print-row">
+                      <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                      <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
+                    </tr>
+                  ))}
+                  <tr className="italic border-t border-dashed border-slate-300">
+                    <td className="text-slate-500 pl-3">Harga Perolehan</td>
+                    <td className="text-right tabular-nums">{fmt(data.aktiva.asetTetap.bruto.subtotal)}</td>
+                  </tr>
+                  {data.aktiva.asetTetap.akumulasi.akun.filter(a => a.saldo !== 0).map(a => (
+                    <tr key={a.kode} className="print-row">
+                      <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                      <td className="text-right tabular-nums text-red-600">({fmt(Math.abs(a.saldo))})</td>
+                    </tr>
+                  ))}
+                  <tr className="font-bold border-t border-slate-400">
+                    <td>Nilai Buku Aset Tetap</td>
+                    <td className="text-right tabular-nums">{fmt(data.aktiva.asetTetap.nilaiBuku)}</td>
+                  </tr>
+                </tbody>
+              </table>
 
               {/* Aset Lainnya */}
               <p className="font-bold text-[11px] mt-2 mb-0.5">Aset Lainnya</p>
-              {data.aktiva.asetLainnya.detail.filter(a => a.saldo !== 0).map(a => (
-                <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
-                  <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
-                  <span className="tabular-nums">{fmt(a.saldo)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
-                <span>Subtotal Aset Lainnya</span>
-                <span className="tabular-nums">{fmt(data.aktiva.asetLainnya.subtotal)}</span>
-              </div>
+              <table className="w-full text-[11px]">
+                <tbody>
+                  {data.aktiva.asetLainnya.detail.filter(a => a.saldo !== 0).map(a => (
+                    <tr key={a.kode} className="print-row">
+                      <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                      <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
+                    </tr>
+                  ))}
+                  <tr className="font-bold border-t border-slate-400">
+                    <td>Subtotal Aset Lainnya</td>
+                    <td className="text-right tabular-nums">{fmt(data.aktiva.asetLainnya.subtotal)}</td>
+                  </tr>
+                </tbody>
+              </table>
 
               {/* Total Aktiva */}
-              <div className="flex justify-between font-bold text-[11px] border-t-2 border-slate-800 mt-2 py-0.5">
-                <span>TOTAL AKTIVA</span>
-                <span className="tabular-nums">{fmt(data.aktiva.totalAset)}</span>
-              </div>
+              <table className="w-full text-[11px]">
+                <tbody>
+                  <tr className="font-bold border-t-2 border-slate-800">
+                    <td className="pt-2">TOTAL AKTIVA</td>
+                    <td className="text-right tabular-nums pt-2">{fmt(data.aktiva.totalAset)}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
             {/* PASSIVA COLUMN */}
@@ -344,52 +360,68 @@ export default function NeracaPage() {
 
               {/* Kewajiban Jangka Pendek */}
               <p className="font-bold text-[11px] mt-2 mb-0.5">Kewajiban Jangka Pendek</p>
-              {data.passiva.kewajiban.jangkaPendek.detail.filter(a => a.saldo !== 0).map(a => (
-                <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
-                  <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
-                  <span className="tabular-nums">{fmt(a.saldo)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
-                <span>Subtotal Kewajiban Pendek</span>
-                <span className="tabular-nums">{fmt(data.passiva.kewajiban.jangkaPendek.subtotal)}</span>
-              </div>
+              <table className="w-full text-[11px]">
+                <tbody>
+                  {data.passiva.kewajiban.jangkaPendek.detail.filter(a => a.saldo !== 0).map(a => (
+                    <tr key={a.kode} className="print-row">
+                      <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                      <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
+                    </tr>
+                  ))}
+                  <tr className="font-bold border-t border-slate-400">
+                    <td>Subtotal Kewajiban Pendek</td>
+                    <td className="text-right tabular-nums">{fmt(data.passiva.kewajiban.jangkaPendek.subtotal)}</td>
+                  </tr>
+                </tbody>
+              </table>
 
               {/* Kewajiban Jangka Panjang */}
               <p className="font-bold text-[11px] mt-2 mb-0.5">Kewajiban Jangka Panjang</p>
-              {data.passiva.kewajiban.jangkaPanjang.detail.filter(a => a.saldo !== 0).map(a => (
-                <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
-                  <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
-                  <span className="tabular-nums">{fmt(a.saldo)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
-                <span>Subtotal Kewajiban Panjang</span>
-                <span className="tabular-nums">{fmt(data.passiva.kewajiban.jangkaPanjang.subtotal)}</span>
-              </div>
+              <table className="w-full text-[11px]">
+                <tbody>
+                  {data.passiva.kewajiban.jangkaPanjang.detail.filter(a => a.saldo !== 0).map(a => (
+                    <tr key={a.kode} className="print-row">
+                      <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                      <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
+                    </tr>
+                  ))}
+                  <tr className="font-bold border-t border-slate-400">
+                    <td>Subtotal Kewajiban Panjang</td>
+                    <td className="text-right tabular-nums">{fmt(data.passiva.kewajiban.jangkaPanjang.subtotal)}</td>
+                  </tr>
+                </tbody>
+              </table>
 
               {/* Ekuitas */}
               <p className="font-bold text-[11px] mt-2 mb-0.5">Ekuitas</p>
-              {data.passiva.ekuitas.detail.filter(a => a.saldo !== 0).map(a => (
-                <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
-                  <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
-                  <span className="tabular-nums">{fmt(a.saldo)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between text-[11px] py-0.5 bg-slate-100 px-1">
-                <span className="font-semibold">Laba Tahun Berjalan</span>
-                <span className="tabular-nums font-semibold">{fmt(data.passiva.ekuitas.labaBerjalan)}</span>
-              </div>
-              <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
-                <span>Total Ekuitas</span>
-                <span className="tabular-nums">{fmt(data.passiva.ekuitas.subtotal)}</span>
-              </div>
+              <table className="w-full text-[11px]">
+                <tbody>
+                  {data.passiva.ekuitas.detail.filter(a => a.saldo !== 0).map(a => (
+                    <tr key={a.kode} className="print-row">
+                      <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                      <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-slate-100">
+                    <td className="font-semibold px-1">Laba Tahun Berjalan</td>
+                    <td className="text-right tabular-nums font-semibold px-1">{fmt(data.passiva.ekuitas.labaBerjalan)}</td>
+                  </tr>
+                  <tr className="font-bold border-t border-slate-400">
+                    <td>Total Ekuitas</td>
+                    <td className="text-right tabular-nums">{fmt(data.passiva.ekuitas.subtotal)}</td>
+                  </tr>
+                </tbody>
+              </table>
 
               {/* Total Passiva */}
-              <div className="flex justify-between font-bold text-[11px] border-t-2 border-slate-800 mt-2 py-0.5">
-                <span>TOTAL PASSIVA</span>
-                <span className="tabular-nums">{fmt(data.passiva.totalPassiva)}</span>
-              </div>
+              <table className="w-full text-[11px]">
+                <tbody>
+                  <tr className="font-bold border-t-2 border-slate-800">
+                    <td className="pt-2">TOTAL PASSIVA</td>
+                    <td className="text-right tabular-nums pt-2">{fmt(data.passiva.totalPassiva)}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>}

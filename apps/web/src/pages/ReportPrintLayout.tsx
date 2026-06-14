@@ -306,6 +306,9 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
           .no-print { display: none !important; }
           .print-area { display: block !important; position: static !important; overflow: visible !important; }
           .print-area input { border: none !important; outline: none !important; box-shadow: none !important; padding: 0 !important; background: transparent !important; font-weight: inherit !important; }
+          .print-area table { width: 100%; border-collapse: collapse; }
+          .print-area td { padding: 1px 0; vertical-align: top; }
+          .print-area .print-row td:last-child { text-align: right; white-space: nowrap; width: 120px; }
           @page { size: ${pageStyle}; margin: 1.5cm 1.8cm; }
         }
         .print-input {
@@ -387,7 +390,7 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
               <div className="print-body text-[11px]">{children}</div>
 
               {/* FOOTER — Tanda Tangan */}
-              <div className="mt-8 mb-4">
+              <div className="mt-8 mb-4 print:break-inside-avoid">
                 <table style={{ width: '90%', margin: '0 auto' }}>
                   <tbody>
                     <tr>

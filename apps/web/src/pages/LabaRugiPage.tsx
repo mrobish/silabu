@@ -253,114 +253,116 @@ export default function LabaRugiPage() {
 
       {/* Print Modal */}
       <ReportPrintLayout title="LAPORAN LABA RUGI" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabel}>
-        {data && <div className="space-y-0">
-          {/* Header label baris */}
-          <div className="flex justify-between border-b border-slate-800 pb-1 mb-3 font-bold text-[11px]">
-            <span>Akun</span>
-            <span>Jumlah (Rp)</span>
-          </div>
+        {data && <table className="w-full text-[11px] border-collapse">
+          <thead>
+            <tr className="border-b border-slate-800 font-bold">
+              <td className="text-left pb-1">Akun</td>
+              <td className="text-right pb-1">Jumlah (Rp)</td>
+            </tr>
+          </thead>
+          <tbody>
+            {/* A. PENDAPATAN */}
+            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">A. Pendapatan Operasional</td></tr>
+            {data.pendapatanOperasional.jasa.filter(a => a.saldo !== 0).map(a => (
+              <tr key={a.kode} className="print-row">
+                <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
+              </tr>
+            ))}
+            {data.pendapatanOperasional.dagang.filter(a => a.saldo !== 0).map(a => (
+              <tr key={a.kode} className="print-row">
+                <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
+              </tr>
+            ))}
+            <tr className="font-bold border-t border-slate-400">
+              <td className="pt-0.5">Subtotal Pendapatan Operasional</td>
+              <td className="text-right tabular-nums pt-0.5">{fmt(data.pendapatanOperasional.subtotal)}</td>
+            </tr>
 
-          {/* A. PENDAPATAN */}
-          <p className="font-bold text-[11px] mt-2 mb-0.5">A. Pendapatan Operasional</p>
-          {data.pendapatanOperasional.jasa.filter(a => a.saldo !== 0).map(a => (
-            <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
-              <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
-              <span className="tabular-nums">{fmt(a.saldo)}</span>
-            </div>
-          ))}
-          {data.pendapatanOperasional.dagang.filter(a => a.saldo !== 0).map(a => (
-            <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
-              <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
-              <span className="tabular-nums">{fmt(a.saldo)}</span>
-            </div>
-          ))}
-          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5 mt-0.5">
-            <span>Subtotal Pendapatan Operasional</span>
-            <span className="tabular-nums">{fmt(data.pendapatanOperasional.subtotal)}</span>
-          </div>
+            {/* B. HPP */}
+            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">B. Harga Pokok Penjualan</td></tr>
+            {data.hpp.detail.filter(a => a.saldo !== 0).map(a => (
+              <tr key={a.kode} className="print-row">
+                <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
+              </tr>
+            ))}
+            <tr className="font-bold border-t border-slate-400">
+              <td className="pt-0.5">Subtotal HPP</td>
+              <td className="text-right tabular-nums pt-0.5">{fmt(data.hpp.subtotal)}</td>
+            </tr>
 
-          {/* B. HPP */}
-          <p className="font-bold text-[11px] mt-2 mb-0.5">B. Harga Pokok Penjualan</p>
-          {data.hpp.detail.filter(a => a.saldo !== 0).map(a => (
-            <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
-              <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
-              <span className="tabular-nums">{fmt(a.saldo)}</span>
-            </div>
-          ))}
-          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
-            <span>Subtotal HPP</span>
-            <span className="tabular-nums">{fmt(data.hpp.subtotal)}</span>
-          </div>
+            {/* C. LABA KOTOR */}
+            <tr className="font-bold border-t-2 border-slate-800">
+              <td className="pt-1">C. Laba Kotor Operasional</td>
+              <td className="text-right tabular-nums pt-1">{fmt(data.labaKotor)}</td>
+            </tr>
 
-          {/* C. LABA KOTOR */}
-          <div className="flex justify-between font-bold text-[11px] border-t-2 border-slate-800 mt-1 py-0.5">
-            <span>C. Laba Kotor Operasional</span>
-            <span className="tabular-nums">{fmt(data.labaKotor)}</span>
-          </div>
+            {/* D. BEBAN OPERASIONAL */}
+            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">D. Beban Operasional</td></tr>
+            {data.bebanOperasional.detail.filter(a => a.saldo !== 0).map(a => (
+              <tr key={a.kode} className="print-row">
+                <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
+              </tr>
+            ))}
+            <tr className="font-bold border-t border-slate-400">
+              <td className="pt-0.5">Subtotal Beban Operasional</td>
+              <td className="text-right tabular-nums pt-0.5">{fmt(data.bebanOperasional.subtotal)}</td>
+            </tr>
 
-          {/* D. BEBAN OPERASIONAL */}
-          <p className="font-bold text-[11px] mt-2 mb-0.5">D. Beban Operasional</p>
-          {data.bebanOperasional.detail.filter(a => a.saldo !== 0).map(a => (
-            <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
-              <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
-              <span className="tabular-nums">{fmt(a.saldo)}</span>
-            </div>
-          ))}
-          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
-            <span>Subtotal Beban Operasional</span>
-            <span className="tabular-nums">{fmt(data.bebanOperasional.subtotal)}</span>
-          </div>
+            {/* E. LABA OPERASIONAL */}
+            <tr className="font-bold border-t-2 border-slate-800">
+              <td className="pt-1">E. Laba Operasional</td>
+              <td className="text-right tabular-nums pt-1">{fmt(data.labaOperasional)}</td>
+            </tr>
 
-          {/* E. LABA OPERASIONAL */}
-          <div className="flex justify-between font-bold text-[11px] border-t-2 border-slate-800 mt-1 py-0.5">
-            <span>E. Laba Operasional</span>
-            <span className="tabular-nums">{fmt(data.labaOperasional)}</span>
-          </div>
+            {/* F. NON-OPERASIONAL */}
+            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">F. Pendapatan &amp; Beban Non-Operasional</td></tr>
+            {data.nonOperasional.pendapatanLain.detail.filter(a => a.saldo !== 0).map(a => (
+              <tr key={a.kode} className="print-row">
+                <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
+              </tr>
+            ))}
+            {data.nonOperasional.bebanLain.detail.filter(a => a.saldo !== 0).map(a => (
+              <tr key={a.kode} className="print-row">
+                <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
+              </tr>
+            ))}
+            <tr className="font-bold border-t border-slate-400">
+              <td className="pt-0.5">Subtotal Non-Operasional</td>
+              <td className="text-right tabular-nums pt-0.5">{fmt(data.nonOperasional.pendapatanLain.subtotal - data.nonOperasional.bebanLain.subtotal)}</td>
+            </tr>
 
-          {/* F. NON-OPERASIONAL */}
-          <p className="font-bold text-[11px] mt-2 mb-0.5">F. Pendapatan &amp; Beban Non-Operasional</p>
-          {data.nonOperasional.pendapatanLain.detail.filter(a => a.saldo !== 0).map(a => (
-            <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
-              <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
-              <span className="tabular-nums">{fmt(a.saldo)}</span>
-            </div>
-          ))}
-          {data.nonOperasional.bebanLain.detail.filter(a => a.saldo !== 0).map(a => (
-            <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
-              <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
-              <span className="tabular-nums">{fmt(a.saldo)}</span>
-            </div>
-          ))}
-          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5 mt-0.5">
-            <span>Subtotal Non-Operasional</span>
-            <span className="tabular-nums">{fmt(data.nonOperasional.pendapatanLain.subtotal - data.nonOperasional.bebanLain.subtotal)}</span>
-          </div>
+            {/* G. LABA SEBELUM PAJAK */}
+            <tr className="font-bold border-t-2 border-slate-800">
+              <td className="pt-1">G. Laba / Rugi Sebelum Pajak</td>
+              <td className="text-right tabular-nums pt-1">{fmt(data.labaSebelumPajak)}</td>
+            </tr>
 
-          {/* G. LABA SEBELUM PAJAK */}
-          <div className="flex justify-between font-bold text-[11px] border-t-2 border-slate-800 mt-1 py-0.5">
-            <span>G. Laba / Rugi Sebelum Pajak</span>
-            <span className="tabular-nums">{fmt(data.labaSebelumPajak)}</span>
-          </div>
+            {/* H. PAJAK */}
+            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">H. Beban Pajak</td></tr>
+            {data.pajak.detail.filter(a => a.saldo !== 0).map(a => (
+              <tr key={a.kode} className="print-row">
+                <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
+              </tr>
+            ))}
+            <tr className="font-bold border-t border-slate-400">
+              <td className="pt-0.5">Subtotal Pajak</td>
+              <td className="text-right tabular-nums pt-0.5">{fmt(data.pajak.subtotal)}</td>
+            </tr>
 
-          {/* H. PAJAK */}
-          <p className="font-bold text-[11px] mt-2 mb-0.5">H. Beban Pajak</p>
-          {data.pajak.detail.filter(a => a.saldo !== 0).map(a => (
-            <div key={a.kode} className="flex justify-between text-[11px] py-0.5">
-              <span className="text-slate-700 ml-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</span>
-              <span className="tabular-nums">{fmt(a.saldo)}</span>
-            </div>
-          ))}
-          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
-            <span>Subtotal Pajak</span>
-            <span className="tabular-nums">{fmt(data.pajak.subtotal)}</span>
-          </div>
-
-          {/* LABA BERSIH */}
-          <div className="flex justify-between font-bold text-[12px] border-t-2 border-slate-800 mt-2 py-1">
-            <span>LABA BERSIH SETELAH PAJAK</span>
-            <span className="tabular-nums">{fmt(data.labaBersih)}</span>
-          </div>
-        </div>}
+            {/* LABA BERSIH */}
+            <tr className="font-bold text-[12px] border-t-2 border-slate-800">
+              <td className="pt-2 pb-1">LABA BERSIH SETELAH PAJAK</td>
+              <td className="text-right tabular-nums pt-2 pb-1">{fmt(data.labaBersih)}</td>
+            </tr>
+          </tbody>
+        </table>}
       </ReportPrintLayout>
     </div>
   );

@@ -195,73 +195,76 @@ export default function ArusKasPage() {
 
       {/* Print Modal */}
       <ReportPrintLayout title="LAPORAN ARUS KAS" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabelArus}>
-        {data && <div className="space-y-0">
-          <div className="flex justify-between border-b border-slate-800 pb-1 mb-3 font-bold text-[11px]">
-            <span>Akun Lawan</span>
-            <span>Jumlah (Rp)</span>
-          </div>
+        {data && <table className="w-full text-[11px] border-collapse">
+          <thead>
+            <tr className="border-b border-slate-800">
+              <th className="text-left pb-1 font-bold">Akun Lawan</th>
+              <th className="text-right pb-1 font-bold w-[140px]">Jumlah (Rp)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* A. Operasi */}
+            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">A. Arus Kas dari Aktivitas Operasi</td></tr>
+            {data.aktivitasOperasi.detail.filter(d => d.net !== 0).map(d => (
+              <tr key={d.kode} className="print-row">
+                <td className="text-slate-700 pl-3"><span className="text-slate-400">{d.kode}</span> {d.nama}</td>
+                <td className={`text-right tabular-nums ${d.net < 0 ? 'text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</td>
+              </tr>
+            ))}
+            <tr className="font-bold border-t border-slate-400">
+              <td className="py-0.5">Arus Kas Bersih dari Aktivitas Operasi</td>
+              <td className={`text-right tabular-nums ${data.aktivitasOperasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasOperasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasOperasi.net)) + ')' : rupiah(data.aktivitasOperasi.net)}</td>
+            </tr>
 
-          {/* A. Operasi */}
-          <p className="font-bold text-[11px] mt-2 mb-0.5">A. Arus Kas dari Aktivitas Operasi</p>
-          {data.aktivitasOperasi.detail.filter(d => d.net !== 0).map(d => (
-            <div key={d.kode} className="flex justify-between text-[11px] py-0.5">
-              <span className="text-slate-700 ml-3"><span className="text-slate-400">{d.kode}</span> {d.nama}</span>
-              <span className={`tabular-nums ${d.net < 0 ? 'text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</span>
-            </div>
-          ))}
-          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
-            <span>Arus Kas Bersih dari Aktivitas Operasi</span>
-            <span className={`tabular-nums ${data.aktivitasOperasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasOperasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasOperasi.net)) + ')' : rupiah(data.aktivitasOperasi.net)}</span>
-          </div>
+            {/* B. Investasi */}
+            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">B. Arus Kas dari Aktivitas Investasi</td></tr>
+            {data.aktivitasInvestasi.detail.filter(d => d.net !== 0).map(d => (
+              <tr key={d.kode} className="print-row">
+                <td className="text-slate-700 pl-3"><span className="text-slate-400">{d.kode}</span> {d.nama}</td>
+                <td className={`text-right tabular-nums ${d.net < 0 ? 'text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</td>
+              </tr>
+            ))}
+            <tr className="font-bold border-t border-slate-400">
+              <td className="py-0.5">Arus Kas Bersih dari Aktivitas Investasi</td>
+              <td className={`text-right tabular-nums ${data.aktivitasInvestasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasInvestasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasInvestasi.net)) + ')' : rupiah(data.aktivitasInvestasi.net)}</td>
+            </tr>
 
-          {/* B. Investasi */}
-          <p className="font-bold text-[11px] mt-2 mb-0.5">B. Arus Kas dari Aktivitas Investasi</p>
-          {data.aktivitasInvestasi.detail.filter(d => d.net !== 0).map(d => (
-            <div key={d.kode} className="flex justify-between text-[11px] py-0.5">
-              <span className="text-slate-700 ml-3"><span className="text-slate-400">{d.kode}</span> {d.nama}</span>
-              <span className={`tabular-nums ${d.net < 0 ? 'text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</span>
-            </div>
-          ))}
-          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
-            <span>Arus Kas Bersih dari Aktivitas Investasi</span>
-            <span className={`tabular-nums ${data.aktivitasInvestasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasInvestasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasInvestasi.net)) + ')' : rupiah(data.aktivitasInvestasi.net)}</span>
-          </div>
+            {/* C. Pendanaan */}
+            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">C. Arus Kas dari Aktivitas Pendanaan</td></tr>
+            {data.aktivitasPendanaan.detail.filter(d => d.net !== 0).map(d => (
+              <tr key={d.kode} className="print-row">
+                <td className="text-slate-700 pl-3"><span className="text-slate-400">{d.kode}</span> {d.nama}</td>
+                <td className={`text-right tabular-nums ${d.net < 0 ? 'text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</td>
+              </tr>
+            ))}
+            <tr className="font-bold border-t border-slate-400">
+              <td className="py-0.5">Arus Kas Bersih dari Aktivitas Pendanaan</td>
+              <td className={`text-right tabular-nums ${data.aktivitasPendanaan.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasPendanaan.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasPendanaan.net)) + ')' : rupiah(data.aktivitasPendanaan.net)}</td>
+            </tr>
 
-          {/* C. Pendanaan */}
-          <p className="font-bold text-[11px] mt-2 mb-0.5">C. Arus Kas dari Aktivitas Pendanaan</p>
-          {data.aktivitasPendanaan.detail.filter(d => d.net !== 0).map(d => (
-            <div key={d.kode} className="flex justify-between text-[11px] py-0.5">
-              <span className="text-slate-700 ml-3"><span className="text-slate-400">{d.kode}</span> {d.nama}</span>
-              <span className={`tabular-nums ${d.net < 0 ? 'text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</span>
-            </div>
-          ))}
-          <div className="flex justify-between font-bold text-[11px] border-t border-slate-400 py-0.5">
-            <span>Arus Kas Bersih dari Aktivitas Pendanaan</span>
-            <span className={`tabular-nums ${data.aktivitasPendanaan.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasPendanaan.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasPendanaan.net)) + ')' : rupiah(data.aktivitasPendanaan.net)}</span>
-          </div>
-
-          {/* Summary */}
-          <div className="flex justify-between font-bold text-[11px] border-t-2 border-slate-800 mt-2 py-0.5">
-            <span>Kas Awal Periode</span>
-            <span className="tabular-nums">{rupiah(data.kasTahunLalu)}</span>
-          </div>
-          <div className="flex justify-between text-[11px] py-0.5 ml-3">
-            <span>Arus Kas Operasi</span>
-            <span className={`tabular-nums ${data.aktivitasOperasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasOperasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasOperasi.net)) + ')' : '+' + rupiah(data.aktivitasOperasi.net)}</span>
-          </div>
-          <div className="flex justify-between text-[11px] py-0.5 ml-3">
-            <span>Arus Kas Investasi</span>
-            <span className={`tabular-nums ${data.aktivitasInvestasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasInvestasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasInvestasi.net)) + ')' : '+' + rupiah(data.aktivitasInvestasi.net)}</span>
-          </div>
-          <div className="flex justify-between text-[11px] py-0.5 ml-3">
-            <span>Arus Kas Pendanaan</span>
-            <span className={`tabular-nums ${data.aktivitasPendanaan.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasPendanaan.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasPendanaan.net)) + ')' : '+' + rupiah(data.aktivitasPendanaan.net)}</span>
-          </div>
-          <div className="flex justify-between font-bold text-[12px] border-t-2 border-slate-800 mt-2 py-1">
-            <span>KAS AKHIR PERIODE</span>
-            <span className="tabular-nums">{rupiah(data.kasBerjalan)}</span>
-          </div>
-        </div>}
+            {/* Summary */}
+            <tr className="font-bold border-t-2 border-slate-800 mt-2">
+              <td className="py-0.5">Kas Awal Periode</td>
+              <td className="text-right tabular-nums">{rupiah(data.kasTahunLalu)}</td>
+            </tr>
+            <tr>
+              <td className="pl-3 py-0.5">Arus Kas Operasi</td>
+              <td className={`text-right tabular-nums ${data.aktivitasOperasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasOperasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasOperasi.net)) + ')' : '+' + rupiah(data.aktivitasOperasi.net)}</td>
+            </tr>
+            <tr>
+              <td className="pl-3 py-0.5">Arus Kas Investasi</td>
+              <td className={`text-right tabular-nums ${data.aktivitasInvestasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasInvestasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasInvestasi.net)) + ')' : '+' + rupiah(data.aktivitasInvestasi.net)}</td>
+            </tr>
+            <tr>
+              <td className="pl-3 py-0.5">Arus Kas Pendanaan</td>
+              <td className={`text-right tabular-nums ${data.aktivitasPendanaan.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasPendanaan.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasPendanaan.net)) + ')' : '+' + rupiah(data.aktivitasPendanaan.net)}</td>
+            </tr>
+            <tr className="font-bold border-t-2 border-slate-800">
+              <td className="py-1 text-[12px]">KAS AKHIR PERIODE</td>
+              <td className="text-right tabular-nums text-[12px]">{rupiah(data.kasBerjalan)}</td>
+            </tr>
+          </tbody>
+        </table>}
       </ReportPrintLayout>
     </div>
   );
