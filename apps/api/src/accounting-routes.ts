@@ -1029,18 +1029,28 @@ export async function accountingRoutes(app: FastifyInstance) {
     // Keep only rows with a non-zero value; validate with strict money parser
     const cleanLines: { akun_id: string; debit: number; kredit: number }[] = [];
     for (const l of lines) {
-      if (!l.akun_id) return reply.status(400).send({ error: 'Setiap baris wajib memiliki akun_id' });
+      // Skip rows where both debit and kredit are empty/zero/null/undefined
+      const rawDebit = (l.debit ?? '').toString().trim();
+      const rawKredit = (l.kredit ?? '').toString().trim();
+      const isEmptyDebit = !rawDebit || rawDebit === '0' || rawDebit === '0.00' || rawDebit === '0,00';
+      const isEmptyKredit = !rawKredit || rawKredit === '0' || rawKredit === '0.00' || rawKredit === '0,00';
+
+      if (isEmptyDebit && isEmptyKredit) continue; // skip empty rows silently
+
+      // Validate akun_id only for non-empty rows
+      if (!l.akun_id) return reply.status(400).send({ error: 'Setiap baris dengan nominal wajib memiliki akun_id' });
 
       let debitCents: number;
       let kreditCents: number;
       try {
-        debitCents = parseMoneyStrict(l.debit ?? '0', 'Debit');
-        kreditCents = parseMoneyStrict(l.kredit ?? '0', 'Kredit');
+        // Use '0' for empty side, strict parse for non-empty side
+        debitCents = isEmptyDebit ? 0 : parseMoneyStrict(rawDebit, 'Debit');
+        kreditCents = isEmptyKredit ? 0 : parseMoneyStrict(rawKredit, 'Kredit');
       } catch (e: any) {
         return reply.status(400).send({ error: e.message });
       }
 
-      if (debitCents === 0 && kreditCents === 0) continue; // skip empty rows
+      if (debitCents === 0 && kreditCents === 0) continue; // skip zero rows
       if (debitCents > 0 && kreditCents > 0) return reply.status(400).send({ error: 'Setiap akun hanya boleh diisi salah satu: debit atau kredit' });
 
       cleanLines.push({ akun_id: l.akun_id, debit: debitCents / 100, kredit: kreditCents / 100 });
