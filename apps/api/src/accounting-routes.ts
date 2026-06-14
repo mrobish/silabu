@@ -2734,7 +2734,7 @@ export async function accountingRoutes(app: FastifyInstance) {
       // - bayar_utang: Debit Utang (kurangi hutang), Credit Kas/Bank (kurangi kas)
       // - terima_piutang: Debit Kas/Bank (tambah kas), Credit Piutang (kurangi piutang)
       // - beli_persediaan: Debit Persediaan (tambah stok), Credit Kas/Bank (kurangi kas)
-      // - jual_persediaan: Debit Kas/Bank (tambah kas), Credit Persediaan (kurangi stok)
+      // - jual_persediaan: 4 lines (Kas←Pendapatan + HPP←Persediaan)
 
       let line1Debit = '0', line1Kredit = '0', line2Debit = '0', line2Kredit = '0';
       let line1AkunId = '', line2AkunId = '';
@@ -2742,6 +2742,9 @@ export async function accountingRoutes(app: FastifyInstance) {
       let line2ContactId = null, line2InventoryItemId = null, line2Qty = null;
 
       const nominalStr = String(nominal);
+
+      // For jual_persediaan: collect extra lines to insert after line1 & line2
+      const extraLines: Array<{ akunId: string; debit: string; kredit: string; ket: string; invId: string | null; qty: string | null }> = [];
 
       switch (tipe) {
         case 'uang_masuk':
@@ -2773,10 +2776,42 @@ export async function accountingRoutes(app: FastifyInstance) {
           line2AkunId = sumberAkunId; line2Debit = '0'; line2Kredit = nominalStr;
           break;
         case 'jual_persediaan':
-          // Debit Kas/Bank, Credit Persediaan (kurangi stok)
-          line1AkunId = sumberAkunId; line1Debit = nominalStr; line1Kredit = '0';
-          line2AkunId = targetAkun.id; line2Debit = '0'; line2Kredit = nominalStr;
-          line2InventoryItemId = inventoryItemId; line2Qty = String(qty);
+          // 4 lines: Kas(D) + Pendapatan(K) + HPP(D) + Persediaan(K)
+          {
+            // Find Pendapatan & HPP accounts dynamically
+            const [pendAkun, hppAkun] = await Promise.all([
+              findAccountByRole(a.tenantId!, 'PENDAPATAN_PENJUALAN'),
+              findAccountByRole(a.tenantId!, 'HPP'),
+            ]);
+            if (!pendAkun) return reply.code(400).send({ error: 'Akun Pendapatan Penjualan tidak ditemukan. Aktifkan akun di Golongan 4.' });
+            if (!hppAkun) return reply.code(400).send({ error: 'Akun HPP tidak ditemukan. Aktifkan akun di Golongan 5.' });
+
+            // Calculate HPP (moving average) from inventory
+            let hppPerUnit = 0;
+            if (inventoryItemId) {
+              const hppRes = await pool.query(
+                `SELECT COALESCE(SUM(jl.debit), 0) AS total_cost,
+                        COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) AS total_qty
+                 FROM journal_lines jl
+                 JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
+                 WHERE jl.inventory_item_id = $1`,
+                [inventoryItemId, a.tenantId]
+              );
+              const totalCost = Number(hppRes.rows[0].total_cost) || 0;
+              const totalQty = Number(hppRes.rows[0].total_qty) || 0;
+              hppPerUnit = totalQty > 0 ? Math.round(totalCost / totalQty) : 0;
+            }
+            const hppTotal = hppPerUnit * (qty || 1);
+
+            // Line 1: Kas (D) — harga jual
+            line1AkunId = sumberAkunId; line1Debit = nominalStr; line1Kredit = '0';
+            // Line 2: Pendapatan (K) — harga jual
+            line2AkunId = pendAkun.id; line2Debit = '0'; line2Kredit = nominalStr;
+            // Line 3: HPP (D) — harga modal
+            extraLines.push({ akunId: hppAkun.id, debit: String(hppTotal), kredit: '0', ket: 'HPP ' + desc, invId: null, qty: null });
+            // Line 4: Persediaan (K) — harga modal + qty
+            extraLines.push({ akunId: targetAkun.id, debit: '0', kredit: String(hppTotal), ket: 'HPP ' + desc, invId: inventoryItemId || null, qty: qty ? String(qty) : null });
+          }
           break;
       }
 
@@ -2793,6 +2828,15 @@ export async function accountingRoutes(app: FastifyInstance) {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
         [entryId, line2AkunId, line2Debit, line2Kredit, desc, line2ContactId, line2InventoryItemId, line2Qty]
       );
+
+      // Insert extra lines (for jual_persediaan: HPP + Persediaan)
+      for (const line of extraLines) {
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, inventory_item_id, qty)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [entryId, line.akunId, line.debit, line.kredit, line.ket, line.invId, line.qty]
+        );
+      }
 
       await client.query('COMMIT');
 
