@@ -3071,15 +3071,24 @@ export async function accountingRoutes(app: FastifyInstance) {
             // Calculate HPP (moving average) from inventory — FIX #12 (M6): integer cents
             let hppTotalStr = '0';
             if (inventoryItemId) {
-              // FIX #12+Concurrency: Check stock WITH LOCK inside transaction
+              // FIX #12+Concurrency: Lock inventory_items master row FIRST
+              const lockRes = await client.query(
+                'SELECT id FROM inventory_items WHERE id=$1 AND tenant_id=$2 FOR UPDATE',
+                [inventoryItemId, a.tenantId]
+              );
+              if (!lockRes.rowCount) {
+                await client.query('ROLLBACK');
+                return reply.code(400).send({ error: 'Barang tidak ditemukan' });
+              }
+
+              // NOW safe to calculate stock — we hold the lock
               const stockRes = await client.query(
                 `SELECT
                    COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) -
                    COALESCE(SUM(CASE WHEN jl.kredit > 0 THEN jl.qty ELSE 0 END), 0) AS stok
                  FROM journal_lines jl
                  JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
-                 WHERE jl.inventory_item_id = $1
-                 FOR UPDATE OF jl`,
+                 WHERE jl.inventory_item_id = $1`,
                 [inventoryItemId, a.tenantId]
               );
               const stokSekarang = Number(stockRes.rows[0].stok) || 0;
@@ -3329,26 +3338,27 @@ export async function accountingRoutes(app: FastifyInstance) {
       let totalHppCents = 0;
 
       for (const item of sortedItems) {
-        // Get item name
-        const itemRes = await client.query(
-          'SELECT id, nama FROM inventory_items WHERE id=$1 AND tenant_id=$2',
+        // FIX #12+Concurrency: Lock inventory_items master row FIRST
+        // This serializes all sales for the same item across concurrent transactions.
+        // SELECT FOR UPDATE on master row blocks until other transaction commits.
+        const lockRes = await client.query(
+          'SELECT id, nama FROM inventory_items WHERE id=$1 AND tenant_id=$2 FOR UPDATE',
           [item.inventory_item_id, a.tenantId]
         );
-        if (!itemRes.rowCount) {
+        if (!lockRes.rowCount) {
           await client.query('ROLLBACK');
           return reply.code(400).send({ error: `Barang dengan id ${item.inventory_item_id} tidak ditemukan` });
         }
+        const itemName = lockRes.rows[0].nama;
 
-        // FIX #12+Concurrency: SELECT FOR UPDATE to lock inventory rows
-        // This prevents concurrent transactions from reading stale stock
+        // NOW safe to calculate stock — we hold the lock on inventory_items
         const stockRes = await client.query(
           `SELECT
              COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) -
              COALESCE(SUM(CASE WHEN jl.kredit > 0 THEN jl.qty ELSE 0 END), 0) AS stok
            FROM journal_lines jl
            JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
-           WHERE jl.inventory_item_id = $1
-           FOR UPDATE OF jl`,
+           WHERE jl.inventory_item_id = $1`,
           [item.inventory_item_id, a.tenantId]
         );
         const stokSekarang = Number(stockRes.rows[0].stok) || 0;
@@ -3358,7 +3368,7 @@ export async function accountingRoutes(app: FastifyInstance) {
         if (stokSesudah < 0) {
           await client.query('ROLLBACK');
           return reply.code(400).send({
-            error: `Stok tidak mencukupi untuk "${itemRes.rows[0].nama}". Stok tersedia: ${stokSekarang}, qty diminta: ${item.qty}.`,
+            error: `Stok tidak mencukupi untuk "${itemName}". Stok tersedia: ${stokSekarang}, qty diminta: ${item.qty}.`,
           });
         }
 
@@ -3380,17 +3390,17 @@ export async function accountingRoutes(app: FastifyInstance) {
           const hppResult = calculateHppCents(totalCost, totalQty, item.qty);
           hpp = hppResult.hppPerUnitCents / 100;
           hppTotalCents = hppResult.hppTotalCents;
-          validateHppNotZero(hppTotalCents, itemRes.rows[0].nama);
+          validateHppNotZero(hppTotalCents, itemName);
         } else if (totalQty <= 0 || totalCost < 0) {
           await client.query('ROLLBACK');
           return reply.code(400).send({
-            error: `Data persediaan tidak valid untuk "${itemRes.rows[0].nama}": totalCost=${totalCost}, totalQty=${totalQty}. Periksa data persediaan masuk.`,
+            error: `Data persediaan tidak valid untuk "${itemName}": totalCost=${totalCost}, totalQty=${totalQty}. Periksa data persediaan masuk.`,
           });
         }
 
         itemDetails.push({
           inventory_item_id: item.inventory_item_id,
-          nama: itemRes.rows[0].nama,
+          nama: itemName,
           qty: item.qty,
           harga_jual: item.harga_jual,
           hpp,
