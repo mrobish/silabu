@@ -43,6 +43,7 @@ interface DateRangePickerProps {
   onStartChange: (d: string) => void;
   onEndChange: (d: string) => void;
   className?: string;
+  minDate?: string;           // YYYY-MM-DD — disable dates before this
 }
 
 const presetBtn = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap';
@@ -53,6 +54,7 @@ export default function DateRangePicker({
   onStartChange,
   onEndChange,
   className = '',
+  minDate,
 }: DateRangePickerProps) {
   const applyPreset = useCallback((s: string, e: string) => {
     onStartChange(s);
@@ -84,6 +86,7 @@ export default function DateRangePicker({
           <DatePicker
             value={startDate}
             onChange={onStartChange}
+            minDate={minDate}
             className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition"
           />
         </div>
@@ -92,6 +95,7 @@ export default function DateRangePicker({
           <DatePicker
             value={endDate}
             onChange={onEndChange}
+            minDate={minDate}
             className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition"
           />
         </div>

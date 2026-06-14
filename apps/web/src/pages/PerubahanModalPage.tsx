@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useDateFilter } from '../hooks/useDateFilter';
+import { useCutoffDate } from "../hooks/useCutoffDate";
 import { Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
@@ -33,6 +34,7 @@ function formatRupiah(v?: number) {
 
 export default function PerubahanModalPage() {
   const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
+  const cutoff = useCutoffDate();
   const [data, setData] = useState<PerubahanModalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -79,7 +81,7 @@ export default function PerubahanModalPage() {
       <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-xl relative z-10">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
           <div className="sm:col-span-2">
-            <DateRangePicker
+            <DateRangePicker minDate={cutoff}
               startDate={startDate}
               endDate={endDate}
               onStartChange={setStartDate}

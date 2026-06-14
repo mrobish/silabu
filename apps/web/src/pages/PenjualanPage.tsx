@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useCutoffDate } from "../hooks/useCutoffDate";
 import { ShoppingCart, Plus, Trash2, X, CheckCircle, AlertTriangle, Package, Search } from 'lucide-react';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -131,6 +132,7 @@ export default function PenjualanPage({ setPage }: { setPage: (p: any) => void }
   const [hargaJual, setHargaJual] = useState('');
   const [kasAkunId, setKasAkunId] = useState('');
   const [tanggal, setTanggal] = useState(new Date().toISOString().slice(0, 10));
+  const cutoff = useCutoffDate();
   const [keterangan, setKeterangan] = useState('');
   const [saving, setSaving] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
@@ -646,7 +648,7 @@ export default function PenjualanPage({ setPage }: { setPage: (p: any) => void }
         {/* Tanggal */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5">📅 Tanggal</label>
-          <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className={inputCls} />
+          <input type="date" value={tanggal} min={cutoff || undefined} onChange={e => setTanggal(e.target.value)} className={inputCls} />
         </div>
 
         {/* Keterangan */}

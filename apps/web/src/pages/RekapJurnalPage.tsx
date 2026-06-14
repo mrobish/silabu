@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useDateFilter } from '../hooks/useDateFilter';
+import { useCutoffDate } from "../hooks/useCutoffDate";
 import { FileText } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
@@ -35,6 +36,7 @@ export default function RekapJurnalPage() {
   const [error, setError] = useState('');
   const [journalType, setJournalType] = useState<'ALL' | 'GENERAL' | 'ADJUSTMENT'>('ALL');
   const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
+  const cutoff = useCutoffDate();
   const [printOpen, setPrintOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -102,7 +104,7 @@ export default function RekapJurnalPage() {
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
           {/* Date Range Picker */}
           <div className="sm:col-span-4">
-            <DateRangePicker
+            <DateRangePicker minDate={cutoff}
               startDate={startDate}
               endDate={endDate}
               onStartChange={setStartDate}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useDateFilter } from '../hooks/useDateFilter';
+import { useCutoffDate } from "../hooks/useCutoffDate";
 import { TrendingUp, TrendingDown, ChevronDown, ChevronRight, DollarSign, BarChart4, Receipt, Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
@@ -58,6 +59,7 @@ function AkunRow({ a, indent = false }: { a: AkunSaldo; indent?: boolean }) {
 
 export default function LabaRugiPage() {
   const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
+  const cutoff = useCutoffDate();
   const [data, setData] = useState<LabaRugiData | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
@@ -111,7 +113,7 @@ export default function LabaRugiPage() {
       <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-xl">
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
           <div className="sm:col-span-2">
-            <DateRangePicker
+            <DateRangePicker minDate={cutoff}
               startDate={startDate}
               endDate={endDate}
               onStartChange={setStartDate}

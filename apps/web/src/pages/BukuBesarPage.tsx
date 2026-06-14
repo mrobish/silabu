@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDateFilter } from '../hooks/useDateFilter';
+import { useCutoffDate } from "../hooks/useCutoffDate";
 import { BookOpen, Calendar, Search, X } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
@@ -34,6 +35,7 @@ export default function BukuBesarPage() {
   const [search, setSearch] = useState('');
   const [openSearch, setOpenSearch] = useState(false);
   const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
+  const cutoff = useCutoffDate();
   const [data, setData] = useState<BukuBesarData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -138,7 +140,7 @@ export default function BukuBesarPage() {
 
           {/* Date Range Picker */}
           <div className="sm:col-span-5">
-            <DateRangePicker
+            <DateRangePicker minDate={cutoff}
               startDate={startDate}
               endDate={endDate}
               onStartChange={setStartDate}

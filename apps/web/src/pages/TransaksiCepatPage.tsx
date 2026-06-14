@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCutoffDate } from "../hooks/useCutoffDate";
 import {
   ArrowLeft, ArrowDownToLine, ArrowUpFromLine, CheckCircle, X,
   Search, Wallet, Landmark,
@@ -183,6 +184,7 @@ function TransactionForm({
   const [targetId, setTargetId] = useState('');
   const [nominal, setNominal] = useState('');
   const [tanggal, setTanggal] = useState(new Date().toISOString().slice(0, 10));
+  const cutoff = useCutoffDate();
   const [keterangan, setKeterangan] = useState('');
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -315,7 +317,7 @@ function TransactionForm({
         {/* Tanggal */}
         <div>
           <label className="block text-sm font-semibold text-slate-700 mb-1.5">📅 Tanggal</label>
-          <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className={inputCls} />
+          <input type="date" value={tanggal} min={cutoff || undefined} onChange={e => setTanggal(e.target.value)} className={inputCls} />
           {errors.tanggal && <p className="text-xs text-red-500 mt-1">{errors.tanggal}</p>}
         </div>
 

@@ -75,6 +75,7 @@ interface DatePickerProps {
   placeholder?: string;
   id?: string;
   required?: boolean;
+  minDate?: string;           // YYYY-MM-DD — dates before this are disabled (grayed out)
 }
 
 export default function DatePicker({
@@ -85,6 +86,7 @@ export default function DatePicker({
   placeholder = 'DD/MM/YYYY',
   id,
   required,
+  minDate,
 }: DatePickerProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -309,18 +311,22 @@ export default function DatePicker({
               const ymd = toYmd(d);
               const selected = selectedDate && isSameDay(d, selectedDate);
               const today = isToday(d);
+              const tooEarly = minDate ? ymd < minDate : false;
               return (
                 <button
                   key={i}
                   type="button"
-                  onClick={() => selectDate(d)}
+                  disabled={tooEarly}
+                  onClick={() => !tooEarly && selectDate(d)}
                   className={`
                     h-8 w-full rounded-lg text-xs font-medium transition
                     ${selected
                       ? 'bg-emerald-600 text-white shadow-sm'
                       : today
                         ? 'bg-emerald-50 text-emerald-700 font-bold ring-1 ring-emerald-200'
-                        : 'text-slate-700 hover:bg-slate-100'}
+                        : tooEarly
+                          ? 'text-slate-300 cursor-not-allowed'
+                          : 'text-slate-700 hover:bg-slate-100'}
                   `}
                 >
                   {d.getDate()}

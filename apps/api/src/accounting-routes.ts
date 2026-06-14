@@ -17,6 +17,25 @@ async function checkPeriodLock(tenantId: string, tahun: number): Promise<void> {
   }
 }
 
+/**
+ * Cek apakah tanggal transaksi >= tanggal cutoff (OPENING_BALANCE).
+ * Mencegah input transaksi di periode yang sudah punya Saldo Awal.
+ */
+async function checkCutoffDate(tenantId: string, tanggal: string): Promise<void> {
+  const r = await pool.query(
+    `SELECT tanggal FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE' LIMIT 1`,
+    [tenantId]
+  );
+  if (r.rows.length === 0) return; // belum ada saldo awal, boleh input kapan saja
+  const cutoff = (r.rows[0] as any).tanggal as string; // YYYY-MM-DD
+  if (tanggal < cutoff) {
+    throw Object.assign(
+      new Error(`Transaksi ditolak. Anda tidak bisa memasukkan transaksi pada periode yang sudah ditutup (sebelum ${cutoff}).`),
+      { statusCode: 422 }
+    );
+  }
+}
+
 export async function accountingRoutes(app: FastifyInstance) {
   // ─── Chart of Accounts ────────────────────────────────────────────
 
@@ -315,6 +334,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     }
 
     await checkPeriodLock(a.tenantId!, tahun);
+    await checkCutoffDate(a.tenantId!, tanggal as string);
 
     // Validate each line
     const akunIds = lines.map((l: any) => l.akun_id);
@@ -495,6 +515,7 @@ export async function accountingRoutes(app: FastifyInstance) {
       }
       await checkPeriodLock(a.tenantId!, tahun);
       const yb = `${tahun}-${bulan}`;
+      await checkCutoffDate(a.tenantId!, tanggal);
       if (!yearBulanSet.has(yb)) {
         await ensurePeriod(a.tenantId!, tahun);
         yearBulanSet.add(yb);
@@ -730,6 +751,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     if (isNaN(tahun) || isNaN(bulan) || tahun < 2000 || tahun > 2100 || bulan < 1 || bulan > 12) {
       return reply.status(400).send({ error: 'Format tanggal tidak valid (YYYY-MM-DD)' });
     }
+    await checkCutoffDate(a.tenantId!, tanggal as string);
 
     // 5. Validasi per baris — XOR (hanya satu sisi), non-negatif, angka
     const akunIds = lines.map((l: any) => l.akun_id);
@@ -1108,6 +1130,16 @@ export async function accountingRoutes(app: FastifyInstance) {
       posted_by: row.posted_by || null,
       posted_by_name: row.posted_by_name || null,
     };
+  });
+
+  // GET /accounting/cutoff-date — tanggal cutoff akuntansi (OPENING_BALANCE tanggal)
+  app.get('/cutoff-date', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const r = await pool.query(
+      `SELECT tanggal FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE' LIMIT 1`,
+      [a.tenantId]
+    );
+    return { cutoff: r.rows.length ? (r.rows[0] as any).tanggal : null };
   });
 
   // POST /accounting/saldo-awal/post — post saldo awal (set status to POSTED, prevent editing)
@@ -2726,6 +2758,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     }
 
     await checkPeriodLock(a.tenantId!, tahun);
+    await checkCutoffDate(a.tenantId!, tanggal);
     await ensurePeriod(a.tenantId!, tahun);
 
     const client = await pool.connect();
@@ -3061,6 +3094,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const labaKotor = totalPenjualan - totalHpp;
 
     await checkPeriodLock(a.tenantId!, tahun);
+    await checkCutoffDate(a.tenantId!, tanggal);
     await ensurePeriod(a.tenantId!, tahun);
 
     const client = await pool.connect();
