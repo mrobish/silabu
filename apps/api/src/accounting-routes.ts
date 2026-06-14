@@ -4,6 +4,7 @@ import { requireTenant, requireActiveTrial, type AuthPayload } from './guards.js
 import { seedDefaultCoa } from './coa-seed.js';
 import { validateJournalBalance, validateJournalLine } from './utils/journal-balance.js';
 import { parseYmdStrict, compareYmd, isValidYmd } from './utils/date-helpers.js';
+import { parseMoneyStrict, dbNumericToCents, MAX_AMOUNT } from './utils/money-helpers.js';
 import ExcelJS from 'exceljs';
 
 const tenantGuard = { onRequest: [requireTenant] };
@@ -1025,28 +1026,42 @@ export async function accountingRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Saldo awal sudah pernah disimpan. Gunakan reset untuk mengubah.', code: 'ALREADY_SETUP' });
     }
 
-    // Keep only rows with a non-zero value; validate cents-safe + single side
+    // Keep only rows with a non-zero value; validate with strict money parser
     const cleanLines: { akun_id: string; debit: number; kredit: number }[] = [];
     for (const l of lines) {
-      const debit = Math.round((parseFloat(l.debit || '0') || 0) * 100) / 100;
-      const kredit = Math.round((parseFloat(l.kredit || '0') || 0) * 100) / 100;
-      if (isNaN(debit) || isNaN(kredit)) return reply.status(400).send({ error: 'Debit/kredit harus angka' });
-      if (debit < 0 || kredit < 0) return reply.status(400).send({ error: 'Debit/kredit tidak boleh negatif' });
-      if (debit === 0 && kredit === 0) continue; // skip empty rows
-      if (debit > 0 && kredit > 0) return reply.status(400).send({ error: 'Setiap akun hanya boleh diisi salah satu: debit atau kredit' });
-      cleanLines.push({ akun_id: l.akun_id, debit, kredit });
+      if (!l.akun_id) return reply.status(400).send({ error: 'Setiap baris wajib memiliki akun_id' });
+
+      let debitCents: number;
+      let kreditCents: number;
+      try {
+        debitCents = parseMoneyStrict(l.debit ?? '0', 'Debit');
+        kreditCents = parseMoneyStrict(l.kredit ?? '0', 'Kredit');
+      } catch (e: any) {
+        return reply.status(400).send({ error: e.message });
+      }
+
+      if (debitCents === 0 && kreditCents === 0) continue; // skip empty rows
+      if (debitCents > 0 && kreditCents > 0) return reply.status(400).send({ error: 'Setiap akun hanya boleh diisi salah satu: debit atau kredit' });
+
+      cleanLines.push({ akun_id: l.akun_id, debit: debitCents / 100, kredit: kreditCents / 100 });
     }
 
     if (cleanLines.length === 0) {
       return reply.status(400).send({ error: 'Isi minimal satu akun dengan nilai debit atau kredit' });
     }
 
-    // Balance check (cents-safe)
+    // Balance check (exact integer cents)
     const totalDebitCents = cleanLines.reduce((s, l) => s + Math.round(l.debit * 100), 0);
     const totalKreditCents = cleanLines.reduce((s, l) => s + Math.round(l.kredit * 100), 0);
     if (totalDebitCents !== totalKreditCents) {
-      const selisih = (totalDebitCents - totalKreditCents) / 100;
-      return reply.status(400).send({ error: `Jurnal tidak balance. Selisih: ${selisih}`, code: 'NOT_BALANCED', selisih });
+      const selisihCents = totalDebitCents - totalKreditCents;
+      return reply.status(400).send({
+        error: `Jurnal tidak balance. Debit: Rp ${(totalDebitCents/100).toLocaleString('id-ID')}, Kredit: Rp ${(totalKreditCents/100).toLocaleString('id-ID')}, Selisih: Rp ${(selisihCents/100).toLocaleString('id-ID')}`,
+        code: 'NOT_BALANCED',
+        totalDebit: totalDebitCents / 100,
+        totalKredit: totalKreditCents / 100,
+        selisih: selisihCents / 100,
+      });
     }
 
     // Validate all akun: tenant-owned, active, postable, real account (Gol 1/2/3, level 4)
@@ -1233,7 +1248,7 @@ export async function accountingRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Belum ada saldo awal untuk diposting' });
     }
 
-    // Validate journal is balanced before posting
+    // Validate journal is balanced before posting (integer cents comparison)
     const balanceCheck = await pool.query(
       `SELECT COALESCE(SUM(debit),0) AS total_debit, COALESCE(SUM(kredit),0) AS total_kredit
        FROM journal_lines jl
@@ -1242,8 +1257,17 @@ export async function accountingRoutes(app: FastifyInstance) {
       [a.tenantId]
     );
     const { total_debit, total_kredit } = balanceCheck.rows[0];
-    if (parseFloat(total_debit) !== parseFloat(total_kredit)) {
-      return reply.status(400).send({ error: 'Jurnal tidak balance. Periksa kembali debit dan kredit.' });
+    const totalDebitCents = dbNumericToCents(total_debit);
+    const totalKreditCents = dbNumericToCents(total_kredit);
+    if (totalDebitCents !== totalKreditCents) {
+      const selisihCents = totalDebitCents - totalKreditCents;
+      return reply.status(400).send({
+        error: `Jurnal tidak balance. Debit: Rp ${(totalDebitCents/100).toLocaleString('id-ID')}, Kredit: Rp ${(totalKreditCents/100).toLocaleString('id-ID')}, Selisih: Rp ${(selisihCents/100).toLocaleString('id-ID')}`,
+        code: 'NOT_BALANCED',
+        totalDebit: totalDebitCents / 100,
+        totalKredit: totalKreditCents / 100,
+        selisih: selisihCents / 100,
+      });
     }
     
     // Post it (set status to POSTED, keep backward compat boolean in sync)

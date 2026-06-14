@@ -1170,10 +1170,12 @@ function SaldoAwalPage({ setPage }: { setPage: (p: Page) => void }) {
 
   const rows = buildRows();
   const cleanRows = Object.entries(rows).filter(([, v]) => (parseFloat(v.debit) || 0) > 0 || (parseFloat(v.kredit) || 0) > 0);
-  const totalDebit = cleanRows.reduce((s, [, v]) => s + (parseFloat(v.debit) || 0), 0);
-  const totalKredit = cleanRows.reduce((s, [, v]) => s + (parseFloat(v.kredit) || 0), 0);
-  const selisih = totalDebit - totalKredit;
-  const isBalanced = Math.abs(selisih) < 0.01 && cleanRows.length > 0;
+  const totalDebitCents = cleanRows.reduce((s, [, v]) => s + Math.round((parseFloat(v.debit) || 0) * 100), 0);
+  const totalKreditCents = cleanRows.reduce((s, [, v]) => s + Math.round((parseFloat(v.kredit) || 0) * 100), 0);
+  const selisih = (totalDebitCents - totalKreditCents) / 100;
+  const isBalanced = totalDebitCents === totalKreditCents && cleanRows.length > 0;
+  const totalDebit = totalDebitCents / 100;
+  const totalKredit = totalKreditCents / 100;
 
   const grouped: Record<string, typeof accounts> = {};
   for (const a of accounts) {
@@ -1227,20 +1229,19 @@ function SaldoAwalPage({ setPage }: { setPage: (p: Page) => void }) {
   async function handlePost() {
     setPosting(true);
     setError('');
+    setShowSuccess('');
     try {
-      const res = await fetch('/api/accounting/saldo-awal/post', {
+      const data = await apiFetch('/api/accounting/saldo-awal/post', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal memposting saldo awal');
-      setLockStatus({ status: 'POSTED', posted_at: new Date().toISOString(), posted_by_name: 'Anda' });
-      setShowSuccess('Saldo awal berhasil diposting dan dikunci!');
-      setShowPostConfirm(false);
+      setLockStatus({ status: 'POSTED', posted_at: new Date().toISOString(), posted_by_name: null });
+      setShowSuccess(data.message || 'Saldo awal berhasil diposting!');
     } catch (e: any) {
       setError(e.message);
     } finally {
       setPosting(false);
+      setShowPostConfirm(false);
     }
   }
 
