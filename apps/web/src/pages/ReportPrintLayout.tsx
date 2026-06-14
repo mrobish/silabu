@@ -84,10 +84,14 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
         y += 2;
       };
 
-      // === KOP SURAT ===
+      // === KOP SURAT — Level Instansi ===
       const namaBumdes = tenant?.nama_bumdes || 'BUM DESA';
+      const alamat = tenant
+        ? `${tenant.desa || ''}, Kec. ${tenant.kecamatan || ''}, ${tenant.kabupaten || ''}`
+        : '';
 
-      // Logo (if available)
+      // Logo di kiri
+      let logoEndX = margin;
       if (tenant?.logo_url) {
         try {
           const img = new Image();
@@ -105,28 +109,42 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
             ctx.drawImage(img, 0, 0);
             const imgData = canvas.toDataURL('image/png');
             const logoSize = 14; // mm
-            const logoX = (pageW - logoSize) / 2;
-            pdf.addImage(imgData, 'PNG', logoX, y, logoSize, logoSize);
-            y += logoSize + 2;
+            pdf.addImage(imgData, 'PNG', margin, y, logoSize, logoSize);
+            logoEndX = margin + logoSize + 4;
           }
         } catch {
-          // Logo failed to load — skip silently
+          // Logo failed — skip
         }
       }
 
-      addText(namaBumdes.toUpperCase(), 16, 'bold', 'center', [15, 23, 42]);
-      addGap(2);
-      const alamat = tenant
-        ? `${tenant.desa || ''}, Kec. ${tenant.kecamatan || ''}, ${tenant.kabupaten || ''}`
-        : '';
-      addText(alamat, 9, 'normal', 'center', [100, 116, 139]);
+      // Nama & alamat di kanan (atau full-width jika no logo)
+      const textStartX = logoEndX > margin ? logoEndX : margin;
+      const textW = pageW - margin - textStartX;
+      const addHeaderText = (text: string, fontSize: number, style: 'normal' | 'bold' = 'normal', color: [number, number, number] = [30, 41, 59]) => {
+        pdf.setFontSize(fontSize);
+        pdf.setFont('helvetica', style);
+        pdf.setTextColor(color[0], color[1], color[2]);
+        const centerX = textStartX + textW / 2;
+        pdf.text(text, centerX, y, { align: 'center', maxWidth: textW });
+        y += fontSize * 0.45;
+      };
+
+      addHeaderText(namaBumdes.toUpperCase(), 14, 'bold', [15, 23, 42]);
+      y += 1;
+      addHeaderText(alamat, 9, 'normal', [100, 116, 139]);
       if (tenant?.telpon) {
-        addText(`Telp. ${tenant.telpon}`, 8, 'normal', 'center', [148, 163, 184]);
+        addHeaderText(`Telp. ${tenant.telpon}`, 8, 'normal', [148, 163, 184]);
       }
-      addGap(4);
-      addLine(0.8);
-      addLine(1.2);
-      addGap(4);
+      y += 3;
+
+      // Garis batas ganda — standar kop surat dinas
+      pdf.setDrawColor(30, 41, 59);
+      pdf.setLineWidth(1.2);
+      pdf.line(margin, y, pageW - margin, y);
+      y += 1.5;
+      pdf.setLineWidth(0.4);
+      pdf.line(margin, y, pageW - margin, y);
+      y += 4;
 
       // === JUDUL ===
       addText(title.toUpperCase(), 12, 'bold', 'center', [15, 23, 42]);
@@ -392,22 +410,26 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
               fontFamily: "'Segoe UI', 'Arial', sans-serif",
               maxWidth: landscape ? '277mm' : '190mm',
             }}>
-              {/* KOP SURAT */}
-              <div className="text-center mb-3">
-                <div className="flex justify-center mb-1.5">
+              {/* KOP SURAT — Level Instansi */}
+              <div className="flex items-center gap-4 mb-3">
+                {/* Logo di kiri */}
+                <div className="shrink-0">
                   {tenant?.logo_url
-                    ? <img src={tenant.logo_url} alt="Logo" className="w-14 h-14 object-contain" />
-                    : <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 text-lg font-bold">
+                    ? <img src={tenant.logo_url} alt="Logo" className="w-16 h-16 object-contain print:w-16 print:h-16" />
+                    : <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 text-xl font-bold">
                         {tenant?.nama_bumdes?.[0] || 'B'}
                       </div>
                   }
                 </div>
-                <h1 className="text-[16px] font-bold text-slate-900 uppercase tracking-wide leading-tight">{tenant?.nama_bumdes || 'BUM DESA'}</h1>
-                <p className="text-[11px] text-slate-600 mt-0.5">{alamat}</p>
-                {tenant?.telpon && <p className="text-[10px] text-slate-400">Telp. {tenant.telpon}</p>}
+                {/* Nama & alamat di kanan */}
+                <div className="flex-1 text-center">
+                  <h1 className="text-xl font-bold text-slate-900 uppercase tracking-wide leading-tight">{tenant?.nama_bumdes || 'BUM DESA'}</h1>
+                  <p className="text-[11px] text-slate-600 mt-1">{alamat}</p>
+                  {tenant?.telpon && <p className="text-[10px] text-slate-400 mt-0.5">Telp. {tenant.telpon}</p>}
+                </div>
               </div>
-              <div className="border-b-2 border-slate-900 mb-2" />
-              <div className="border-b-[3px] border-slate-900 mb-3" />
+              {/* Garis batas ganda — standar kop surat dinas */}
+              <div className="border-b-4 border-double border-gray-800 mb-1 print:border-b-4 print:border-double print:border-gray-800" />
 
               {/* JUDUL + PERIODE */}
               <h2 className="text-center font-bold text-slate-900 text-[13px] uppercase mb-0.5">{title}</h2>

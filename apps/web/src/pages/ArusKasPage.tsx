@@ -207,61 +207,61 @@ export default function ArusKasPage() {
             <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">A. Arus Kas dari Aktivitas Operasi</td></tr>
             {data.aktivitasOperasi.detail.filter(d => d.net !== 0).map(d => (
               <tr key={d.kode} className="print-row">
-                <td className="text-slate-700 pl-3"><span className="text-slate-400">{d.kode}</span> {d.nama}</td>
-                <td className={`text-right tabular-nums ${d.net < 0 ? 'text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</td>
+                <td className="text-slate-700 pl-6"><span className="text-slate-400">{d.kode}</span> {d.nama}</td>
+                <td className={`text-right tabular-nums ${d.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</td>
               </tr>
             ))}
-            <tr className="font-bold border-t border-slate-400">
+            <tr className="font-bold border-t border-gray-800">
               <td className="py-0.5">Arus Kas Bersih dari Aktivitas Operasi</td>
-              <td className={`text-right tabular-nums ${data.aktivitasOperasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasOperasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasOperasi.net)) + ')' : rupiah(data.aktivitasOperasi.net)}</td>
+              <td className={`text-right tabular-nums ${data.aktivitasOperasi.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{data.aktivitasOperasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasOperasi.net)) + ')' : rupiah(data.aktivitasOperasi.net)}</td>
             </tr>
 
             {/* B. Investasi */}
             <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">B. Arus Kas dari Aktivitas Investasi</td></tr>
             {data.aktivitasInvestasi.detail.filter(d => d.net !== 0).map(d => (
               <tr key={d.kode} className="print-row">
-                <td className="text-slate-700 pl-3"><span className="text-slate-400">{d.kode}</span> {d.nama}</td>
-                <td className={`text-right tabular-nums ${d.net < 0 ? 'text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</td>
+                <td className="text-slate-700 pl-6"><span className="text-slate-400">{d.kode}</span> {d.nama}</td>
+                <td className={`text-right tabular-nums ${d.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</td>
               </tr>
             ))}
-            <tr className="font-bold border-t border-slate-400">
+            <tr className="font-bold border-t border-gray-800">
               <td className="py-0.5">Arus Kas Bersih dari Aktivitas Investasi</td>
-              <td className={`text-right tabular-nums ${data.aktivitasInvestasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasInvestasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasInvestasi.net)) + ')' : rupiah(data.aktivitasInvestasi.net)}</td>
+              <td className={`text-right tabular-nums ${data.aktivitasInvestasi.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{data.aktivitasInvestasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasInvestasi.net)) + ')' : rupiah(data.aktivitasInvestasi.net)}</td>
             </tr>
 
             {/* C. Pendanaan */}
             <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">C. Arus Kas dari Aktivitas Pendanaan</td></tr>
             {data.aktivitasPendanaan.detail.filter(d => d.net !== 0).map(d => (
               <tr key={d.kode} className="print-row">
-                <td className="text-slate-700 pl-3"><span className="text-slate-400">{d.kode}</span> {d.nama}</td>
-                <td className={`text-right tabular-nums ${d.net < 0 ? 'text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</td>
+                <td className="text-slate-700 pl-6"><span className="text-slate-400">{d.kode}</span> {d.nama}</td>
+                <td className={`text-right tabular-nums ${d.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</td>
               </tr>
             ))}
-            <tr className="font-bold border-t border-slate-400">
+            <tr className="font-bold border-t border-gray-800">
               <td className="py-0.5">Arus Kas Bersih dari Aktivitas Pendanaan</td>
-              <td className={`text-right tabular-nums ${data.aktivitasPendanaan.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasPendanaan.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasPendanaan.net)) + ')' : rupiah(data.aktivitasPendanaan.net)}</td>
+              <td className={`text-right tabular-nums ${data.aktivitasPendanaan.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{data.aktivitasPendanaan.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasPendanaan.net)) + ')' : rupiah(data.aktivitasPendanaan.net)}</td>
             </tr>
 
             {/* Summary */}
-            <tr className="font-bold border-t-2 border-slate-800 mt-2">
+            <tr className="font-bold border-t-2 border-gray-800 mt-2">
               <td className="py-0.5">Kas Awal Periode</td>
               <td className="text-right tabular-nums">{rupiah(data.kasTahunLalu)}</td>
             </tr>
             <tr>
               <td className="pl-3 py-0.5">Arus Kas Operasi</td>
-              <td className={`text-right tabular-nums ${data.aktivitasOperasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasOperasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasOperasi.net)) + ')' : '+' + rupiah(data.aktivitasOperasi.net)}</td>
+              <td className={`text-right tabular-nums ${data.aktivitasOperasi.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{data.aktivitasOperasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasOperasi.net)) + ')' : '+' + rupiah(data.aktivitasOperasi.net)}</td>
             </tr>
             <tr>
               <td className="pl-3 py-0.5">Arus Kas Investasi</td>
-              <td className={`text-right tabular-nums ${data.aktivitasInvestasi.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasInvestasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasInvestasi.net)) + ')' : '+' + rupiah(data.aktivitasInvestasi.net)}</td>
+              <td className={`text-right tabular-nums ${data.aktivitasInvestasi.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{data.aktivitasInvestasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasInvestasi.net)) + ')' : '+' + rupiah(data.aktivitasInvestasi.net)}</td>
             </tr>
             <tr>
               <td className="pl-3 py-0.5">Arus Kas Pendanaan</td>
-              <td className={`text-right tabular-nums ${data.aktivitasPendanaan.net < 0 ? 'text-red-600' : ''}`}>{data.aktivitasPendanaan.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasPendanaan.net)) + ')' : '+' + rupiah(data.aktivitasPendanaan.net)}</td>
+              <td className={`text-right tabular-nums ${data.aktivitasPendanaan.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{data.aktivitasPendanaan.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasPendanaan.net)) + ')' : '+' + rupiah(data.aktivitasPendanaan.net)}</td>
             </tr>
-            <tr className="font-bold border-t-2 border-slate-800">
+            <tr className="font-extrabold border-t border-gray-800 border-b-4 border-double border-gray-900 bg-gray-100 print:bg-gray-100">
               <td className="py-1 text-[12px]">KAS AKHIR PERIODE</td>
-              <td className="text-right tabular-nums text-[12px]">{rupiah(data.kasBerjalan)}</td>
+              <td className={`text-right tabular-nums text-[12px] ${data.kasBerjalan < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{data.kasBerjalan < 0 ? '(' + rupiah(Math.abs(data.kasBerjalan)) + ')' : rupiah(data.kasBerjalan)}</td>
             </tr>
           </tbody>
         </table>}

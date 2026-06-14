@@ -288,11 +288,11 @@ export default function NeracaPage() {
                 <tbody>
                   {data.aktiva.asetLancar.detail.filter(a => a.saldo !== 0).map(a => (
                     <tr key={a.kode} className="print-row">
-                      <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                      <td className="text-slate-700 pl-6"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
                       <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
                     </tr>
                   ))}
-                  <tr className="font-bold border-t border-slate-400">
+                  <tr className="font-bold border-t border-gray-800">
                     <td className="pt-0.5">Subtotal Aset Lancar</td>
                     <td className="text-right tabular-nums pt-0.5">{fmt(data.aktiva.asetLancar.subtotal)}</td>
                   </tr>
@@ -305,7 +305,7 @@ export default function NeracaPage() {
                 <tbody>
                   {data.aktiva.asetTetap.bruto.akun.filter(a => a.saldo !== 0).map(a => (
                     <tr key={a.kode} className="print-row">
-                      <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                      <td className="text-slate-700 pl-6"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
                       <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
                     </tr>
                   ))}
@@ -315,11 +315,11 @@ export default function NeracaPage() {
                   </tr>
                   {data.aktiva.asetTetap.akumulasi.akun.filter(a => a.saldo !== 0).map(a => (
                     <tr key={a.kode} className="print-row">
-                      <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
-                      <td className="text-right tabular-nums text-red-600">({fmt(Math.abs(a.saldo))})</td>
+                      <td className="text-slate-700 pl-6"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                      <td className="text-right tabular-nums text-red-600 print:text-red-600">({fmt(Math.abs(a.saldo))})</td>
                     </tr>
                   ))}
-                  <tr className="font-bold border-t border-slate-400">
+                  <tr className="font-bold border-t border-gray-800">
                     <td>Nilai Buku Aset Tetap</td>
                     <td className="text-right tabular-nums">{fmt(data.aktiva.asetTetap.nilaiBuku)}</td>
                   </tr>
@@ -332,11 +332,11 @@ export default function NeracaPage() {
                 <tbody>
                   {data.aktiva.asetLainnya.detail.filter(a => a.saldo !== 0).map(a => (
                     <tr key={a.kode} className="print-row">
-                      <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                      <td className="text-slate-700 pl-6"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
                       <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
                     </tr>
                   ))}
-                  <tr className="font-bold border-t border-slate-400">
+                  <tr className="font-bold border-t border-gray-800">
                     <td>Subtotal Aset Lainnya</td>
                     <td className="text-right tabular-nums">{fmt(data.aktiva.asetLainnya.subtotal)}</td>
                   </tr>
@@ -346,9 +346,9 @@ export default function NeracaPage() {
               {/* Total Aktiva */}
               <table className="w-full text-[11px]">
                 <tbody>
-                  <tr className="font-bold border-t-2 border-slate-800">
-                    <td className="pt-2">TOTAL AKTIVA</td>
-                    <td className="text-right tabular-nums pt-2">{fmt(data.aktiva.totalAset)}</td>
+                  <tr className="font-extrabold bg-gray-100 print:bg-gray-100 border-t-2 border-gray-800 border-b-4 border-double border-gray-900">
+                    <td className="pt-2 pb-1">TOTAL AKTIVA</td>
+                    <td className="text-right tabular-nums pt-2 pb-1">{fmt(data.aktiva.totalAset)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -364,11 +364,11 @@ export default function NeracaPage() {
                 <tbody>
                   {data.passiva.kewajiban.jangkaPendek.detail.filter(a => a.saldo !== 0).map(a => (
                     <tr key={a.kode} className="print-row">
-                      <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                      <td className="text-slate-700 pl-6"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
                       <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
                     </tr>
                   ))}
-                  <tr className="font-bold border-t border-slate-400">
+                  <tr className="font-bold border-t border-gray-800">
                     <td>Subtotal Kewajiban Pendek</td>
                     <td className="text-right tabular-nums">{fmt(data.passiva.kewajiban.jangkaPendek.subtotal)}</td>
                   </tr>
@@ -381,11 +381,11 @@ export default function NeracaPage() {
                 <tbody>
                   {data.passiva.kewajiban.jangkaPanjang.detail.filter(a => a.saldo !== 0).map(a => (
                     <tr key={a.kode} className="print-row">
-                      <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                      <td className="text-slate-700 pl-6"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
                       <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
                     </tr>
                   ))}
-                  <tr className="font-bold border-t border-slate-400">
+                  <tr className="font-bold border-t border-gray-800">
                     <td>Subtotal Kewajiban Panjang</td>
                     <td className="text-right tabular-nums">{fmt(data.passiva.kewajiban.jangkaPanjang.subtotal)}</td>
                   </tr>
@@ -398,7 +398,7 @@ export default function NeracaPage() {
                 <tbody>
                   {data.passiva.ekuitas.detail.filter(a => a.saldo !== 0).map(a => (
                     <tr key={a.kode} className="print-row">
-                      <td className="text-slate-700 pl-3"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+                      <td className="text-slate-700 pl-6"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
                       <td className="text-right tabular-nums">{fmt(a.saldo)}</td>
                     </tr>
                   ))}
@@ -406,7 +406,7 @@ export default function NeracaPage() {
                     <td className="font-semibold px-1">Laba Tahun Berjalan</td>
                     <td className="text-right tabular-nums font-semibold px-1">{fmt(data.passiva.ekuitas.labaBerjalan)}</td>
                   </tr>
-                  <tr className="font-bold border-t border-slate-400">
+                  <tr className="font-bold border-t border-gray-800">
                     <td>Total Ekuitas</td>
                     <td className="text-right tabular-nums">{fmt(data.passiva.ekuitas.subtotal)}</td>
                   </tr>
@@ -416,9 +416,9 @@ export default function NeracaPage() {
               {/* Total Passiva */}
               <table className="w-full text-[11px]">
                 <tbody>
-                  <tr className="font-bold border-t-2 border-slate-800">
-                    <td className="pt-2">TOTAL PASSIVA</td>
-                    <td className="text-right tabular-nums pt-2">{fmt(data.passiva.totalPassiva)}</td>
+                  <tr className="font-extrabold bg-gray-100 print:bg-gray-100 border-t-2 border-gray-800 border-b-4 border-double border-gray-900">
+                    <td className="pt-2 pb-1">TOTAL PASSIVA</td>
+                    <td className="text-right tabular-nums pt-2 pb-1">{fmt(data.passiva.totalPassiva)}</td>
                   </tr>
                 </tbody>
               </table>
