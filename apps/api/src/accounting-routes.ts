@@ -1788,6 +1788,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_lines jl
          JOIN journal_entries je ON je.id = jl.entry_id AND je.tenant_id = $1
               AND je.isposted = true
+              AND COALESCE(je.tipetransaksi, '') <> 'CLOSING'
        ) m ON m.akun_id = c.id
        WHERE c.tenant_id = $1 AND c.ispostable = true AND c.kode LIKE '1.1.01%'`,
       [tenantId]
@@ -1797,7 +1798,8 @@ export async function accountingRoutes(app: FastifyInstance) {
     // 3. Jumlah transaksi bulan ini
     const txCount = await pool.query(
       `SELECT COUNT(*)::int AS count FROM journal_entries
-       WHERE tenant_id=$1 AND isposted = true AND tipetransaksi <> 'OPENING_BALANCE'
+       WHERE tenant_id=$1 AND isposted = true
+         AND COALESCE(tipetransaksi, '') NOT IN ('OPENING_BALANCE', 'CLOSING')
          AND tanggal >= $2 AND tanggal <= $3`,
       [tenantId, `${currentYear}-${String(now.getMonth()+1).padStart(2,'0')}-01`, today]
     );
