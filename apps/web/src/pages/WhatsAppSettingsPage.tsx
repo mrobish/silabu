@@ -70,7 +70,29 @@ export default function WhatsAppSettingsPage() {
     } catch {}
   }, []);
 
-  useEffect(() => { fetchStatus(); fetchTemplates(); }, [fetchStatus, fetchTemplates]);
+  // ── Fetch OTP status ──
+  const [otpEnabled, setOtpEnabled] = useState(false);
+  const fetchOtpStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/admin/otp/status`, { headers });
+      const data = await res.json();
+      setOtpEnabled(data.enabled);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchStatus(); fetchTemplates(); fetchOtpStatus(); }, [fetchStatus, fetchTemplates, fetchOtpStatus]);
+
+  async function handleToggleOtp() {
+    const newVal = !otpEnabled;
+    try {
+      const res = await fetch(`${API}/admin/otp/toggle`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ enabled: newVal }),
+      });
+      const data = await res.json();
+      if (data.ok) setOtpEnabled(newVal);
+    } catch {}
+  }
 
   // Auto-refresh QR
   useEffect(() => {
@@ -197,6 +219,31 @@ export default function WhatsAppSettingsPage() {
           <p className="text-xs text-emerald-700">Sistem OTP siap mengirim kode verifikasi via WhatsApp.</p>
         </div>
       )}
+
+      {/* OTP Toggle */}
+      <div className={`rounded-2xl border p-6 ${otpEnabled ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+              🔐 Verifikasi OTP Saat Login
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              {otpEnabled
+                ? 'User wajib masukkan kode OTP setelah login (WhatsApp + Email)'
+                : 'OTP dimatikan — user langsung masuk setelah login'}
+            </p>
+          </div>
+          <button onClick={handleToggleOtp}
+            className={`relative w-14 h-7 rounded-full transition-colors duration-200 ${otpEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+            <div className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200 ${otpEnabled ? 'translate-x-7' : 'translate-x-0.5'}`} />
+          </button>
+        </div>
+        {!otpEnabled && (
+          <p className="text-[11px] text-amber-600 mt-2 font-semibold">
+            ⚠️ OTP dimatikan — login tidak memerlukan verifikasi kedua
+          </p>
+        )}
+      </div>
 
       {/* Test Send */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6">

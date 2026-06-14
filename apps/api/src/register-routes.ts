@@ -219,22 +219,39 @@ export async function registerRoutes(app: FastifyInstance) {
       [user.id]
     );
 
-    // ── OTP: Generate + send, don't give JWT yet ──
-    const otp = crypto.randomInt(100000, 999999).toString();
-    const hashed = crypto.createHash('sha256').update(otp).digest('hex');
-    await pool.query('DELETE FROM verification_tokens WHERE user_id=$1 AND purpose=\'login_otp\' AND consumed_at IS NULL', [user.id]);
-    await pool.query(
-      `INSERT INTO verification_tokens (user_id, email, purpose, token_hash, expires_at) VALUES ($1, $2, 'login_otp', $3, now() + interval '5 minutes')`,
-      [user.id, emailLower, hashed]
-    );
-    // Temp token for OTP verification
-    const tempToken = jwt.sign({ userId: user.id, email: user.email, purpose: 'otp_login' }, JWT_SECRET, { expiresIn: '5m' });
-    // Send OTP (fire-and-forget)
-    const { sendOTPChannels } = await import('./otp-routes.js').catch(() => ({ sendOTPChannels: null }));
-    if (sendOTPChannels) {
-      sendOTPChannels(user, otp, pool).catch(() => {});
+    // ── OTP: Check if enabled ──
+    let otpEnabled = false;
+    try {
+      const otpSetting = await pool.query("SELECT value FROM system_settings WHERE key='otp_enabled'");
+      otpEnabled = otpSetting.rowCount ? otpSetting.rows[0].value === true || otpSetting.rows[0].value === 'true' : false;
+    } catch {}
+
+    if (otpEnabled) {
+      // OTP flow: Generate + send, don't give JWT yet
+      const otp = crypto.randomInt(100000, 999999).toString();
+      const hashed = crypto.createHash('sha256').update(otp).digest('hex');
+      await pool.query('DELETE FROM verification_tokens WHERE user_id=$1 AND purpose=\'login_otp\' AND consumed_at IS NULL', [user.id]);
+      await pool.query(
+        `INSERT INTO verification_tokens (user_id, email, purpose, token_hash, expires_at) VALUES ($1, $2, 'login_otp', $3, now() + interval '5 minutes')`,
+        [user.id, emailLower, hashed]
+      );
+      const tempToken = jwt.sign({ userId: user.id, email: user.email, purpose: 'otp_login' }, JWT_SECRET, { expiresIn: '5m' });
+      const { sendOTPChannels } = await import('./otp-routes.js').catch(() => ({ sendOTPChannels: null }));
+      if (sendOTPChannels) {
+        sendOTPChannels(user, otp, pool).catch(() => {});
+      }
+      return { requires_otp: true, tempToken, message: 'OTP dikirim' };
     }
-    return { requires_otp: true, tempToken, message: 'OTP dikirim' };
+
+    // OTP disabled → issue JWT directly
+    const accessToken = jwt.sign(
+      { userId: user.id, email: user.email, role: user.role, tenantId: user.tenant_id },
+      JWT_SECRET, { expiresIn: '7d' }
+    );
+    return {
+      accessToken,
+      user: { id: user.id, email: user.email, nama_lengkap: user.nama_lengkap, role: user.role, tenantId: user.tenant_id },
+    };
   });
 
   // ========== ME ==========
@@ -329,20 +346,35 @@ export async function registerRoutes(app: FastifyInstance) {
           user = userRes.rows[0];
         }
         await client.query('COMMIT');
-        // CASE 1: Existing fully registered user (has tenant + verified) → OTP verification
+        // CASE 1: Existing fully registered user (has tenant + verified)
         if (user.tenant_id && user.email_verified_at) {
-          const otp = crypto.randomInt(100000, 999999).toString();
-          const hashed = crypto.createHash('sha256').update(otp).digest('hex');
-          await client.query('DELETE FROM verification_tokens WHERE user_id=$1 AND purpose=\'login_otp\' AND consumed_at IS NULL', [user.id]);
-          await client.query(
-            `INSERT INTO verification_tokens (user_id, email, purpose, token_hash, expires_at) VALUES ($1, $2, 'login_otp', $3, now() + interval '5 minutes')`,
-            [user.id, email, hashed]
+          // Check OTP toggle
+          let otpEnabled = false;
+          try {
+            const otpSetting = await client.query("SELECT value FROM system_settings WHERE key='otp_enabled'");
+            otpEnabled = otpSetting.rowCount ? otpSetting.rows[0].value === true || otpSetting.rows[0].value === 'true' : false;
+          } catch {}
+
+          if (otpEnabled) {
+            const otp = crypto.randomInt(100000, 999999).toString();
+            const hashed = crypto.createHash('sha256').update(otp).digest('hex');
+            await client.query('DELETE FROM verification_tokens WHERE user_id=$1 AND purpose=\'login_otp\' AND consumed_at IS NULL', [user.id]);
+            await client.query(
+              `INSERT INTO verification_tokens (user_id, email, purpose, token_hash, expires_at) VALUES ($1, $2, 'login_otp', $3, now() + interval '5 minutes')`,
+              [user.id, email, hashed]
+            );
+            const tempToken = jwt.sign({ userId: user.id, email: user.email, purpose: 'otp_login' }, JWT_SECRET, { expiresIn: '5m' });
+            const { sendOTPChannels: sendOTP } = await import('./otp-routes.js').catch(() => ({ sendOTPChannels: null }));
+            if (sendOTP) sendOTP(user, otp, pool).catch(() => {});
+            return reply.redirect(`${APP_URL}/verify-otp?token=${tempToken}&flow=google`);
+          }
+
+          // OTP disabled → issue JWT directly
+          const accessToken = jwt.sign(
+            { userId: user.id, email: user.email, role: user.role, tenantId: user.tenant_id },
+            JWT_SECRET, { expiresIn: '7d' }
           );
-          const tempToken = jwt.sign({ userId: user.id, email: user.email, purpose: 'otp_login' }, JWT_SECRET, { expiresIn: '5m' });
-          // Send OTP (fire-and-forget)
-          const { sendOTPChannels: sendOTP } = await import('./otp-routes.js').catch(() => ({ sendOTPChannels: null }));
-          if (sendOTP) sendOTP(user, otp, pool).catch(() => {});
-          return reply.redirect(`${APP_URL}/verify-otp?token=${tempToken}&flow=google`);
+          return reply.redirect(`${APP_URL}/login/callback?token=${accessToken}&user=${encodeURIComponent(JSON.stringify({ id: user.id, email: user.email, nama_lengkap: user.nama_lengkap, role: user.role, tenantId: user.tenant_id }))}`);
         }
         // CASE 2: New or incomplete user → send OTP, go through verification
         const otp = await storeOTP(user.id, email);

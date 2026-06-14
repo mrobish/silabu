@@ -383,4 +383,26 @@ export async function otpRoutes(app: FastifyInstance) {
     );
     return { ok: true, templates: DEFAULT_TEMPLATES };
   });
+
+  // ── Super Admin: Get OTP enabled status ──
+  app.get('/admin/otp/status', async () => {
+    try {
+      const r = await pool.query("SELECT value FROM system_settings WHERE key='otp_enabled'");
+      const enabled = r.rowCount ? r.rows[0].value === true || r.rows[0].value === 'true' : false;
+      return { enabled };
+    } catch {
+      return { enabled: false };
+    }
+  });
+
+  // ── Super Admin: Toggle OTP on/off ──
+  app.post('/admin/otp/toggle', async (req: FastifyRequest) => {
+    const { enabled } = req.body as any;
+    await pool.query(
+      `INSERT INTO system_settings (key, value, updated_at) VALUES ('otp_enabled', $1, now())
+       ON CONFLICT (key) DO UPDATE SET value=$1, updated_at=now()`,
+      [JSON.stringify(!!enabled)]
+    );
+    return { ok: true, enabled: !!enabled };
+  });
 }
