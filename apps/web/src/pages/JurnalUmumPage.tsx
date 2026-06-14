@@ -1651,7 +1651,17 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
                           {isOpening ? (
                             <span className="block text-center text-xs text-slate-400 italic" title="Saldo Awal hanya bisa diubah dari modul Saldo Awal">Saldo Awal</span>
                           ) : locked ? (
-                            <span className="flex items-center justify-center gap-1 text-xs text-slate-400" title="Periode terkunci — tidak dapat diedit atau dihapus">🔒 Periode terkunci</span>
+                            <div className="flex items-center justify-center gap-2">
+                              <button type="button" disabled
+                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 text-slate-300 cursor-not-allowed" title="Periode terkunci — tidak dapat diedit">
+                                <Icon d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" className="w-4 h-4" />
+                              </button>
+                              <button type="button" disabled
+                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 text-slate-300 cursor-not-allowed" title="Periode terkunci — tidak dapat dihapus">
+                                <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" className="w-4 h-4" />
+                              </button>
+                              <span className="text-[10px] text-slate-400" title="Periode terkunci — tidak dapat diedit atau dihapus">🔒</span>
+                            </div>
                           ) : (
                             <div className="flex items-center justify-center gap-2">
                               <button type="button" onClick={() => startEdit(e.id)}
