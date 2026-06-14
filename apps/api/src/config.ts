@@ -18,5 +18,23 @@ if (_jwtSecret.length < 32) {
 
 export const JWT_SECRET: string = _jwtSecret;
 
-// ENCRYPTION_KEY: separate env, falls back to JWT_SECRET only if explicitly intended
-export const ENCRYPTION_KEY: string = process.env.ENCRYPTION_KEY || _jwtSecret;
+// ENCRYPTION_KEY: MUST be separate from JWT_SECRET (different purpose, different rotation policy)
+// WARNING: Jangan rotate ENCRYPTION_KEY jika sudah ada data terenkripsi di database,
+//          karena data lama tidak akan bisa dibaca!
+const _encryptionKey = process.env.ENCRYPTION_KEY;
+if (!_encryptionKey) {
+  throw new Error(
+    '[CONFIG] ENCRYPTION_KEY environment variable wajib diisi! ' +
+    'Set di .env atau server environment. HARUS BERBEDA dari JWT_SECRET.'
+  );
+}
+if (_encryptionKey.length < 32) {
+  throw new Error(
+    `[CONFIG] ENCRYPTION_KEY terlalu pendek (${_encryptionKey.length} chars). Minimal 32 karakter, disarankan 64.`
+  );
+}
+if (_encryptionKey === _jwtSecret) {
+  console.warn('[CONFIG] ⚠️ ENCRYPTION_KEY sama dengan JWT_SECRET! Gunakan secret yang BERBEDA untuk keamanan.');
+}
+
+export const ENCRYPTION_KEY: string = _encryptionKey;

@@ -21,11 +21,16 @@ import VerifyOtpPage from './pages/VerifyOtpPage';
 
 // ── Global 401 interceptor ──────────────────────────────────
 // Wraps native fetch to auto-logout on 401 (token invalid/expired).
-// This covers ALL fetch calls, not just those using apiFetch().
+// ONLY intercepts API requests (URL contains '/api/'), not all fetch calls.
 const originalFetch = window.fetch;
 window.fetch = async (...args: Parameters<typeof fetch>): Promise<Response> => {
   const res = await originalFetch(...args);
-  if (res.status === 401) {
+  
+  // Only handle 401 for API requests
+  const url = typeof args[0] === 'string' ? args[0] : args[0] instanceof URL ? args[0].href : args[0]?.url || '';
+  const isApiRequest = url.includes('/api/');
+  
+  if (res.status === 401 && isApiRequest) {
     // Only redirect if we're not already on a login/register page
     const path = window.location.pathname;
     const isPublicPage = path === '/' || path.startsWith('/login') || path.startsWith('/register') || path.startsWith('/forgot') || path.startsWith('/reset') || path.startsWith('/verify-otp');

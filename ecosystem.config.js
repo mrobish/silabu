@@ -11,7 +11,7 @@ module.exports = {
       max_memory_restart: '1G',
       env: {
         NODE_ENV: 'production',
-        ENCRYPTION_KEY: 'silabu-dev-secret-change-in-prod',
+        ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
         PORT: 3010,
         DATABASE_URL: 'postgresql://silabu:@localhost:5432/silabu',
         JWT_SECRET: process.env.JWT_SECRET,
