@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 type TenantProfile = {
   nama_bumdes: string;
@@ -32,6 +34,67 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
   const [namaBendahara, setNamaBendahara] = useState('');
   const [namaDirektur, setNamaDirektur] = useState('');
   const printRef = useRef<HTMLDivElement>(null);
+  const printAreaRef = useRef<HTMLDivElement>(null);
+  const [generating, setGenerating] = useState(false);
+
+  const handleGeneratePdf = async () => {
+    if (!printAreaRef.current) return;
+    setGenerating(true);
+    try {
+      const el = printAreaRef.current;
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const isLandscape = landscape;
+      const pdf = new jsPDF({
+        orientation: isLandscape ? 'landscape' : 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+      const pageW = isLandscape ? 297 : 210;
+      const pageH = isLandscape ? 210 : 297;
+      const margin = 10;
+      const contentW = pageW - margin * 2;
+      const imgH = (canvas.height * contentW) / canvas.width;
+
+      // If content fits on one page
+      if (imgH <= pageH - margin * 2) {
+        pdf.addImage(imgData, 'PNG', margin, margin, contentW, imgH);
+      } else {
+        // Multi-page: slice canvas
+        const pageContentH = pageH - margin * 2;
+        const pxPerMm = canvas.width / contentW;
+        const slicePxH = Math.floor(pageContentH * pxPerMm);
+        let y = 0;
+        let page = 0;
+        while (y < canvas.height) {
+          if (page > 0) pdf.addPage();
+          const sliceCanvas = document.createElement('canvas');
+          sliceCanvas.width = canvas.width;
+          sliceCanvas.height = Math.min(slicePxH, canvas.height - y);
+          const ctx = sliceCanvas.getContext('2d')!;
+          ctx.drawImage(canvas, 0, y, canvas.width, sliceCanvas.height, 0, 0, canvas.width, sliceCanvas.height);
+          const sliceData = sliceCanvas.toDataURL('image/png');
+          const sliceH = (sliceCanvas.height * contentW) / canvas.width;
+          pdf.addImage(sliceData, 'PNG', margin, margin, contentW, sliceH);
+          y += slicePxH;
+          page++;
+        }
+      }
+      const fileName = `${title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      pdf.save(fileName);
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+      // Fallback to window.print()
+      window.print();
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -105,9 +168,9 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
           <div className="no-print flex items-center justify-between gap-2 px-4 sm:px-6 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
             <h3 className="text-sm font-semibold text-slate-700 truncate">Cetak {title}</h3>
             <div className="flex gap-2 shrink-0">
-              <button onClick={() => window.print()}
-                className="rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-4 py-2 text-sm font-bold text-white shadow-md hover:shadow-lg transition-all whitespace-nowrap">
-                🖨 Cetak / PDF
+              <button onClick={handleGeneratePdf} disabled={generating}
+                className="rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-4 py-2 text-sm font-bold text-white shadow-md hover:shadow-lg transition-all whitespace-nowrap disabled:opacity-50">
+                {generating ? '⏳ Generating...' : '📄 Cetak / PDF'}
               </button>
               <button onClick={onClose}
                 className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-all whitespace-nowrap">
@@ -118,7 +181,7 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
 
           {/* Scrollable preview */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6" style={{ background: '#fff' }}>
-            <div className="print-area mx-auto" style={{
+            <div ref={printAreaRef} className="print-area mx-auto" style={{
               fontFamily: "'Segoe UI', 'Arial', sans-serif",
               maxWidth: landscape ? '277mm' : '190mm',
             }}>
@@ -149,28 +212,45 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
 
               {/* FOOTER — Tanda Tangan */}
               <div className="mt-8 mb-4">
-                <div className="flex justify-between" style={{ maxWidth: '90%', margin: '0 auto' }}>
-                  {/* Direktur — kiri */}
-                  <div className="text-center" style={{ width: '42%' }}>
-                    <p className="text-[11px] text-slate-600">Mengetahui,</p>
-                    <p className="text-[11px] font-bold text-slate-800 mt-0.5">DIREKTUR</p>
-                    <p className="text-[11px] text-slate-700 mb-1">{tenant?.nama_bumdes || 'BUM Desa'}</p>
-                    <div style={{ height: '56px' }} />
-                    <input type="text" className="print-input"
-                      value={namaDirektur} onChange={e => setNamaDirektur(e.target.value)} />
-                  </div>
-
-                  {/* Bendahara — kanan, titimangsa di atas */}
-                  <div className="text-center" style={{ width: '42%' }}>
-                    <input type="text" className="print-input-date"
-                      value={tglCetak} onChange={e => setTglCetak(e.target.value)} />
-                    <p className="text-[11px] font-bold text-slate-800 mt-1">BENDAHARA</p>
-                    <p className="text-[11px] text-slate-700 mb-1">{tenant?.nama_bumdes || 'BUM Desa'}</p>
-                    <div style={{ height: '56px' }} />
-                    <input type="text" className="print-input"
-                      value={namaBendahara} onChange={e => setNamaBendahara(e.target.value)} />
-                  </div>
-                </div>
+                <table style={{ width: '90%', margin: '0 auto' }}>
+                  <tbody>
+                    {/* Baris 1: Label kiri & tanggal kanan — sejajar */}
+                    <tr>
+                      <td className="text-center" style={{ width: '42%', verticalAlign: 'top' }}>
+                        <p className="text-[11px] text-slate-600">Mengetahui,</p>
+                      </td>
+                      <td style={{ width: '16%' }}></td>
+                      <td className="text-center" style={{ width: '42%', verticalAlign: 'top' }}>
+                        <input type="text" className="print-input-date"
+                          value={tglCetak} onChange={e => setTglCetak(e.target.value)} />
+                      </td>
+                    </tr>
+                    {/* Baris 2: Jabatan — DIREKTUR & BENDAHARA sejajar */}
+                    <tr>
+                      <td className="text-center" style={{ verticalAlign: 'top' }}>
+                        <p className="text-[11px] font-bold text-slate-800 mt-0.5">DIREKTUR</p>
+                        <p className="text-[11px] text-slate-700">{tenant?.nama_bumdes || 'BUM Desa'}</p>
+                      </td>
+                      <td></td>
+                      <td className="text-center" style={{ verticalAlign: 'top' }}>
+                        <p className="text-[11px] font-bold text-slate-800 mt-0.5">BENDAHARA</p>
+                        <p className="text-[11px] text-slate-700">{tenant?.nama_bumdes || 'BUM Desa'}</p>
+                      </td>
+                    </tr>
+                    {/* Baris 3: Ruang tanda tangan — sama tinggi */}
+                    <tr>
+                      <td className="text-center" style={{ paddingTop: '56px', verticalAlign: 'bottom' }}>
+                        <input type="text" className="print-input"
+                          value={namaDirektur} onChange={e => setNamaDirektur(e.target.value)} />
+                      </td>
+                      <td></td>
+                      <td className="text-center" style={{ paddingTop: '56px', verticalAlign: 'bottom' }}>
+                        <input type="text" className="print-input"
+                          value={namaBendahara} onChange={e => setNamaBendahara(e.target.value)} />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
 
               {/* Branding footer */}
