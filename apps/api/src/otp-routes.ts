@@ -51,10 +51,32 @@ try {
   sendEmailFn = mailer.sendEmail;
 } catch { /* mailer not available */ }
 
+// ─── Template helpers ─────────────────────────────────────
+const DEFAULT_TEMPLATES = {
+  whatsapp: '🔐 Kode OTP {app_name} Anda: *{otp}*\n\nBerlaku 5 menit. Jangan bagikan kode ini ke siapapun.',
+  email_subject: 'Kode OTP Login {app_name}',
+  email_body: '<div style="font-family:Arial,sans-serif;max-width:400px;margin:0 auto;padding:20px"><h2 style="color:#059669">🔐 Kode OTP Login</h2><p>Halo <b>{user_name}</b>,</p><p>Kode OTP Anda:</p><div style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;padding:20px;background:#f0fdf4;border-radius:12px;color:#059669">{otp}</div><p style="color:#64748b;font-size:13px">Berlaku 5 menit. Jangan bagikan kode ini ke siapapun.</p></div>',
+};
+
+async function getOTPTemplates(): Promise<typeof DEFAULT_TEMPLATES> {
+  try {
+    const r = await pool.query("SELECT value FROM system_settings WHERE key='otp_templates'");
+    if (r.rowCount) return { ...DEFAULT_TEMPLATES, ...r.rows[0].value };
+  } catch {}
+  return DEFAULT_TEMPLATES;
+}
+
+function applyTemplate(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{(\w+)\}/g, (_: any, key: string) => vars[key] || `{${key}}`);
+}
+
 export async function sendOTPChannels(user: any, otp: string, pool: any): Promise<{ via: string }> {
-  const waMsg = `🔐 Kode OTP SILABU DIGI Anda: *${otp}*\n\nBerlaku 5 menit. Jangan bagikan kode ini ke siapapun.`;
-  const emailSubject = 'Kode OTP Login SILABU DIGI';
-  const emailHtml = `<div style="font-family:Arial,sans-serif;max-width:400px;margin:0 auto;padding:20px"><h2 style="color:#059669">🔐 Kode OTP Login</h2><p>Halo <b>${user.nama_lengkap}</b>,</p><p>Kode OTP Anda:</p><div style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;padding:20px;background:#f0fdf4;border-radius:12px;color:#059669">${otp}</div><p style="color:#64748b;font-size:13px">Berlaku 5 menit. Jangan bagikan kode ini ke siapapun.</p></div>`;
+  const tpl = await getOTPTemplates();
+  const vars: Record<string, string> = { app_name: 'SILABU DIGI', otp, user_name: user.nama_lengkap || user.email, email: user.email };
+
+  const waMsg = applyTemplate(tpl.whatsapp, vars);
+  const emailSubject = applyTemplate(tpl.email_subject, vars);
+  const emailHtml = applyTemplate(tpl.email_body, vars);
 
   let via = 'email';
 
@@ -321,5 +343,44 @@ export async function otpRoutes(app: FastifyInstance) {
       [JSON.stringify({ waha_url, waha_api_key })]
     );
     return { ok: true };
+  });
+
+  // ── Super Admin: Get OTP templates ──
+  app.get('/admin/otp/templates', async () => {
+    const tpl = await getOTPTemplates();
+    return { templates: tpl, variables: [
+      { key: '{app_name}', desc: 'Nama aplikasi (SILABU DIGI)' },
+      { key: '{otp}', desc: 'Kode OTP 6 digit' },
+      { key: '{user_name}', desc: 'Nama lengkap user' },
+      { key: '{email}', desc: 'Email user' },
+    ]};
+  });
+
+  // ── Super Admin: Save OTP templates ──
+  app.post('/admin/otp/templates', async (req: FastifyRequest) => {
+    const { whatsapp, email_subject, email_body } = req.body as any;
+    if (!whatsapp || !email_subject || !email_body) return { error: 'Semua template wajib diisi' };
+
+    // Validate: must contain {otp}
+    if (!whatsapp.includes('{otp}') || !email_body.includes('{otp}')) {
+      return { error: 'Template wajib mengandung {otp}' };
+    }
+
+    await pool.query(
+      `INSERT INTO system_settings (key, value, updated_at) VALUES ('otp_templates', $1, now())
+       ON CONFLICT (key) DO UPDATE SET value=$1, updated_at=now()`,
+      [JSON.stringify({ whatsapp, email_subject, email_body })]
+    );
+    return { ok: true, message: 'Template berhasil disimpan' };
+  });
+
+  // ── Super Admin: Reset OTP templates to default ──
+  app.post('/admin/otp/templates/reset', async () => {
+    await pool.query(
+      `INSERT INTO system_settings (key, value, updated_at) VALUES ('otp_templates', $1, now())
+       ON CONFLICT (key) DO UPDATE SET value=$1, updated_at=now()`,
+      [JSON.stringify(DEFAULT_TEMPLATES)]
+    );
+    return { ok: true, templates: DEFAULT_TEMPLATES };
   });
 }
