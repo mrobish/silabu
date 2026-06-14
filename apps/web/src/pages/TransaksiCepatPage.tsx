@@ -144,7 +144,7 @@ function CurrencyInput({ value, onChange, placeholder }: { value: string; onChan
 // ── categorize accounts ──────────────────────────────────────────────────────
 function isKasBank(a: Account): boolean {
   const k = (a.kode || '').replace(/\s/g, '');
-  return k.startsWith('1.1.01') || k.startsWith('1.1.02');
+  return k.startsWith('1.1.01') || k.startsWith('1.1.02') || k.startsWith('1.1.04') || k.startsWith('1.1.06') || k.startsWith('1.1.11');
 }
 
 function categorizeMasuk(a: Account): string {
@@ -165,6 +165,29 @@ function categorizeKeluar(a: Account): string {
   if (k.startsWith('3.2')) return '💸 Prive';
   return '📦 Lainnya';
 }
+// ── Filter target accounts per transaction type (Fix #14) ───────────────────
+function isAllowedTarget(a: Account, tipe: 'uang_masuk' | 'uang_keluar'): boolean {
+  const k = (a.kode || '').replace(/\s/g, '');
+  const jenis = a.jenisAkun || a.jenis_akun || '';
+
+  // Always block system accounts
+  if (k.startsWith('3.3') || k.startsWith('3.4') || k.startsWith('3.8') || k.startsWith('3.9')) return false;
+
+  if (tipe === 'uang_masuk') {
+    // Allow: Pendapatan, Piutang, Utang, Modal (not Prive)
+    return jenis === 'pendapatan' || jenis === 'pendapatan_lain' || jenis === 'kewajiban' ||
+           (jenis === 'ekuitas' && !k.startsWith('3.2')) ||
+           (jenis === 'aset' && k.startsWith('1.1.03'));
+  } else {
+    // Allow: Beban, HPP, Persediaan, Aset, Utang, Prive
+    return jenis === 'beban' || jenis === 'beban_lain' || jenis === 'beban_pajak' || jenis === 'hpp' ||
+           jenis === 'kewajiban' ||
+           (jenis === 'aset' && (k.startsWith('1.1.05') || k.startsWith('1.3'))) ||
+           (jenis === 'ekuitas' && k.startsWith('3.2'));
+  }
+}
+
+
 
 // ── Transaction Form ─────────────────────────────────────────────────────────
 function TransactionForm({
@@ -178,7 +201,7 @@ function TransactionForm({
   const isMasuk = tipe === 'uang_masuk';
 
   const kasBankAccounts = accounts.filter(a => isKasBank(a));
-  const targetAccounts = accounts.filter(a => !isKasBank(a) && (a.isPostable ?? a.is_postable ?? true) && (a.isActive ?? a.is_active ?? true));
+  const targetAccounts = accounts.filter(a => !isKasBank(a) && (a.isPostable ?? a.is_postable ?? true) && (a.isActive ?? a.is_active ?? true) && isAllowedTarget(a, tipe));
 
   const [kasId, setKasId] = useState('');
   const [targetId, setTargetId] = useState('');
@@ -247,7 +270,7 @@ function TransactionForm({
       if (r.ok && d.success && d.entry) {
         onSuccess(d.entry);
       } else {
-        setErrors({ submit: d.message || 'Gagal menyimpan transaksi' });
+        setErrors({ submit: d.error || d.message || 'Gagal menyimpan transaksi' });
       }
     } catch {
       setErrors({ submit: 'Terjadi kesalahan jaringan' });

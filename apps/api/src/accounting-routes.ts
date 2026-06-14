@@ -6,6 +6,7 @@ import { validateJournalBalance, validateJournalLine } from './utils/journal-bal
 import { parseYmdStrict, compareYmd, isValidYmd } from './utils/date-helpers.js';
 import { parseMoneyStrict, dbNumericToCents, MAX_AMOUNT } from './utils/money-helpers.js';
 import { calculateHppCents, validateHppNotZero } from './utils/hpp-helpers.js';
+import { validateQuickTxSource, validateQuickTxTarget } from './utils/quick-tx-validation.js';
 import {
   validateBaseKey,
   computePayloadHash,
@@ -3063,13 +3064,18 @@ export async function accountingRoutes(app: FastifyInstance) {
     }
     const targetAkun = targetRes.rows[0];
 
-    // Validate sumber akun exists
-    const sumberRes = await pool.query(
-      `SELECT id, kode, nama FROM chart_of_accounts WHERE id=$1 AND tenant_id=$2`,
-      [sumberAkunId, a.tenantId]
-    );
-    if (!sumberRes.rowCount) {
-      return reply.code(400).send({ error: 'Akun sumber tidak ditemukan' });
+    // Validate sumber akun (Fix #14: strict validation)
+    const sumberValidation = await validateQuickTxSource(sumberAkunId, a.tenantId!);
+    if (!sumberValidation.ok) {
+      return reply.code(400).send({ error: sumberValidation.error });
+    }
+
+    // Validate target akun for uang_masuk/uang_keluar (Fix #14)
+    if ((tipe === 'uang_masuk' || tipe === 'uang_keluar') && b.target_akun_id) {
+      const targetValidation = await validateQuickTxTarget(b.target_akun_id, a.tenantId!, tipe);
+      if (!targetValidation.ok) {
+        return reply.code(400).send({ error: targetValidation.error });
+      }
     }
 
     await checkPeriodLock(a.tenantId!, tahun);
