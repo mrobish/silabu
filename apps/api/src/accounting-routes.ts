@@ -3071,24 +3071,26 @@ export async function accountingRoutes(app: FastifyInstance) {
             // Calculate HPP (moving average) from inventory — FIX #12 (M6): integer cents
             let hppTotalStr = '0';
             if (inventoryItemId) {
-              // FIX #12: Check stock before calculating HPP
-              const stockRes = await pool.query(
+              // FIX #12+Concurrency: Check stock WITH LOCK inside transaction
+              const stockRes = await client.query(
                 `SELECT
                    COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) -
                    COALESCE(SUM(CASE WHEN jl.kredit > 0 THEN jl.qty ELSE 0 END), 0) AS stok
                  FROM journal_lines jl
                  JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
-                 WHERE jl.inventory_item_id = $1`,
+                 WHERE jl.inventory_item_id = $1
+                 FOR UPDATE OF jl`,
                 [inventoryItemId, a.tenantId]
               );
               const stokSekarang = Number(stockRes.rows[0].stok) || 0;
               if ((qty || 1) > stokSekarang) {
+                await client.query('ROLLBACK');
                 return reply.code(400).send({
                   error: `Stok tidak mencukupi. Stok tersedia: ${stokSekarang}, qty diminta: ${qty || 1}.`,
                 });
               }
 
-              const hppRes = await pool.query(
+              const hppRes = await client.query(
                 `SELECT COALESCE(SUM(jl.debit), 0) AS total_cost,
                         COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) AS total_qty
                  FROM journal_lines jl
@@ -3100,6 +3102,7 @@ export async function accountingRoutes(app: FastifyInstance) {
               const totalQty = Number(hppRes.rows[0].total_qty) || 0;
 
               if (totalQty <= 0 || totalCost < 0) {
+                await client.query('ROLLBACK');
                 return reply.code(400).send({
                   error: `Data persediaan tidak valid: totalCost=${totalCost}, totalQty=${totalQty}. Periksa data persediaan masuk.`,
                 });
@@ -3284,122 +3287,126 @@ export async function accountingRoutes(app: FastifyInstance) {
     const hppAkunId = hppAkun.id;
     const persediaanAkunId = persediaanAkun.id;
 
-    // Validate items and compute stock/HPP for each
-    const itemDetails: Array<{
-      inventory_item_id: string;
-      nama: string;
-      qty: number;
-      harga_jual: number;
-      hpp: number;
-      hpp_total_cents: number; // FIX #12: track cents for journal lines
-      stok_sekarang: number;
-      stok_sesudah: number;
-      is_negative: boolean;
-    }> = [];
-
-    let totalPenjualan = 0;
-    let totalHppCents = 0; // FIX #12: accumulate in cents
-
+    // Validate items basic fields (BEFORE transaction — fast, no race condition)
     for (const item of b.items) {
       if (!item.inventory_item_id || !item.qty || item.qty <= 0 || !item.harga_jual || item.harga_jual <= 0) {
         return reply.code(400).send({ error: 'Setiap item wajib memiliki inventory_item_id, qty > 0, dan harga_jual > 0' });
       }
-      // FIX #12: Validate qty is integer (BUMDes sells by unit, not decimal)
       if (!Number.isInteger(item.qty) || !Number.isFinite(item.qty)) {
         return reply.code(400).send({ error: `qty harus bilangan bulat positif, diterima: ${item.qty}` });
       }
-
-      // Get item name
-      const itemRes = await pool.query(
-        'SELECT id, nama FROM inventory_items WHERE id=$1 AND tenant_id=$2',
-        [item.inventory_item_id, a.tenantId]
-      );
-      if (!itemRes.rowCount) {
-        return reply.code(400).send({ error: `Barang dengan id ${item.inventory_item_id} tidak ditemukan` });
-      }
-
-      // Calculate current stock
-      const stockRes = await pool.query(
-        `SELECT
-           COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) -
-           COALESCE(SUM(CASE WHEN jl.kredit > 0 THEN jl.qty ELSE 0 END), 0) AS stok
-         FROM journal_lines jl
-         JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
-         WHERE jl.inventory_item_id = $1`,
-        [item.inventory_item_id, a.tenantId]
-      );
-      const stokSekarang = Number(stockRes.rows[0].stok) || 0;
-
-      // Calculate HPP (moving average) from inventory — FIX #12 (M6): integer cents
-      const hppRes = await pool.query(
-        `SELECT
-           COALESCE(SUM(jl.debit), 0) AS total_cost,
-           COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) AS total_qty
-         FROM journal_lines jl
-         JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
-         WHERE jl.inventory_item_id = $1`,
-        [item.inventory_item_id, a.tenantId]
-      );
-      const totalCost = Number(hppRes.rows[0].total_cost) || 0;
-      const totalQty = Number(hppRes.rows[0].total_qty) || 0;
-
-      // Calculate HPP using integer cents helper (no per-unit rounding)
-      let hpp = 0;
-      let hppTotalCents = 0;
-      if (totalQty > 0 && totalCost > 0) {
-        const hppResult = calculateHppCents(totalCost, totalQty, item.qty);
-        hpp = hppResult.hppPerUnitCents / 100; // for display/response
-        hppTotalCents = hppResult.hppTotalCents; // for journal lines
-
-        // Validate HPP > 0 for inventory items
-        validateHppNotZero(hppTotalCents, itemRes.rows[0].nama);
-      } else if (totalQty <= 0 || totalCost < 0) {
-        // Invalid inventory data — reject transaction
-        return reply.code(400).send({
-          error: `Data persediaan tidak valid untuk "${itemRes.rows[0].nama}": totalCost=${totalCost}, totalQty=${totalQty}. Periksa data persediaan masuk.`,
-        });
-      }
-
-      const stokSesudah = stokSekarang - item.qty;
-      const isNegative = stokSesudah < 0;
-
-      // FIX #12: Block overselling — reject if qty > available stock
-      if (isNegative) {
-        return reply.code(400).send({
-          error: `Stok tidak mencukupi untuk "${itemRes.rows[0].nama}". Stok tersedia: ${stokSekarang}, qty diminta: ${item.qty}.`,
-        });
-      }
-
-      itemDetails.push({
-        inventory_item_id: item.inventory_item_id,
-        nama: itemRes.rows[0].nama,
-        qty: item.qty,
-        harga_jual: item.harga_jual,
-        hpp,
-        hpp_total_cents: hppTotalCents, // FIX #12: track cents for journal lines
-        stok_sekarang: stokSekarang,
-        stok_sesudah: stokSesudah,
-        is_negative: isNegative,
-      });
-
-      totalPenjualan += item.qty * item.harga_jual;
-      totalHppCents += hppTotalCents; // FIX #12: accumulate in cents
     }
 
-    const totalHpp = totalHppCents / 100; // Convert cents to Rupiah for response
-    const labaKotor = totalPenjualan - totalHpp;
+    // Sort items by inventory_item_id for consistent lock ordering (prevent deadlocks)
+    const sortedItems = [...b.items].sort((a: any, b: any) =>
+      String(a.inventory_item_id).localeCompare(String(b.inventory_item_id))
+    );
 
     await checkPeriodLock(a.tenantId!, tahun);
     await checkCutoffDate(a.tenantId!, tanggal);
     await ensurePeriod(a.tenantId!, tahun);
 
+    // FIX #12+Concurrency: ALL stock checks + journal creation in ONE atomic transaction
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
       const no_jurnal = await nextJurnalNo(a.tenantId!, tahun, bulan);
 
-      // Create journal entry with tipetransaksi='SALES'
+      // Validate items, check stock WITH LOCK, calculate HPP — INSIDE transaction
+      const itemDetails: Array<{
+        inventory_item_id: string;
+        nama: string;
+        qty: number;
+        harga_jual: number;
+        hpp: number;
+        hpp_total_cents: number;
+        stok_sekarang: number;
+        stok_sesudah: number;
+      }> = [];
+
+      let totalPenjualan = 0;
+      let totalHppCents = 0;
+
+      for (const item of sortedItems) {
+        // Get item name
+        const itemRes = await client.query(
+          'SELECT id, nama FROM inventory_items WHERE id=$1 AND tenant_id=$2',
+          [item.inventory_item_id, a.tenantId]
+        );
+        if (!itemRes.rowCount) {
+          await client.query('ROLLBACK');
+          return reply.code(400).send({ error: `Barang dengan id ${item.inventory_item_id} tidak ditemukan` });
+        }
+
+        // FIX #12+Concurrency: SELECT FOR UPDATE to lock inventory rows
+        // This prevents concurrent transactions from reading stale stock
+        const stockRes = await client.query(
+          `SELECT
+             COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) -
+             COALESCE(SUM(CASE WHEN jl.kredit > 0 THEN jl.qty ELSE 0 END), 0) AS stok
+           FROM journal_lines jl
+           JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
+           WHERE jl.inventory_item_id = $1
+           FOR UPDATE OF jl`,
+          [item.inventory_item_id, a.tenantId]
+        );
+        const stokSekarang = Number(stockRes.rows[0].stok) || 0;
+        const stokSesudah = stokSekarang - item.qty;
+
+        // Block overselling
+        if (stokSesudah < 0) {
+          await client.query('ROLLBACK');
+          return reply.code(400).send({
+            error: `Stok tidak mencukupi untuk "${itemRes.rows[0].nama}". Stok tersedia: ${stokSekarang}, qty diminta: ${item.qty}.`,
+          });
+        }
+
+        // Calculate HPP using integer cents helper
+        let hpp = 0;
+        let hppTotalCents = 0;
+        const hppRes = await client.query(
+          `SELECT COALESCE(SUM(jl.debit), 0) AS total_cost,
+                  COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) AS total_qty
+           FROM journal_lines jl
+           JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
+           WHERE jl.inventory_item_id = $1`,
+          [item.inventory_item_id, a.tenantId]
+        );
+        const totalCost = Number(hppRes.rows[0].total_cost) || 0;
+        const totalQty = Number(hppRes.rows[0].total_qty) || 0;
+
+        if (totalQty > 0 && totalCost > 0) {
+          const hppResult = calculateHppCents(totalCost, totalQty, item.qty);
+          hpp = hppResult.hppPerUnitCents / 100;
+          hppTotalCents = hppResult.hppTotalCents;
+          validateHppNotZero(hppTotalCents, itemRes.rows[0].nama);
+        } else if (totalQty <= 0 || totalCost < 0) {
+          await client.query('ROLLBACK');
+          return reply.code(400).send({
+            error: `Data persediaan tidak valid untuk "${itemRes.rows[0].nama}": totalCost=${totalCost}, totalQty=${totalQty}. Periksa data persediaan masuk.`,
+          });
+        }
+
+        itemDetails.push({
+          inventory_item_id: item.inventory_item_id,
+          nama: itemRes.rows[0].nama,
+          qty: item.qty,
+          harga_jual: item.harga_jual,
+          hpp,
+          hpp_total_cents: hppTotalCents,
+          stok_sekarang: stokSekarang,
+          stok_sesudah: stokSesudah,
+        });
+
+        totalPenjualan += item.qty * item.harga_jual;
+        totalHppCents += hppTotalCents;
+      }
+
+      const totalHpp = totalHppCents / 100;
+      const labaKotor = totalPenjualan - totalHpp;
+
+      // Create journal entry
       const entryRes = await client.query(
         `INSERT INTO journal_entries
            (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, tipeTransaksi, isPosted, created_by)
@@ -3461,7 +3468,6 @@ export async function accountingRoutes(app: FastifyInstance) {
           harga_jual: d.harga_jual,
           hpp: d.hpp,
           stok_sesudah: d.stok_sesudah,
-          is_negative: d.is_negative,
         })),
         total_penjualan: totalPenjualan,
         total_hpp: totalHpp,
