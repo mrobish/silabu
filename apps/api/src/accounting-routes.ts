@@ -7,6 +7,7 @@ import { parseYmdStrict, compareYmd, isValidYmd } from './utils/date-helpers.js'
 import { parseMoneyStrict, dbNumericToCents, MAX_AMOUNT } from './utils/money-helpers.js';
 import { calculateHppCents, validateHppNotZero } from './utils/hpp-helpers.js';
 import { validateQuickTxSource, validateQuickTxTarget } from './utils/quick-tx-validation.js';
+import { computeLabaRugiMonthlyGrouped } from './utils/monthly-pl.js';
 import {
   validateBaseKey,
   computePayloadHash,
@@ -1635,18 +1636,13 @@ export async function accountingRoutes(app: FastifyInstance) {
       [tenantId, `${currentYear}-${String(now.getMonth()+1).padStart(2,'0')}-01`, today]
     );
 
-    // 4. Data bulanan (Jan–Des) untuk chart — pemasukan vs pengeluaran per bulan
-    const monthly: Array<{ month: string; pemasukan: number; pengeluaran: number }> = [];
-    for (let m = 1; m <= 12; m++) {
-      const ms = `${currentYear}-${String(m).padStart(2,'0')}-01`;
-      const me = new Date(currentYear, m, 0).toISOString().slice(0, 10);
-      const mLR = await computeLabaRugi(tenantId, ms, me);
-      monthly.push({
-        month: ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'][m-1],
-        pemasukan: mLR.pendapatanOperasional.subtotal + mLR.nonOperasional.pendapatanLain.subtotal,
-        pengeluaran: mLR.hpp.subtotal + mLR.bebanOperasional.subtotal + mLR.nonOperasional.bebanLain.subtotal + mLR.pajak.subtotal,
-      });
-    }
+    // 4. Data bulanan (Jan–Des) untuk chart — Fix #15: single grouped query (bukan 12x)
+    const monthlyPL = await computeLabaRugiMonthlyGrouped(tenantId, currentYear);
+    const monthly = monthlyPL.map(m => ({
+      month: m.label,
+      pemasukan: m.pendapatan + m.pendapatanLain,
+      pengeluaran: m.hpp + m.bebanOperasional + m.bebanLain + m.pajak,
+    }));
 
     return {
       totalPemasukan,
