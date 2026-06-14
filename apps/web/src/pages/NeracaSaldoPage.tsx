@@ -43,9 +43,15 @@ export default function NeracaSaldoPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
-      setData(json);
+      if (json.error || !json.akun) {
+        console.error('[NeracaSaldo] API error:', json.error || 'No akun data');
+        setData(null);
+      } else {
+        setData(json);
+      }
     } catch (e) {
       console.error(e);
+      setData(null);
     }
     setLoading(false);
   };
