@@ -1,9 +1,9 @@
 import crypto from 'crypto';
+import { ENCRYPTION_KEY } from './config.js';
 
 // AES-256-GCM encryption for app_settings credentials.
-// Key derived from ENCRYPTION_KEY env (or JWT_SECRET fallback) via scrypt.
-const RAW_KEY = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'silabu-digi-secret-2026';
-const KEY = crypto.scryptSync(RAW_KEY, 'silabu-settings-salt', 32);
+// Key derived from ENCRYPTION_KEY (set in .env or falls back to JWT_SECRET via config.ts)
+const KEY = crypto.scryptSync(ENCRYPTION_KEY, 'silabu-settings-salt', 32);
 const ALGO = 'aes-256-gcm';
 const PREFIX = 'enc:v1:';
 

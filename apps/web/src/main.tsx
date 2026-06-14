@@ -19,6 +19,29 @@ import InvoicePage from './pages/InvoicePage';
 import FAQ from './pages/FAQ';
 import VerifyOtpPage from './pages/VerifyOtpPage';
 
+// ── Global 401 interceptor ──────────────────────────────────
+// Wraps native fetch to auto-logout on 401 (token invalid/expired).
+// This covers ALL fetch calls, not just those using apiFetch().
+const originalFetch = window.fetch;
+window.fetch = async (...args: Parameters<typeof fetch>): Promise<Response> => {
+  const res = await originalFetch(...args);
+  if (res.status === 401) {
+    // Only redirect if we're not already on a login/register page
+    const path = window.location.pathname;
+    const isPublicPage = path === '/' || path.startsWith('/login') || path.startsWith('/register') || path.startsWith('/forgot') || path.startsWith('/reset') || path.startsWith('/verify-otp');
+    if (!isPublicPage) {
+      try {
+        localStorage.removeItem('accessToken');
+        sessionStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        sessionStorage.removeItem('refreshToken');
+      } catch {}
+      window.location.href = '/login/email?reason=session_expired';
+    }
+  }
+  return res;
+};
+
 const router = createBrowserRouter([
   { path: '/', element: <Home /> },
   // Registration flow

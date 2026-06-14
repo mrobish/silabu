@@ -3,8 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { pool } from './db.js';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'silabu-secret-2026';
+import { JWT_SECRET } from './config.js';
 const WAHA_URL = process.env.WAHA_URL || 'http://localhost:3003';
 const WAHA_KEY = process.env.WAHA_API_KEY || '***';
 

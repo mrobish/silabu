@@ -1,8 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import jwt from 'jsonwebtoken';
 import { pool } from './db.js';
-
-const JWT_SECRET = process.env['JWT_SECRET'] || 'silabu-digi-secret-2026';
+import { JWT_SECRET } from './config.js';
 
 export interface AuthPayload {
   userId: string;

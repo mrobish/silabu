@@ -14,7 +14,7 @@ module.exports = {
         ENCRYPTION_KEY: 'silabu-dev-secret-change-in-prod',
         PORT: 3010,
         DATABASE_URL: 'postgresql://silabu:@localhost:5432/silabu',
-        JWT_SECRET: 'silabu-dev-secret-change-in-prod',
+        JWT_SECRET: process.env.JWT_SECRET,
         CORS_ORIGIN: 'https://silabu.ondesa.id',
       },
     },

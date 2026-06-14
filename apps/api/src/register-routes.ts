@@ -7,8 +7,7 @@ import { sendEmail, buildOTPCodeEmail } from './mailer.js';
 import { verifyTurnstile, getSecuritySettings } from './turnstile.js';
 import { getSetting } from './settings-routes.js';
 import { seedDefaultCoa } from './coa-seed.js';
-
-const JWT_SECRET = process.env['JWT_SECRET'] || 'silabu-digi-secret-2026';
+import { JWT_SECRET } from './config.js';
 const APP_URL = process.env.APP_URL || 'https://silabu.ondesa.id';
 
 function sign(user: any) {
