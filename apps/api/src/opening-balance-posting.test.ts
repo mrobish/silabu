@@ -5,7 +5,7 @@ import {
   toCents,
   validateLinesBalance,
   OpeningJournalLine,
-} from './utils/opening-balance-posting';
+} from './utils/opening-balance-posting.js';
 
 describe('toCents', () => {
   it('converts rupiah to integer cents', () => {
