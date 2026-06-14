@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../utils/apiFetch';
 import ReportPrintLayout from './ReportPrintLayout';
 
 // ─── Types ───────────────────────────────────────────────────
@@ -266,13 +267,11 @@ export default function JurnalPenyesuaianPage() {
         })),
         tipeTransaksi: 'ADJUSTMENT',
       };
-      const res = await fetch('/api/accounting/jurnal-umum', {
+      const data = await apiFetch('/api/accounting/jurnal-umum', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token() },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan jurnal penyesuaian');
       const no = data.no_jurnal || data.entry?.no_jurnal || data.jurnal?.no_jurnal || '';
       setShowSuccess('Jurnal penyesuaian berhasil disimpan' + (no ? ': ' + no : ''));
       setLines([emptyLine(), emptyLine()]);

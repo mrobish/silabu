@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
+import { apiFetch } from '../utils/apiFetch';
 
 // ─── Types ───────────────────────────────────────────────────
 type CoAAccount = {
@@ -999,13 +1000,11 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
   async function submitBatch(batchRows: any[]) {
     setSubmitting(true);
     try {
-      const res = await fetch('/api/accounting/jurnal-umum/batch', {
+      const data = await apiFetch('/api/accounting/jurnal-umum/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
         body: JSON.stringify({ rows: batchRows }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message || 'Gagal menyimpan jurnal');
 
       const count = data.entries?.length || 0;
       const nos = (data.entries || []).map((e: any) => e.noJurnal || e.no_jurnal || '').filter(Boolean);
@@ -1142,13 +1141,11 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
           qty: l.qty || null,
         })),
       };
-      const res = await fetch('/api/accounting/jurnal-umum/' + editingId, {
+      const data = await apiFetch('/api/accounting/jurnal-umum/' + editingId, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message || 'Gagal memperbarui jurnal');
       setShowSuccess('Jurnal berhasil diperbarui');
       cancelEdit();
       const refreshed = await fetch('/api/accounting/jurnal-umum?limit=20', { headers: { Authorization: 'Bearer ' + getToken() } });

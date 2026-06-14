@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiFetch } from '../utils/apiFetch';
 import PasswordForm from './PasswordForm';
 import RincianSaldoPage from './RincianSaldoPage';
 import BantuanPage from './BantuanPage';
@@ -1188,13 +1189,11 @@ function SaldoAwalPage({ setPage }: { setPage: (p: Page) => void }) {
     setShowSuccess('');
     try {
       const lines = cleanRows.map(([akun_id, v]) => ({ akun_id, debit: v.debit || '0', kredit: v.kredit || '0' }));
-      const res = await fetch('/api/accounting/saldo-awal', {
+      const data = await apiFetch('/api/accounting/saldo-awal', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ tanggal, lines }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan draft saldo awal');
       setShowSuccess(data.message || 'Draft saldo awal berhasil disimpan!');
       setIsSetup(true);
       setEntry({ noJurnal: data.noJurnal, tanggal });

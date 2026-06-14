@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { apiFetch } from '../utils/apiFetch';
 import { useCutoffDate } from "../hooks/useCutoffDate";
 import { ShoppingCart, Plus, Trash2, X, CheckCircle, AlertTriangle, Package, Search } from 'lucide-react';
 
@@ -305,7 +306,7 @@ export default function PenjualanPage({ setPage }: { setPage: (p: any) => void }
         keterangan: keterangan || undefined,
       };
 
-      const r = await fetch('/api/accounting/penjualan', {
+      const d: SaleResult = await apiFetch('/api/accounting/penjualan', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -314,16 +315,15 @@ export default function PenjualanPage({ setPage }: { setPage: (p: any) => void }
         body: JSON.stringify(body),
       });
 
-      const d: SaleResult = await r.json();
-      if (r.ok && d.success) {
+      if (d.success) {
         setSuccessResult(d);
         setCart([]);
         setKeterangan('');
       } else {
         setToast({ message: (d as any).error || 'Gagal menyimpan transaksi', type: 'error' });
       }
-    } catch {
-      setToast({ message: 'Terjadi kesalahan jaringan', type: 'error' });
+    } catch (e: any) {
+      setToast({ message: e.message || 'Terjadi kesalahan jaringan', type: 'error' });
     } finally {
       setSaving(false);
       setShowWarning(false);
