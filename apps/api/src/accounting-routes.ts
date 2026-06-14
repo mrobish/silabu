@@ -1869,8 +1869,25 @@ export async function accountingRoutes(app: FastifyInstance) {
     const tid = a.tenantId;
 
     // ── Kas Tahun Lalu: total Kas/Bank s/d start_date (termasuk Saldo Awal) ──
+    // When start_date not provided, include OPENING_BALANCE so kasTahunLalu + flowQuery = neracaKasTotal
     const kasTahunLalu = await (async () => {
-      if (!startDate) return 0;
+      if (!startDate) {
+        // No start_date → kasTahunLalu = OPENING_BALANCE contribution to Kas/Bank
+        const r = await pool.query(
+          `SELECT COALESCE(SUM(CASE WHEN c.saldonormal='D' THEN m.debit-m.kredit ELSE m.kredit-m.debit END),0) AS saldo
+           FROM chart_of_accounts c
+           LEFT JOIN (
+             SELECT jl.akun_id, SUM(jl.debit) AS debit, SUM(jl.kredit) AS kredit
+             FROM journal_lines jl
+             JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1
+               AND je.tipetransaksi = 'OPENING_BALANCE'
+             GROUP BY jl.akun_id
+           ) m ON m.akun_id=c.id
+           WHERE c.tenant_id=$1 AND c.ispostable=true AND (c.kode LIKE '1.1.01%' OR c.kode LIKE '1.1.02%')`,
+          [tid]
+        );
+        return Number(r.rows[0]?.saldo || 0);
+      }
       const r = await pool.query(
         `SELECT COALESCE(SUM(CASE WHEN c.saldonormal='D' THEN m.debit-m.kredit ELSE m.kredit-m.debit END),0) AS saldo
          FROM chart_of_accounts c
@@ -3065,5 +3082,203 @@ export async function accountingRoutes(app: FastifyInstance) {
     } finally {
       client.release();
     }
+  });
+
+  // ── Guided Auto-Fix: Detect sales journals without HPP ──
+  app.get('/fix-missing-hpp/scan', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const tid = a.tenantId;
+
+    // Find journal entries that have Pendapatan Penjualan (Gol 4.2) but NO HPP (Gol 5) lines
+    const broken = await pool.query(
+      `SELECT je.id, je.no_jurnal, je.tanggal, je.keterangan,
+              SUM(CASE WHEN c_pend.kode LIKE '4.%' THEN jl_pend.kredit ELSE 0 END) AS total_penjualan,
+              SUM(CASE WHEN c_pend.kode LIKE '4.%' THEN jl_pend.debit ELSE 0 END) AS total_return
+       FROM journal_entries je
+       JOIN journal_lines jl_pend ON jl_pend.entry_id = je.id
+       JOIN chart_of_accounts c_pend ON c_pend.id = jl_pend.akun_id
+       WHERE je.tenant_id = $1
+         AND je.isposted = true
+         AND c_pend.kode LIKE '4.2%'
+         AND NOT EXISTS (
+           SELECT 1 FROM journal_lines jl_hpp
+           JOIN chart_of_accounts c_hpp ON c_hpp.id = jl_hpp.akun_id
+           WHERE jl_hpp.entry_id = je.id AND c_hpp.kode LIKE '5.%'
+         )
+       GROUP BY je.id, je.no_jurnal, je.tanggal, je.keterangan
+       ORDER BY je.tanggal`,
+      [tid]
+    );
+
+    if (!broken.rowCount) {
+      return { issues: [], message: 'Semua transaksi penjualan sudah memiliki HPP ✅' };
+    }
+
+    const issues = broken.rows.map((r: any) => ({
+      entry_id: r.id,
+      no_jurnal: r.no_jurnal,
+      tanggal: r.tanggal,
+      keterangan: r.keterangan,
+      total_penjualan: Number(r.total_penjualan) - Number(r.total_return),
+    }));
+
+    return {
+      issues,
+      message: `Ditemukan ${issues.length} transaksi penjualan tanpa catatan HPP`,
+    };
+  });
+
+  // ── Guided Auto-Fix: Execute HPP correction ──
+  app.post('/fix-missing-hpp/execute', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const tid = a.tenantId;
+    const { entry_ids } = req.body as any;
+
+    if (!entry_ids || !Array.isArray(entry_ids) || entry_ids.length === 0) {
+      return reply.code(400).send({ error: 'entry_ids wajib diisi' });
+    }
+
+    // Find required accounts
+    const [hppAkun, persediaanAkun] = await Promise.all([
+      findAccountByRole(tid!, 'HPP'),
+      findAccountByRole(tid!, 'PERSEDIAAN'),
+    ]);
+    if (!hppAkun) return reply.code(400).send({ error: 'Akun HPP tidak ditemukan' });
+    if (!persediaanAkun) return reply.code(400).send({ error: 'Akun Persediaan tidak ditemukan' });
+
+    const client = await pool.connect();
+    const results: Array<{ no_jurnal: string; status: string; message: string }> = [];
+
+    try {
+      await client.query('BEGIN');
+
+      for (const entryId of entry_ids) {
+        // Get original entry
+        const origRes = await client.query(
+          `SELECT je.id, je.no_jurnal, je.tanggal, je.bulan, je.tahun, je.keterangan
+           FROM journal_entries je
+           WHERE je.id=$1 AND je.tenant_id=$2 AND je.isposted=true`,
+          [entryId, tid]
+        );
+        if (!origRes.rowCount) {
+          results.push({ no_jurnal: entryId, status: 'SKIP', message: 'Entry tidak ditemukan' });
+          continue;
+        }
+        const orig = origRes.rows[0];
+
+        // Check if already has HPP
+        const hasHpp = await client.query(
+          `SELECT 1 FROM journal_lines jl
+           JOIN chart_of_accounts c ON c.id = jl.akun_id
+           WHERE jl.entry_id=$1 AND c.kode LIKE '5.%'`,
+          [entryId]
+        );
+        if (hasHpp.rowCount) {
+          results.push({ no_jurnal: orig.no_jurnal, status: 'SKIP', message: 'Sudah punya HPP' });
+          continue;
+        }
+
+        // Get revenue lines to find inventory items sold
+        const revenueLines = await client.query(
+          `SELECT jl.id, jl.kredit, jl.debit, jl.inventory_item_id, jl.qty, c.kode
+           FROM journal_lines jl
+           JOIN chart_of_accounts c ON c.id = jl.akun_id
+           WHERE jl.entry_id=$1 AND c.kode LIKE '4.2%'`,
+          [entryId]
+        );
+
+        // Calculate HPP for each item
+        let correctionClient = client;
+        const now = new Date();
+        const corrTanggal = now.toISOString().slice(0, 10);
+        const corrBulan = now.getMonth() + 1;
+        const corrTahun = now.getFullYear();
+        const corrNoJurnal = await nextJurnalNo(tid!, corrTahun, corrBulan);
+
+        // Create correction journal
+        const corrEntry = await correctionClient.query(
+          `INSERT INTO journal_entries
+             (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, tipeTransaksi, isPosted, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,'KOREKSI_HPP',true,$7)
+           RETURNING id`,
+          [tid, corrNoJurnal, corrTanggal, corrBulan, corrTahun,
+           `Koreksi HPP otomatis — referensi ${orig.no_jurnal} (${orig.keterangan})`, a.userId]
+        );
+        const corrEntryId = corrEntry.rows[0].id;
+
+        let totalHpp = 0;
+        for (const rl of revenueLines.rows) {
+          const netRevenue = Number(rl.kredit) - Number(rl.debit);
+          if (netRevenue <= 0) continue;
+
+          // Calculate moving average HPP for this item (if inventory_item_id exists)
+          let hppPerUnit = 0;
+          let hppTotal = 0;
+          let qtyToReduce = 0;
+
+          if (rl.inventory_item_id) {
+            const hppRes = await correctionClient.query(
+              `SELECT COALESCE(SUM(jl.debit), 0) AS total_cost,
+                      COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) AS total_qty
+               FROM journal_lines jl
+               JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
+               WHERE jl.inventory_item_id = $1`,
+              [rl.inventory_item_id, tid]
+            );
+            const totalCost = Number(hppRes.rows[0].total_cost) || 0;
+            const totalQty = Number(hppRes.rows[0].total_qty) || 0;
+            hppPerUnit = totalQty > 0 ? Math.round(totalCost / totalQty) : 0;
+            qtyToReduce = Number(rl.qty) || 1;
+            hppTotal = hppPerUnit * qtyToReduce;
+          } else {
+            // No inventory item — estimate HPP as 70% of revenue (conservative)
+            hppTotal = Math.round(netRevenue * 0.7);
+          }
+
+          if (hppTotal <= 0) continue;
+          totalHpp += hppTotal;
+
+          // Debit HPP
+          await correctionClient.query(
+            `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, inventory_item_id, qty)
+             VALUES ($1,$2,$3,'0',$4,NULL,NULL)`,
+            [corrEntryId, hppAkun.id, String(hppTotal), `Koreksi HPP — referensi ${orig.no_jurnal}`]
+          );
+
+          // Kredit Persediaan
+          await correctionClient.query(
+            `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, inventory_item_id, qty)
+             VALUES ($1,$2,'0',$3,$4,$5,$6)`,
+            [corrEntryId, persediaanAkun.id, String(hppTotal),
+             `Koreksi HPP — referensi ${orig.no_jurnal}`,
+             rl.inventory_item_id || null, rl.inventory_item_id ? String(qtyToReduce) : null]
+          );
+        }
+
+        if (totalHpp > 0) {
+          await correctionClient.query('COMMIT');
+          results.push({
+            no_jurnal: orig.no_jurnal,
+            status: 'FIXED',
+            message: `HPP Rp ${totalHpp.toLocaleString('id-ID')} → Jurnal ${corrNoJurnal}`,
+          });
+          // Start new transaction for next entry
+          await correctionClient.query('BEGIN');
+        } else {
+          await correctionClient.query('ROLLBACK');
+          results.push({ no_jurnal: orig.no_jurnal, status: 'SKIP', message: 'Tidak ada HPP yang perlu dikoreksi' });
+          await correctionClient.query('BEGIN');
+        }
+      }
+
+      await client.query('COMMIT');
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return reply.code(500).send({ error: e.message });
+    } finally {
+      client.release();
+    }
+
+    return { success: true, results, message: `Koreksi selesai: ${results.filter(r => r.status === 'FIXED').length} diperbaiki` };
   });
 }

@@ -13,6 +13,7 @@ import AsetTetapPage from './AsetTetapPage';
 import TutupBukuPage from './TutupBukuPage';
 import CalkPage from './CalkPage';
 import PerubahanModalPage from './PerubahanModalPage';
+import HppFixBanner from './HppFixBanner';
 import RekapJurnalPage from './RekapJurnalPage';
 import JurnalPenyesuaianPage from './JurnalPenyesuaianPage';
 import JurnalUmumPage from './JurnalUmumPage';
@@ -1835,6 +1836,8 @@ export default function AppDashboard() {
               )}
 
               {/* Welcome */}
+              <HppFixBanner />
+
               <div className="bg-gradient-to-br from-white to-slate-50 rounded-2xl p-6 sm:p-8 border border-slate-100 shadow-sm">
                 <h2 className="text-2xl font-bold text-slate-900">Selamat datang kembali, {user.nama_lengkap.split(' ')[0]}</h2>
                 <p className="mt-1.5 text-sm text-slate-500">
