@@ -170,6 +170,8 @@ export default function AsetTetapPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [depreMsg, setDepreMsg] = useState('');
+  const [depreResult, setDepreResult] = useState<{success:number; failed:number; results:any[]} | null>(null);
+  const [depreLoading, setDepreLoading] = useState(false);
   const [kategoriFilter, setKategoriFilter] = useState('');
   const [printOpen, setPrintOpen] = useState(false);
 
@@ -191,17 +193,29 @@ export default function AsetTetapPage() {
 
   const runDepreciate = async () => {
     if (!confirm('Jalankan penyusutan bulanan untuk semua aset aktif?')) return;
+    setDepreLoading(true);
+    setDepreMsg('');
+    setDepreResult(null);
     try {
       const r = await fetch('/api/accounting/aset-tetap/depreciate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token() },
+        body: JSON.stringify({}),
       });
-      if (r.ok) {
-        const d = await r.json();
-        setDepreMsg(`${d.success} aset berhasil disusutkan`);
+      const d = await r.json();
+      if (r.status === 400) {
+        setDepreMsg(d.error || 'Tidak ada aset yang perlu disusutkan');
+      } else if (r.ok || r.status === 207) {
+        setDepreResult({ success: d.success || 0, failed: d.failed || 0, results: d.results || [] });
         fetchData();
+      } else {
+        setDepreMsg(d.error || 'Gagal menjalankan penyusutan');
       }
-    } catch {}
+    } catch (e: any) {
+      setDepreMsg('Error jaringan: ' + (e.message || 'tidak dapat terhubung'));
+    } finally {
+      setDepreLoading(false);
+    }
   };
 
   const filtered = asets.filter(a => !kategoriFilter || a.kategori === kategoriFilter);
@@ -220,9 +234,9 @@ export default function AsetTetapPage() {
           <p className="text-xs text-slate-500">Fixed Asset Management — Lacak, susutkan, dan cetak daftar aset</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={runDepreciate} title="Jalankan penyusutan bulanan"
-            className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition whitespace-nowrap">
-            <Calculator size={16} className="inline -mt-0.5 mr-1" /> Susutkan
+          <button onClick={runDepreciate} disabled={depreLoading} title="Jalankan penyusutan bulanan"
+            className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition whitespace-nowrap disabled:opacity-50">
+            <Calculator size={16} className="inline -mt-0.5 mr-1" /> {depreLoading ? 'Memproses...' : 'Susutkan'}
           </button>
           <button onClick={() => setModalOpen(true)}
             className="rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition whitespace-nowrap">
@@ -236,9 +250,32 @@ export default function AsetTetapPage() {
       </div>
 
       {depreMsg && (
-        <div className="rounded-2xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700 flex items-center gap-2">
-          <CheckCircle size={16} className="shrink-0" /> {depreMsg}
-          <button onClick={() => setDepreMsg('')} className="ml-auto text-emerald-400 hover:text-emerald-600"><X size={14} /></button>
+        <div className="rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-center gap-2">
+          <AlertTriangle size={16} className="shrink-0" /> {depreMsg}
+          <button onClick={() => setDepreMsg('')} className="ml-auto text-red-400 hover:text-red-600"><X size={14} /></button>
+        </div>
+      )}
+
+      {depreResult && (
+        <div className={`rounded-2xl border px-4 py-3 text-sm ${depreResult.failed > 0 ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
+          <div className="flex items-center gap-2 mb-2">
+            {depreResult.failed > 0 ? <AlertTriangle size={16} className="shrink-0" /> : <CheckCircle size={16} className="shrink-0" />}
+            <span className="font-semibold">
+              {depreResult.success} berhasil, {depreResult.failed} gagal
+            </span>
+            <button onClick={() => setDepreResult(null)} className="ml-auto opacity-50 hover:opacity-100"><X size={14} /></button>
+          </div>
+          <div className="space-y-1 ml-6">
+            {depreResult.results.map((r, i) => (
+              <div key={i} className="text-xs">
+                {r.ok ? (
+                  <span className="text-emerald-600">✓ {r.nama}: Rp {r.susut?.toLocaleString('id-ID')} ({r.noJurnal})</span>
+                ) : (
+                  <span className="text-red-600">✗ {r.nama}: {r.error}</span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -2382,50 +2382,56 @@ export async function accountingRoutes(app: FastifyInstance) {
         continue;
       }
 
-      // Proteksi: cek apakah sudah didepresiasi bulan ini
+      // Proteksi: cek apakah sudah didepresiasi bulan ini (by asset_id, bukan nama)
       const bulanKe = Math.floor((Number(as.akumulasi_penyusutan || 0) / susut)) + 1;
       const keterangan = `Penyusutan ${as.nama} - Bulan ke-${bulanKe}`;
-      const lastDayOfMonth = new Date(tahun, bulan, 0).getDate();
+      const deprRef = `ASSET_DEPR:${as.id}`;
       const existingJe = await pool.query(
-        `SELECT id FROM journal_entries
-         WHERE tenant_id=$1 AND tanggal >= $2 AND tanggal <= $3
-           AND keterangan LIKE $4 AND tipetransaksi IS DISTINCT FROM 'CLOSING'`,
-        [a.tenantId, `${tahun}-${String(bulan).padStart(2, '0')}-01`, `${tahun}-${String(bulan).padStart(2, '0')}-${lastDayOfMonth}`, `Penyusutan ${as.nama}%`]
+        `SELECT id, no_jurnal FROM journal_entries
+         WHERE tenant_id=$1 AND tahun=$2 AND bulan=$3 AND referensi=$4`,
+        [a.tenantId, tahun, bulan, deprRef]
       );
       if (existingJe.rowCount && existingJe.rowCount > 0) {
-        results.push({ nama: as.nama, susut: 0, ok: false, error: `Sudah didepresiasi bulan ${bulan}/${tahun}` });
+        results.push({ nama: as.nama, susut: 0, ok: false, error: `Sudah didepresiasi bulan ${bulan}/${tahun} (${existingJe.rows[0].no_jurnal})` });
         continue;
       }
 
-      // Generate sequential no_jurnal
-      const noJurnal = await nextJurnalNo(a.tenantId!, tahun, bulan, susutPrefix);
-
+      // Generate sequential no_jurnal (with retry for concurrency safety)
       const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const je = await client.query(
-          `INSERT INTO journal_entries (tenant_id, tanggal, bulan, tahun, no_jurnal, keterangan, isposted, created_at)
-           VALUES ($1,$2,$3,$4,$5,$6,true,$7) RETURNING id`,
-          [a.tenantId, tanggal, bulan, tahun, noJurnal, keterangan, now]
-        );
-        await client.query(
-          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit)
-           VALUES ($1,$2,$3,0), ($1,$4,0,$3)`,
-          [je.rows[0].id, bebanAcc.rows[0].id, aktualSusut, akumAcc.rows[0].id]
-        );
-        await client.query(
-          `UPDATE fixed_assets SET akumulasi_penyusutan = COALESCE(akumulasi_penyusutan, 0) + $1, updated_at = $2 WHERE id = $3 AND tenant_id = $4`,
-          [aktualSusut, now, as.id, a.tenantId]
-        );
-        await client.query('COMMIT');
-        results.push({ nama: as.nama, noJurnal, susut: aktualSusut, ok: true });
-      } catch (e: any) {
-        await client.query('ROLLBACK');
-        const msg = e.code === '23505' ? 'Duplikat no_jurnal — coba lagi' : e.message || 'Error database';
-        results.push({ nama: as.nama, susut: aktualSusut, ok: false, error: msg });
-      } finally {
-        client.release();
+      const MAX_RETRIES = 3;
+      let success = false;
+      for (let attempt = 0; attempt < MAX_RETRIES && !success; attempt++) {
+        const noJurnal = await nextJurnalNo(a.tenantId!, tahun, bulan, susutPrefix);
+        try {
+          await client.query('BEGIN');
+          const je = await client.query(
+            `INSERT INTO journal_entries (tenant_id, tanggal, bulan, tahun, no_jurnal, keterangan, referensi, isposted, created_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8) RETURNING id`,
+            [a.tenantId, tanggal, bulan, tahun, noJurnal, keterangan, deprRef, now]
+          );
+          await client.query(
+            `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit)
+             VALUES ($1,$2,$3,0), ($1,$4,0,$3)`,
+            [je.rows[0].id, bebanAcc.rows[0].id, aktualSusut, akumAcc.rows[0].id]
+          );
+          await client.query(
+            `UPDATE fixed_assets SET akumulasi_penyusutan = COALESCE(akumulasi_penyusutan, 0) + $1, updated_at = $2 WHERE id = $3 AND tenant_id = $4`,
+            [aktualSusut, now, as.id, a.tenantId]
+          );
+          await client.query('COMMIT');
+          results.push({ nama: as.nama, noJurnal, susut: aktualSusut, ok: true });
+          success = true;
+        } catch (e: any) {
+          await client.query('ROLLBACK');
+          if (e.code === '23505' && attempt < MAX_RETRIES - 1) {
+            continue; // no_jurnal collision, retry with new number
+          }
+          const msg = e.code === '23505' ? 'Duplikat no_jurnal — gagal setelah 3 percobaan' : e.message || 'Error database';
+          results.push({ nama: as.nama, susut: aktualSusut, ok: false, error: msg });
+          success = true; // stop retrying
+        }
       }
+      client.release();
     }
 
     const success = results.filter(r => r.ok).length;
@@ -2494,49 +2500,55 @@ export async function accountingRoutes(app: FastifyInstance) {
         const aktualSusut = Math.min(susut, Math.max(0, nilaiTersisa));
         if (aktualSusut <= 0) continue;
 
-        // Proteksi: cek apakah sudah didepresiasi bulan ini
-        const lastDayOfMonth = new Date(tahun, bulan, 0).getDate();
+        // Proteksi: cek apakah sudah didepresiasi bulan ini (by asset_id)
+        const deprRef = `ASSET_DEPR:${as.id}`;
         const existingJe = await pool.query(
-          `SELECT id FROM journal_entries
-           WHERE tenant_id=$1 AND tanggal >= $2 AND tanggal <= $3
-             AND keterangan LIKE $4 AND tipetransaksi IS DISTINCT FROM 'CLOSING'`,
-          [t.id, `${tahun}-${String(bulan).padStart(2, '0')}-01`, `${tahun}-${String(bulan).padStart(2, '0')}-${lastDayOfMonth}`, `Penyusutan ${as.nama}%`]
+          `SELECT id, no_jurnal FROM journal_entries
+           WHERE tenant_id=$1 AND tahun=$2 AND bulan=$3 AND referensi=$4`,
+          [t.id, tahun, bulan, deprRef]
         );
         if (existingJe.rowCount && existingJe.rowCount > 0) {
-          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, skip: 'sudah didepresiasi' });
+          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, skip: `sudah didepresiasi (${existingJe.rows[0].no_jurnal})` });
           continue;
         }
 
         const bulanKe = Math.floor((Number(as.akumulasi_penyusutan) / susut)) + 1;
         const keterangan = `Penyusutan ${as.nama} - Bulan ke-${bulanKe}`;
-        const noJurnal = await nextJurnalNo(t.id, tahun, bulan, susutPrefix);
 
+        // Concurrency-safe: retry on no_jurnal collision
         const client = await pool.connect();
-        try {
-          await client.query('BEGIN');
-          const je = await client.query(
-            `INSERT INTO journal_entries (tenant_id, tanggal, bulan, tahun, no_jurnal, keterangan, isposted, created_at)
-             VALUES ($1,$2,$3,$4,$5,$6,true,$7) RETURNING id`,
-            [t.id, tanggal, bulan, tahun, noJurnal, keterangan, now]
-          );
-          await client.query(
-            `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit)
-             VALUES ($1,$2,$3,0), ($1,$4,0,$3)`,
-            [je.rows[0].id, bebanAcc.rows[0].id, aktualSusut, akumAcc.rows[0].id]
-          );
-          await client.query(
-            `UPDATE fixed_assets SET akumulasi_penyusutan = COALESCE(akumulasi_penyusutan, 0) + $1, updated_at = $2 WHERE id = $3 AND tenant_id = $4`,
-            [aktualSusut, now, as.id, t.id]
-          );
-          await client.query('COMMIT');
-          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, noJurnal, susut: aktualSusut });
-        } catch (e: any) {
-          await client.query('ROLLBACK');
-          const msg = e.code === '23505' ? 'Duplikat no_jurnal' : e.message;
-          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, error: msg });
-        } finally {
-          client.release();
+        const MAX_RETRIES = 3;
+        let ok = false;
+        for (let attempt = 0; attempt < MAX_RETRIES && !ok; attempt++) {
+          const noJurnal = await nextJurnalNo(t.id, tahun, bulan, susutPrefix);
+          try {
+            await client.query('BEGIN');
+            const je = await client.query(
+              `INSERT INTO journal_entries (tenant_id, tanggal, bulan, tahun, no_jurnal, keterangan, referensi, isposted, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8) RETURNING id`,
+              [t.id, tanggal, bulan, tahun, noJurnal, keterangan, deprRef, now]
+            );
+            await client.query(
+              `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit)
+               VALUES ($1,$2,$3,0), ($1,$4,0,$3)`,
+              [je.rows[0].id, bebanAcc.rows[0].id, aktualSusut, akumAcc.rows[0].id]
+            );
+            await client.query(
+              `UPDATE fixed_assets SET akumulasi_penyusutan = COALESCE(akumulasi_penyusutan, 0) + $1, updated_at = $2 WHERE id = $3 AND tenant_id = $4`,
+              [aktualSusut, now, as.id, t.id]
+            );
+            await client.query('COMMIT');
+            allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, noJurnal, susut: aktualSusut });
+            ok = true;
+          } catch (e: any) {
+            await client.query('ROLLBACK');
+            if (e.code === '23505' && attempt < MAX_RETRIES - 1) continue;
+            const msg = e.code === '23505' ? 'Duplikat no_jurnal — gagal setelah retry' : e.message;
+            allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, error: msg });
+            ok = true;
+          }
         }
+        client.release();
       }
     }
     return { ran: now.toISOString(), total: allResults.length, results: allResults };
