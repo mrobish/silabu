@@ -3009,6 +3009,9 @@ export async function accountingRoutes(app: FastifyInstance) {
         message: `Tutup buku ${year} berhasil. Laba bersih Rp ${labaBersih.toLocaleString('id-ID')}${totalPrive > 0 ? `, Prive Rp ${totalPrive.toLocaleString('id-ID')}` : ''} → Saldo Laba Rp ${netToSaldoLaba.toLocaleString('id-ID')}.`,
       };
     } catch (e: any) {
+      // Rollback aborted transaction first (safe even if already aborted)
+      await client.query('ROLLBACK').catch(() => {});
+      
       // Safety net: catch unique constraint violation on no_jurnal
       if (e.code === '23505' && e.constraint?.includes('no_jurnal')) {
         // Double-submit caught by unique constraint → try to return idempotent response
@@ -3041,7 +3044,6 @@ export async function accountingRoutes(app: FastifyInstance) {
           code: 'CLOSING_DUPLICATE',
         });
       }
-      await client.query('ROLLBACK').catch(() => {});
       return reply.code(500).send({ error: e.message });
     } finally {
       client.release();

@@ -90,10 +90,11 @@ describe('config.ts — fail-fast validation', () => {
       expect(ENCRYPTION_KEY).toHaveLength(32);
     });
 
-    it('warns if ENCRYPTION_KEY === JWT_SECRET', async () => {
+    it('warns if ENCRYPTION_KEY === JWT_SECRET (non-production)', async () => {
       const secret = 'a'.repeat(64);
       process.env.JWT_SECRET = secret;
       process.env.ENCRYPTION_KEY = secret;
+      process.env.NODE_ENV = 'test'; // Ensure warn path, not throw path
       
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
@@ -104,6 +105,17 @@ describe('config.ts — fail-fast validation', () => {
       );
       
       consoleSpy.mockRestore();
+    });
+
+    it('throws if ENCRYPTION_KEY === JWT_SECRET in production', async () => {
+      const secret = 'a'.repeat(64);
+      process.env.JWT_SECRET = secret;
+      process.env.ENCRYPTION_KEY = secret;
+      process.env.NODE_ENV = 'production';
+      
+      await expect(import('./config.js')).rejects.toThrow(
+        'ENCRYPTION_KEY tidak boleh sama dengan JWT_SECRET'
+      );
     });
 
     it('does NOT warn if ENCRYPTION_KEY !== JWT_SECRET', async () => {
