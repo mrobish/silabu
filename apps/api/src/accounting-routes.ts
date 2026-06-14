@@ -3,6 +3,7 @@ import { pool } from './db.js';
 import { requireTenant, requireActiveTrial, type AuthPayload } from './guards.js';
 import { seedDefaultCoa } from './coa-seed.js';
 import { validateJournalBalance, validateJournalLine } from './utils/journal-balance.js';
+import { parseYmdStrict, compareYmd, isValidYmd } from './utils/date-helpers.js';
 import ExcelJS from 'exceljs';
 
 const tenantGuard = { onRequest: [requireTenant] };
@@ -29,6 +30,7 @@ async function checkPeriodLock(tenantId: string, tahun: number): Promise<void> {
  *  2. MAX(tanggal) dari kedua tipe → handle multi-tahun (2025 & 2026)
  *  3. NULL safe → BUM Desa baru tanpa saldo awal lolos semua
  *  4. CLOSING pakai <= (31 Des ditutup), OPENING_BALANCE pakai < (1 Jan lolos)
+ *  5. Tanggal input WAJIB format YYYY-MM-DD (strict, reject "2025-9-05")
  */
 async function checkCutoffDate(
   tenantId: string,
@@ -39,31 +41,37 @@ async function checkCutoffDate(
   const bypassTypes = ['OPENING_BALANCE', 'CLOSING'];
   if (opts?.tipetransaksi && bypassTypes.includes(opts.tipetransaksi)) return;
 
-  // ② Query MAX gabungan — cari cutoff terbaru dari kedua tipe
+  // ② Strict validate tanggal format — reject "2025-9-05", "2025/09/05", "2025-02-30"
+  parseYmdStrict(tanggal); // throws if invalid → caller should catch and return 400
+
+  // ③ Query MAX gabungan — cari cutoff terbaru dari kedua tipe
   const r = await pool.query(
     `SELECT tanggal AS cutoff, tipetransaksi AS cutoff_type
      FROM journal_entries
      WHERE tenant_id=$1 AND tipetransaksi IN ('OPENING_BALANCE','CLOSING')
      ORDER BY tanggal DESC LIMIT 1`,
-    [tenantId]
+    [tenantId],
   );
-  if (!r.rows.length) return; // ③ NULL = belum ada apa-apa → loloskan semua
+  if (!r.rows.length) return; // ④ NULL = belum ada apa-apa → loloskan semua
 
   const row = r.rows[0] as any;
-  const cutoff: string = row.cutoff;
+  const cutoff: string = row.cutoff instanceof Date
+    ? row.cutoff.toISOString().slice(0, 10)
+    : String(row.cutoff);
   const cutoffType: string = row.cutoff_type;
 
-  // ④ Logika pemblokiran:
+  // ⑤ Logika pemblokiran menggunakan compareYmd (integer comparison, bukan string)
   //    CLOSING (31 Des 2025) → blokir <= 31 Des (tahun sudah tutup, tidak bisa input lagi)
   //    OPENING_BALANCE (1 Jan 2026) → blokir < 1 Jan (1 Jan sendiri masih boleh)
+  const cmp = compareYmd(tanggal, cutoff);
   const blocked = cutoffType === 'CLOSING'
-    ? tanggal <= cutoff   // Tutup Buku: termasuk tanggal closing
-    : tanggal < cutoff;   // Saldo Awal: sebelum tanggal opening
+    ? cmp <= 0   // Tutup Buku: termasuk tanggal closing
+    : cmp < 0;   // Saldo Awal: sebelum tanggal opening
 
   if (blocked) {
     throw Object.assign(
       new Error(`Transaksi ditolak. Anda tidak bisa memasukkan transaksi pada periode yang sudah ditutup (sebelum ${cutoff}).`),
-      { statusCode: 422 }
+      { statusCode: 422 },
     );
   }
 }
@@ -880,6 +888,9 @@ export async function accountingRoutes(app: FastifyInstance) {
     const tglStr = (entry.tanggal instanceof Date ? entry.tanggal.toISOString().slice(0,10) : String(entry.tanggal));
     await checkPeriodLock(a.tenantId!, parseInt(tglStr.slice(0,4), 10));
 
+    // 3b. CUTOFF CHECK — blokir delete jika tanggal entry <= cutoff
+    await checkCutoffDate(a.tenantId!, tglStr);
+
     // 4. Atomic: BEGIN → hapus lines → hapus entry → COMMIT
     const client = await pool.connect();
     try {
@@ -1148,14 +1159,56 @@ export async function accountingRoutes(app: FastifyInstance) {
     };
   });
 
-  // GET /accounting/cutoff-date — tanggal cutoff akuntansi (OPENING_BALANCE tanggal)
+  // GET /accounting/cutoff-date — tanggal cutoff akuntansi (OPENING + CLOSING)
   app.get('/cutoff-date', tenantGuard, async (req: FastifyRequest) => {
     const a = (req as any).auth as AuthPayload;
     const r = await pool.query(
-      `SELECT tanggal FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE' LIMIT 1`,
+      `SELECT tanggal, tipetransaksi
+       FROM journal_entries
+       WHERE tenant_id=$1 AND tipetransaksi IN ('OPENING_BALANCE', 'CLOSING')
+       ORDER BY tanggal DESC`,
       [a.tenantId]
     );
-    return { cutoff: r.rows.length ? (r.rows[0] as any).tanggal : null };
+
+    let openingCutoff: string | null = null;
+    let closingCutoff: string | null = null;
+
+    for (const row of r.rows as any[]) {
+      const tgl = row.tanggal instanceof Date ? row.tanggal.toISOString().slice(0, 10) : String(row.tanggal);
+      if (row.tipetransaksi === 'OPENING_BALANCE' && !openingCutoff) openingCutoff = tgl;
+      if (row.tipetransaksi === 'CLOSING' && !closingCutoff) closingCutoff = tgl;
+    }
+
+    // Effective cutoff = the one that blocks the most (latest date)
+    let effectiveCutoff: string | null = null;
+    let cutoffType: string | null = null;
+
+    if (openingCutoff && closingCutoff) {
+      // Both exist — compare and pick the later one
+      const cmp = compareYmd(openingCutoff, closingCutoff);
+      if (cmp >= 0) {
+        effectiveCutoff = openingCutoff;
+        cutoffType = 'OPENING_BALANCE';
+      } else {
+        effectiveCutoff = closingCutoff;
+        cutoffType = 'CLOSING';
+      }
+    } else if (openingCutoff) {
+      effectiveCutoff = openingCutoff;
+      cutoffType = 'OPENING_BALANCE';
+    } else if (closingCutoff) {
+      effectiveCutoff = closingCutoff;
+      cutoffType = 'CLOSING';
+    }
+
+    return {
+      openingCutoff,
+      closingCutoff,
+      effectiveCutoff,
+      cutoffType,
+      // Backward compatibility
+      cutoff: effectiveCutoff,
+    };
   });
 
   // POST /accounting/saldo-awal/post — post saldo awal (set status to POSTED, prevent editing)
@@ -2821,13 +2874,15 @@ export async function accountingRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'Nominal harus lebih dari 0' });
     }
 
-    // Parse tanggal
-    const [tahunStr, bulanStr] = tanggal.split('-');
-    const tahun = parseInt(tahunStr, 10);
-    const bulan = parseInt(bulanStr, 10);
-    if (isNaN(tahun) || isNaN(bulan)) {
-      return reply.code(400).send({ error: 'Format tanggal tidak valid' });
+    // Parse tanggal (strict YYYY-MM-DD validation)
+    let parsedDate;
+    try {
+      parsedDate = parseYmdStrict(tanggal);
+    } catch (e: any) {
+      return reply.code(400).send({ error: e.message });
     }
+    const tahun = parsedDate.year;
+    const bulan = parsedDate.month;
 
     // Determine target akun based on transaction type
     let targetAkunKode = '';
@@ -3126,13 +3181,15 @@ export async function accountingRoutes(app: FastifyInstance) {
     const kasAkunId = b.kas_akun_id as string;
     const keterangan = b.keterangan || 'Penjualan POS';
 
-    // Parse tanggal
-    const [tahunStr, bulanStr] = tanggal.split('-');
-    const tahun = parseInt(tahunStr, 10);
-    const bulan = parseInt(bulanStr, 10);
-    if (isNaN(tahun) || isNaN(bulan)) {
-      return reply.code(400).send({ error: 'Format tanggal tidak valid' });
+    // Parse tanggal (strict YYYY-MM-DD validation)
+    let parsedDate;
+    try {
+      parsedDate = parseYmdStrict(tanggal);
+    } catch (e: any) {
+      return reply.code(400).send({ error: e.message });
     }
+    const tahun = parsedDate.year;
+    const bulan = parsedDate.month;
 
     // Validate kas akun
     const kasRes = await pool.query(

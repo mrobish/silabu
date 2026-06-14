@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
 import { apiFetch } from '../utils/apiFetch';
+import { useCutoffDate } from '../hooks/useCutoffDate';
 
 // ─── Types ───────────────────────────────────────────────────
 type CoAAccount = {
@@ -588,6 +589,18 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
   const [tourStep, setTourStep] = useState(-1); // -1 = not active
   const [showConfetti, setShowConfetti] = useState(false);
 
+  // Cutoff date for locked period
+  const cutoffDate = useCutoffDate();
+
+  // Check if entry tanggal is before/at cutoff (locked period)
+  function isEntryLocked(entryTanggal: string): boolean {
+    if (!cutoffDate) return false;
+    // Use simple string comparison here — both dates come from DB in YYYY-MM-DD format
+    // Backend is the source of truth; this is just for UI convenience
+    const tgl = entryTanggal?.slice(0, 10) || '';
+    return tgl <= cutoffDate;
+  }
+
   const TOUR_KEY = 'silabu-tour-jurnal-seen';
   const TOUR_STEPS = [
     { target: '[data-tour="master-header"]', title: '📍 Cukup Isi Sekali', text: 'Masukkan Tanggal, No. Bukti, dan Keterangan di sini untuk seluruh rincian transaksi di bawahnya.' },
@@ -1057,6 +1070,12 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
         setError('Jurnal ini (' + j.tipeTransaksi + ') hanya bisa diubah dari modul terkait.');
         return;
       }
+      // Check cutoff date — don't allow editing entries in locked period
+      const entryTanggal = (j.tanggal || '').slice(0, 10);
+      if (isEntryLocked(entryTanggal)) {
+        setError('Jurnal ini berada di periode yang sudah ditutup dan tidak dapat diedit.');
+        return;
+      }
       setEditingId(String(entryId));
       setEditHeader({
         tanggal: (j.tanggal || '').slice(0, 10),
@@ -1172,6 +1191,12 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
   // ── Delete ──────────────────────────────────────────────
   async function handleDelete() {
     if (!deleteModal) return;
+    // Check cutoff date
+    if (isEntryLocked(deleteModal.tanggal?.slice(0, 10) || '')) {
+      setError('Jurnal ini berada di periode yang sudah ditutup dan tidak dapat dihapus.');
+      setDeleteModal(null);
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -1615,8 +1640,9 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
                     const noJurnal = e.no_jurnal || (e as any).noJurnal || '';
                     const rowTotal = Number((e as any).total) || ((e as any).lines || []).reduce((s: number, l: any) => s + Number(l.debit || 0), 0);
                     const isOpening = noJurnal.startsWith('OB') || (e as any).tipeTransaksi === 'OPENING_BALANCE';
+                    const locked = isEntryLocked(e.tanggal || '');
                     return (
-                      <tr key={e.id} className={'transition ' + (editingId === String(e.id) ? 'bg-amber-50/60' : 'hover:bg-slate-50/50')}>
+                      <tr key={e.id} className={'transition ' + (locked ? 'opacity-60' : '') + (editingId === String(e.id) ? ' bg-amber-50/60' : ' hover:bg-slate-50/50')}>
                         <td className="px-5 py-3 font-mono text-xs font-semibold text-emerald-700">{noJurnal}</td>
                         <td className="px-5 py-3 text-slate-600">{formatDate(e.tanggal)}</td>
                         <td className="px-5 py-3 text-slate-900">{e.keterangan || '-'}</td>
@@ -1624,6 +1650,8 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
                         <td className="px-5 py-3">
                           {isOpening ? (
                             <span className="block text-center text-xs text-slate-400 italic" title="Saldo Awal hanya bisa diubah dari modul Saldo Awal">Saldo Awal</span>
+                          ) : locked ? (
+                            <span className="flex items-center justify-center gap-1 text-xs text-slate-400" title="Periode terkunci — tidak dapat diedit atau dihapus">🔒 Periode terkunci</span>
                           ) : (
                             <div className="flex items-center justify-center gap-2">
                               <button type="button" onClick={() => startEdit(e.id)}
