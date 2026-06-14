@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 type TenantProfile = {
   nama_bumdes: string;
@@ -41,55 +41,231 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
     if (!printAreaRef.current) return;
     setGenerating(true);
     try {
-      const el = printAreaRef.current;
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const isLandscape = landscape;
       const pdf = new jsPDF({
-        orientation: isLandscape ? 'landscape' : 'portrait',
+        orientation: landscape ? 'landscape' : 'portrait',
         unit: 'mm',
         format: 'a4',
       });
-      const pageW = isLandscape ? 297 : 210;
-      const pageH = isLandscape ? 210 : 297;
-      const margin = 10;
-      const contentW = pageW - margin * 2;
-      const imgH = (canvas.height * contentW) / canvas.width;
 
-      // If content fits on one page
-      if (imgH <= pageH - margin * 2) {
-        pdf.addImage(imgData, 'PNG', margin, margin, contentW, imgH);
-      } else {
-        // Multi-page: slice canvas
-        const pageContentH = pageH - margin * 2;
-        const pxPerMm = canvas.width / contentW;
-        const slicePxH = Math.floor(pageContentH * pxPerMm);
-        let y = 0;
-        let page = 0;
-        while (y < canvas.height) {
-          if (page > 0) pdf.addPage();
-          const sliceCanvas = document.createElement('canvas');
-          sliceCanvas.width = canvas.width;
-          sliceCanvas.height = Math.min(slicePxH, canvas.height - y);
-          const ctx = sliceCanvas.getContext('2d')!;
-          ctx.drawImage(canvas, 0, y, canvas.width, sliceCanvas.height, 0, 0, canvas.width, sliceCanvas.height);
-          const sliceData = sliceCanvas.toDataURL('image/png');
-          const sliceH = (sliceCanvas.height * contentW) / canvas.width;
-          pdf.addImage(sliceData, 'PNG', margin, margin, contentW, sliceH);
-          y += slicePxH;
-          page++;
+      const pageW = landscape ? 297 : 210;
+      const pageH = landscape ? 210 : 297;
+      const margin = 15;
+      const contentW = pageW - margin * 2;
+      let y = margin;
+
+      // Helper: add text with auto-wrap
+      const addText = (text: string, fontSize: number, style: 'normal' | 'bold' = 'normal', align: 'left' | 'center' | 'right' = 'left', color: [number, number, number] = [30, 41, 59]) => {
+        pdf.setFontSize(fontSize);
+        pdf.setFont('helvetica', style);
+        pdf.setTextColor(color[0], color[1], color[2]);
+        const lines = pdf.splitTextToSize(text, contentW);
+        lines.forEach((line: string) => {
+          if (y > pageH - margin - 10) {
+            pdf.addPage();
+            y = margin;
+          }
+          if (align === 'center') {
+            pdf.text(line, pageW / 2, y, { align: 'center' });
+          } else if (align === 'right') {
+            pdf.text(line, pageW - margin, y, { align: 'right' });
+          } else {
+            pdf.text(line, margin, y);
+          }
+          y += fontSize * 0.45;
+        });
+      };
+
+      const addGap = (mm: number) => { y += mm; };
+      const addLine = (thickness: number = 0.5) => {
+        if (y > pageH - margin - 10) { pdf.addPage(); y = margin; }
+        pdf.setDrawColor(30, 41, 59);
+        pdf.setLineWidth(thickness);
+        pdf.line(margin, y, pageW - margin, y);
+        y += 2;
+      };
+
+      // === KOP SURAT ===
+      const namaBumdes = tenant?.nama_bumdes || 'BUM DESA';
+      addText(namaBumdes.toUpperCase(), 16, 'bold', 'center', [15, 23, 42]);
+      addGap(2);
+      const alamat = tenant
+        ? `${tenant.desa || ''}, Kec. ${tenant.kecamatan || ''}, ${tenant.kabupaten || ''}`
+        : '';
+      addText(alamat, 9, 'normal', 'center', [100, 116, 139]);
+      if (tenant?.telpon) {
+        addText(`Telp. ${tenant.telpon}`, 8, 'normal', 'center', [148, 163, 184]);
+      }
+      addGap(4);
+      addLine(0.8);
+      addLine(1.2);
+      addGap(4);
+
+      // === JUDUL ===
+      addText(title.toUpperCase(), 12, 'bold', 'center', [15, 23, 42]);
+      if (periodLabel) {
+        addGap(1);
+        addText(periodLabel, 9, 'normal', 'center', [71, 85, 105]);
+      }
+      addGap(1);
+      addText('(Dalam Rupiah)', 8, 'normal', 'center', [148, 163, 184]);
+      addGap(6);
+
+      // === Parse content from DOM ===
+      const bodyEl = printAreaRef.current.querySelector('.print-body');
+      if (bodyEl) {
+        // Look for tables first
+        const tables = bodyEl.querySelectorAll('table');
+        if (tables.length > 0) {
+          tables.forEach(table => {
+            const headers: string[][] = [];
+            const rows: string[][] = [];
+
+            table.querySelectorAll('thead tr').forEach(tr => {
+              const row: string[] = [];
+              tr.querySelectorAll('th').forEach(th => row.push(th.textContent?.trim() || ''));
+              if (row.length > 0) headers.push(row);
+            });
+
+            table.querySelectorAll('tbody tr').forEach(tr => {
+              const row: string[] = [];
+              tr.querySelectorAll('td').forEach(td => row.push(td.textContent?.trim() || ''));
+              if (row.length > 0) rows.push(row);
+            });
+
+            // If no thead, treat first row as header
+            if (headers.length === 0 && rows.length > 0) {
+              headers.push(rows.shift()!);
+            }
+
+            autoTable(pdf, {
+              head: headers,
+              body: rows,
+              startY: y,
+              margin: { left: margin, right: margin },
+              styles: {
+                fontSize: 9,
+                cellPadding: 2,
+                textColor: [30, 41, 59],
+                lineColor: [203, 213, 225],
+                lineWidth: 0.1,
+              },
+              headStyles: {
+                fillColor: [241, 245, 249],
+                textColor: [15, 23, 42],
+                fontStyle: 'bold',
+                fontSize: 9,
+              },
+              alternateRowStyles: {
+                fillColor: [248, 250, 252],
+              },
+              columnStyles: headers[0]?.reduce((acc, _, i) => {
+                // Right-align last column (usually amounts)
+                if (i === headers[0].length - 1) {
+                  acc[i] = { halign: 'right', fontStyle: 'normal' };
+                }
+                return acc;
+              }, {} as Record<number, any>) || {},
+              didParseCell: (data) => {
+                // Bold for rows containing "Modal Akhir", "TOTAL", "Laba Bersih", etc.
+                const cellText = data.cell.raw?.toString() || '';
+                if (cellText.includes('Modal Akhir') || cellText.includes('TOTAL') || cellText.includes('Laba Bersih') || cellText.includes('Modal Awal')) {
+                  data.cell.styles.fontStyle = 'bold';
+                }
+                // Highlight summary rows
+                if (cellText.includes('Modal Akhir')) {
+                  data.cell.styles.fillColor = [209, 250, 229];
+                  data.cell.styles.textColor = [5, 46, 22];
+                }
+                // Red for negative amounts
+                if (data.section === 'body' && data.column.index === data.table.columns.length - 1) {
+                  const val = cellText.replace(/[^\d,-]/g, '');
+                  if (val.startsWith('-') || val.startsWith('(') || cellText.includes('(Rp')) {
+                    data.cell.styles.textColor = [220, 38, 38];
+                  }
+                }
+              },
+            });
+            y = (pdf as any).lastAutoTable?.finalY + 6 || y + 20;
+          });
+        } else {
+          // No table — render as text
+          const textContent = bodyEl.textContent || '';
+          textContent.split('\n').forEach(line => {
+            const trimmed = line.trim();
+            if (!trimmed) { addGap(3); return; }
+            if (trimmed.includes('TOTAL') || trimmed.includes('Modal Akhir') || trimmed.includes('Modal Awal')) {
+              addText(trimmed, 10, 'bold');
+            } else {
+              addText(trimmed, 9);
+            }
+            addGap(1);
+          });
         }
       }
+
+      // === SIGNATURE ===
+      addGap(15);
+      const sigY = y;
+      const sigColW = contentW * 0.42;
+      const sigLeftX = margin;
+      const sigRightX = pageW - margin - sigColW;
+      const sigCenterGap = margin + contentW * 0.5;
+
+      // Left signature
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(100, 116, 139);
+      pdf.text('Mengetahui,', sigLeftX, sigY);
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(30, 41, 59);
+      pdf.text('DIREKTUR', sigLeftX, sigY + 5);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(71, 85, 105);
+      pdf.text(namaBumdes, sigLeftX, sigY + 9);
+
+      // Signature line left
+      pdf.setDrawColor(30, 41, 59);
+      pdf.setLineWidth(0.3);
+      pdf.line(sigLeftX, sigY + 24, sigLeftX + sigColW, sigY + 24);
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(30, 41, 59);
+      pdf.text(namaDirektur || '________________', sigLeftX, sigY + 28);
+
+      // Right signature
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(100, 116, 139);
+      pdf.text(tglCetak, sigRightX, sigY);
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(30, 41, 59);
+      pdf.text('BENDAHARA', sigRightX, sigY + 5);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(71, 85, 105);
+      pdf.text(namaBumdes, sigRightX, sigY + 9);
+
+      // Signature line right
+      pdf.line(sigRightX, sigY + 24, sigRightX + sigColW, sigY + 24);
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(30, 41, 59);
+      pdf.text(namaBendahara || '________________', sigRightX, sigY + 28);
+
+      // === BRANDING ===
+      y = Math.max(sigY + 38, y + 10);
+      if (y > pageH - margin) { pdf.addPage(); y = margin; }
+      pdf.setFontSize(7);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(148, 163, 184);
+      pdf.text('Dicetak dengan SILABU DIGI — Sistem Akuntansi BUM Desa', pageW / 2, y, { align: 'center' });
+
+      // Save
       const fileName = `${title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
       pdf.save(fileName);
     } catch (err) {
       console.error('PDF generation failed:', err);
-      // Fallback to window.print()
       window.print();
     } finally {
       setGenerating(false);
@@ -214,7 +390,6 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
               <div className="mt-8 mb-4">
                 <table style={{ width: '90%', margin: '0 auto' }}>
                   <tbody>
-                    {/* Baris 1: Label kiri & tanggal kanan — sejajar */}
                     <tr>
                       <td className="text-center" style={{ width: '42%', verticalAlign: 'top' }}>
                         <p className="text-[11px] text-slate-600">Mengetahui,</p>
@@ -225,7 +400,6 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
                           value={tglCetak} onChange={e => setTglCetak(e.target.value)} />
                       </td>
                     </tr>
-                    {/* Baris 2: Jabatan — DIREKTUR & BENDAHARA sejajar */}
                     <tr>
                       <td className="text-center" style={{ verticalAlign: 'top' }}>
                         <p className="text-[11px] font-bold text-slate-800 mt-0.5">DIREKTUR</p>
@@ -237,7 +411,6 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
                         <p className="text-[11px] text-slate-700">{tenant?.nama_bumdes || 'BUM Desa'}</p>
                       </td>
                     </tr>
-                    {/* Baris 3: Ruang tanda tangan — sama tinggi */}
                     <tr>
                       <td className="text-center" style={{ paddingTop: '56px', verticalAlign: 'bottom' }}>
                         <input type="text" className="print-input"
