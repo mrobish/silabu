@@ -5,6 +5,7 @@ import { seedDefaultCoa } from './coa-seed.js';
 import { validateJournalBalance, validateJournalLine } from './utils/journal-balance.js';
 import { parseYmdStrict, compareYmd, isValidYmd } from './utils/date-helpers.js';
 import { parseMoneyStrict, dbNumericToCents, MAX_AMOUNT } from './utils/money-helpers.js';
+import { calculateHppCents, validateHppNotZero } from './utils/hpp-helpers.js';
 import ExcelJS from 'exceljs';
 
 const tenantGuard = { onRequest: [requireTenant] };
@@ -3067,8 +3068,8 @@ export async function accountingRoutes(app: FastifyInstance) {
             if (!pendAkun) return reply.code(400).send({ error: 'Akun Pendapatan Penjualan tidak ditemukan. Aktifkan akun di Golongan 4.' });
             if (!hppAkun) return reply.code(400).send({ error: 'Akun HPP tidak ditemukan. Aktifkan akun di Golongan 5.' });
 
-            // Calculate HPP (moving average) from inventory
-            let hppPerUnit = 0;
+            // Calculate HPP (moving average) from inventory — FIX #12 (M6): integer cents
+            let hppTotalStr = '0';
             if (inventoryItemId) {
               const hppRes = await pool.query(
                 `SELECT COALESCE(SUM(jl.debit), 0) AS total_cost,
@@ -3080,18 +3081,28 @@ export async function accountingRoutes(app: FastifyInstance) {
               );
               const totalCost = Number(hppRes.rows[0].total_cost) || 0;
               const totalQty = Number(hppRes.rows[0].total_qty) || 0;
-              hppPerUnit = totalQty > 0 ? Math.round(totalCost / totalQty) : 0;
+
+              if (totalQty <= 0 || totalCost < 0) {
+                return reply.code(400).send({
+                  error: `Data persediaan tidak valid: totalCost=${totalCost}, totalQty=${totalQty}. Periksa data persediaan masuk.`,
+                });
+              }
+
+              if (totalQty > 0 && totalCost > 0) {
+                const hppResult = calculateHppCents(totalCost, totalQty, qty || 1);
+                validateHppNotZero(hppResult.hppTotalCents, desc || 'item');
+                hppTotalStr = hppResult.hppTotalStr;
+              }
             }
-            const hppTotal = hppPerUnit * (qty || 1);
 
             // Line 1: Kas (D) — harga jual
             line1AkunId = sumberAkunId; line1Debit = nominalStr; line1Kredit = '0';
             // Line 2: Pendapatan (K) — harga jual
             line2AkunId = pendAkun.id; line2Debit = '0'; line2Kredit = nominalStr;
             // Line 3: HPP (D) — harga modal
-            extraLines.push({ akunId: hppAkun.id, debit: String(hppTotal), kredit: '0', ket: 'HPP ' + desc, invId: null, qty: null });
+            extraLines.push({ akunId: hppAkun.id, debit: hppTotalStr, kredit: '0', ket: 'HPP ' + desc, invId: null, qty: null });
             // Line 4: Persediaan (K) — harga modal + qty
-            extraLines.push({ akunId: targetAkun.id, debit: '0', kredit: String(hppTotal), ket: 'HPP ' + desc, invId: inventoryItemId || null, qty: qty ? String(qty) : null });
+            extraLines.push({ akunId: targetAkun.id, debit: '0', kredit: hppTotalStr, ket: 'HPP ' + desc, invId: inventoryItemId || null, qty: qty ? String(qty) : null });
           }
           break;
       }
@@ -3263,17 +3274,22 @@ export async function accountingRoutes(app: FastifyInstance) {
       qty: number;
       harga_jual: number;
       hpp: number;
+      hpp_total_cents: number; // FIX #12: track cents for journal lines
       stok_sekarang: number;
       stok_sesudah: number;
       is_negative: boolean;
     }> = [];
 
     let totalPenjualan = 0;
-    let totalHpp = 0;
+    let totalHppCents = 0; // FIX #12: accumulate in cents
 
     for (const item of b.items) {
       if (!item.inventory_item_id || !item.qty || item.qty <= 0 || !item.harga_jual || item.harga_jual <= 0) {
         return reply.code(400).send({ error: 'Setiap item wajib memiliki inventory_item_id, qty > 0, dan harga_jual > 0' });
+      }
+      // FIX #12: Validate qty is integer (BUMDes sells by unit, not decimal)
+      if (!Number.isInteger(item.qty) || !Number.isFinite(item.qty)) {
+        return reply.code(400).send({ error: `qty harus bilangan bulat positif, diterima: ${item.qty}` });
       }
 
       // Get item name
@@ -3297,7 +3313,7 @@ export async function accountingRoutes(app: FastifyInstance) {
       );
       const stokSekarang = Number(stockRes.rows[0].stok) || 0;
 
-      // Calculate HPP (moving average): total debit cost / total debit qty for this item
+      // Calculate HPP (moving average) from inventory — FIX #12 (M6): integer cents
       const hppRes = await pool.query(
         `SELECT
            COALESCE(SUM(jl.debit), 0) AS total_cost,
@@ -3309,7 +3325,23 @@ export async function accountingRoutes(app: FastifyInstance) {
       );
       const totalCost = Number(hppRes.rows[0].total_cost) || 0;
       const totalQty = Number(hppRes.rows[0].total_qty) || 0;
-      const hpp = totalQty > 0 ? Math.round(totalCost / totalQty) : 0;
+
+      // Calculate HPP using integer cents helper (no per-unit rounding)
+      let hpp = 0;
+      let hppTotalCents = 0;
+      if (totalQty > 0 && totalCost > 0) {
+        const hppResult = calculateHppCents(totalCost, totalQty, item.qty);
+        hpp = hppResult.hppPerUnitCents / 100; // for display/response
+        hppTotalCents = hppResult.hppTotalCents; // for journal lines
+
+        // Validate HPP > 0 for inventory items
+        validateHppNotZero(hppTotalCents, itemRes.rows[0].nama);
+      } else if (totalQty <= 0 || totalCost < 0) {
+        // Invalid inventory data — reject transaction
+        return reply.code(400).send({
+          error: `Data persediaan tidak valid untuk "${itemRes.rows[0].nama}": totalCost=${totalCost}, totalQty=${totalQty}. Periksa data persediaan masuk.`,
+        });
+      }
 
       const stokSesudah = stokSekarang - item.qty;
       const isNegative = stokSesudah < 0;
@@ -3320,15 +3352,17 @@ export async function accountingRoutes(app: FastifyInstance) {
         qty: item.qty,
         harga_jual: item.harga_jual,
         hpp,
+        hpp_total_cents: hppTotalCents, // FIX #12: track cents for journal lines
         stok_sekarang: stokSekarang,
         stok_sesudah: stokSesudah,
         is_negative: isNegative,
       });
 
       totalPenjualan += item.qty * item.harga_jual;
-      totalHpp += item.qty * hpp;
+      totalHppCents += hppTotalCents; // FIX #12: accumulate in cents
     }
 
+    const totalHpp = totalHppCents / 100; // Convert cents to Rupiah for response
     const labaKotor = totalPenjualan - totalHpp;
 
     await checkPeriodLock(a.tenantId!, tahun);
@@ -3354,7 +3388,9 @@ export async function accountingRoutes(app: FastifyInstance) {
       // Insert journal lines per item
       for (const detail of itemDetails) {
         const itemTotal = detail.qty * detail.harga_jual;
-        const itemHppTotal = detail.qty * detail.hpp;
+        // FIX #12: Use hppTotalCents from calculation (not qty * hpp rounded)
+        const itemHppCents = detail.hpp_total_cents ?? Math.round(detail.qty * detail.hpp * 100);
+        const itemHppStr = (itemHppCents / 100).toFixed(2);
 
         // Line 1: Debit Kas (aggregated per item selling price)
         await client.query(
@@ -3374,14 +3410,14 @@ export async function accountingRoutes(app: FastifyInstance) {
         await client.query(
           `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, inventory_item_id, qty)
            VALUES ($1,$2,$3,'0',$4,NULL,NULL)`,
-          [entryId, hppAkunId, String(itemHppTotal), `HPP ${detail.nama}`]
+          [entryId, hppAkunId, itemHppStr, `HPP ${detail.nama}`]
         );
 
         // Line 4: Kredit Persediaan (with inventory_item_id and qty)
         await client.query(
           `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, inventory_item_id, qty)
            VALUES ($1,$2,'0',$3,$4,$5,$6)`,
-          [entryId, persediaanAkunId, String(itemHppTotal), `HPP ${detail.nama}`, detail.inventory_item_id, String(detail.qty)]
+          [entryId, persediaanAkunId, itemHppStr, `HPP ${detail.nama}`, detail.inventory_item_id, String(detail.qty)]
         );
       }
 
@@ -3592,13 +3628,16 @@ export async function accountingRoutes(app: FastifyInstance) {
           continue;
         }
 
-        const hppPerUnitCents = Math.round((totalCost / totalQty) * 100);
+        // FIX #12: Use shared helper for consistent integer cents calculation
         const qtyToReduce = Number(rl.qty) || 1;
-        const hppTotalCents = hppPerUnitCents * Math.round(qtyToReduce);
-
-        if (hppTotalCents <= 0) {
+        let hppTotalCents = 0;
+        try {
+          const hppResult = calculateHppCents(totalCost, totalQty, Math.round(qtyToReduce));
+          hppTotalCents = hppResult.hppTotalCents;
+          validateHppNotZero(hppTotalCents, `baris ${rl.id}`);
+        } catch (e: any) {
           needsManualReview = true;
-          manualReviewReasons.push(`Baris ${rl.id}: HPP bernilai nol atau negatif`);
+          manualReviewReasons.push(`Baris ${rl.id}: ${e.message}`);
           continue;
         }
 
