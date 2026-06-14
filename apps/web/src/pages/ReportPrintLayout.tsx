@@ -86,6 +86,34 @@ export default function ReportPrintLayout({ children, title, isOpen, onClose, pe
 
       // === KOP SURAT ===
       const namaBumdes = tenant?.nama_bumdes || 'BUM DESA';
+
+      // Logo (if available)
+      if (tenant?.logo_url) {
+        try {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = () => reject(new Error('Logo load failed'));
+            img.src = tenant.logo_url!;
+          });
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth || 80;
+          canvas.height = img.naturalHeight || 80;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0);
+            const imgData = canvas.toDataURL('image/png');
+            const logoSize = 14; // mm
+            const logoX = (pageW - logoSize) / 2;
+            pdf.addImage(imgData, 'PNG', logoX, y, logoSize, logoSize);
+            y += logoSize + 2;
+          }
+        } catch {
+          // Logo failed to load — skip silently
+        }
+      }
+
       addText(namaBumdes.toUpperCase(), 16, 'bold', 'center', [15, 23, 42]);
       addGap(2);
       const alamat = tenant
