@@ -16,6 +16,7 @@ import {
   sortByGroupIndex,
   IDEMPOTENCY_WINDOW,
 } from './utils/batch-idempotency.js';
+import { postOpeningJournalAtomic } from './utils/opening-balance-posting.js';
 import ExcelJS from 'exceljs';
 
 const tenantGuard = { onRequest: [requireTenant] };
@@ -1068,12 +1069,13 @@ export async function accountingRoutes(app: FastifyInstance) {
   });
 
   // POST /accounting/saldo-awal — simpan saldo awal sebagai jurnal OPENING_BALANCE (sekali per tenant)
+  // Fix #17 (R5): Atomic with advisory lock + idempotent response
   app.post('/saldo-awal', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
     const body = req.body as any;
     if (!body) return reply.status(400).send({ error: 'Body request kosong' });
 
-    // Check if saldo awal is posted (locked)
+    // Pre-transaction validation (non-sensitive)
     const statusCheck = await pool.query(
       `SELECT status_saldo_awal FROM tenants WHERE id = $1`,
       [a.tenantId]
@@ -1100,15 +1102,6 @@ export async function accountingRoutes(app: FastifyInstance) {
 
     // OPENING_BALANCE tanggal = 1 Januari tahun pembukuan (bukan tanggal input user)
     const obTanggal = `${tahun}-01-01`;
-
-    // Block duplicate — opening balance only once per tenant
-    const existing = await pool.query(
-      `SELECT id FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE' LIMIT 1`,
-      [a.tenantId]
-    );
-    if (existing.rowCount) {
-      return reply.status(400).send({ error: 'Saldo awal sudah pernah disimpan. Gunakan reset untuk mengubah.', code: 'ALREADY_SETUP' });
-    }
 
     // Keep only rows with a non-zero value; validate with strict money parser
     const cleanLines: { akun_id: string; debit: number; kredit: number }[] = [];
@@ -1178,33 +1171,30 @@ export async function accountingRoutes(app: FastifyInstance) {
 
     await ensurePeriod(a.tenantId!, tahun);
 
+    // Atomic: advisory lock + duplicate check + insert all inside transaction
     const client = await pool.connect();
     try {
-      await client.query('BEGIN');
-      const entryRes = await client.query(
-        `INSERT INTO journal_entries (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, tipetransaksi, isposted, islocked, created_by)
-         VALUES ($1,'OB-001',$2,$3,$4,$5,'OPENING_BALANCE',true,true,$6)
-         RETURNING id, no_jurnal AS "noJurnal", tanggal`,
-        [a.tenantId, obTanggal, 1, tahun, 'Setup Saldo Awal', a.userId]
+      const result = await postOpeningJournalAtomic(
+        client, a.tenantId!, a.userId, obTanggal, tahun, cleanLines
       );
-      const entryId = (entryRes.rows[0] as any).id;
-      for (const l of cleanLines) {
-        await client.query(
-          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan)
-           VALUES ($1,$2,$3,$4,'Saldo Awal')`,
-          [entryId, l.akun_id, l.debit, l.kredit]
-        );
-      }
-      await client.query('COMMIT');
-      return reply.status(201).send({
-        message: 'Saldo awal berhasil disimpan',
-        entryId,
-        noJurnal: 'OB-001',
-        totalLines: cleanLines.length,
+
+      return reply.status(result.action === 'posted' ? 201 : 200).send({
+        success: true,
+        idempotent: result.action === 'idempotent',
+        message: result.action === 'idempotent'
+          ? 'Saldo awal sudah diposting.'
+          : 'Saldo awal berhasil disimpan',
+        entryId: result.entryId,
+        noJurnal: result.noJurnal,
+        tanggal: result.tanggal,
+        tipetransaksi: 'OPENING_BALANCE',
+        totalDebit: result.totalDebit,
+        totalKredit: result.totalKredit,
+        totalLines: result.totalLines,
       });
     } catch (e: any) {
-      await client.query('ROLLBACK');
-      return reply.status(500).send({ error: 'Gagal menyimpan saldo awal: ' + e.message });
+      const status = e.statusCode || 500;
+      return reply.status(status).send({ error: 'Gagal menyimpan saldo awal: ' + e.message });
     } finally {
       client.release();
     }
@@ -1321,61 +1311,87 @@ export async function accountingRoutes(app: FastifyInstance) {
   });
 
   // POST /accounting/saldo-awal/post — post saldo awal (set status to POSTED, prevent editing)
+  // Fix #17 (R5): Advisory lock to prevent concurrent post
   app.post('/saldo-awal/post', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
     
-    // Check if already posted
-    const check = await pool.query(
-      `SELECT status_saldo_awal FROM tenants WHERE id = $1`,
-      [a.tenantId]
-    );
-    if (check.rows[0]?.status_saldo_awal === 'POSTED') {
-      return reply.status(400).send({ error: 'Saldo awal sudah diposting' });
-    }
-    
-    // Check if saldo awal exists
-    const entries = await pool.query(
-      `SELECT id FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE' LIMIT 1`,
-      [a.tenantId]
-    );
-    if (!entries.rowCount) {
-      return reply.status(400).send({ error: 'Belum ada saldo awal untuk diposting' });
-    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // Advisory lock per tenant
+      await client.query(
+        `SELECT pg_advisory_xact_lock(hashtext('opening-balance-post'), hashtext($1))`,
+        [a.tenantId]
+      );
+      
+      // Check if already posted (inside transaction, after lock)
+      const check = await client.query(
+        `SELECT status_saldo_awal FROM tenants WHERE id = $1`,
+        [a.tenantId]
+      );
+      if (check.rows[0]?.status_saldo_awal === 'POSTED') {
+        await client.query('COMMIT');
+        return reply.send({ 
+          success: true, 
+          idempotent: true,
+          message: 'Saldo awal sudah diposting', 
+          status: 'POSTED' 
+        });
+      }
+      
+      // Check if saldo awal exists
+      const entries = await client.query(
+        `SELECT id FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE' LIMIT 1`,
+        [a.tenantId]
+      );
+      if (!entries.rowCount) {
+        await client.query('ROLLBACK');
+        return reply.status(400).send({ error: 'Belum ada saldo awal untuk diposting' });
+      }
 
-    // Validate journal is balanced before posting (integer cents comparison)
-    const balanceCheck = await pool.query(
-      `SELECT COALESCE(SUM(debit),0) AS total_debit, COALESCE(SUM(kredit),0) AS total_kredit
-       FROM journal_lines jl
-       JOIN journal_entries je ON je.id = jl.entry_id
-       WHERE je.tenant_id=$1 AND je.tipetransaksi='OPENING_BALANCE'`,
-      [a.tenantId]
-    );
-    const { total_debit, total_kredit } = balanceCheck.rows[0];
-    const totalDebitCents = dbNumericToCents(total_debit);
-    const totalKreditCents = dbNumericToCents(total_kredit);
-    if (totalDebitCents !== totalKreditCents) {
-      const selisihCents = totalDebitCents - totalKreditCents;
-      return reply.status(400).send({
-        error: `Jurnal tidak balance. Debit: Rp ${(totalDebitCents/100).toLocaleString('id-ID')}, Kredit: Rp ${(totalKreditCents/100).toLocaleString('id-ID')}, Selisih: Rp ${(selisihCents/100).toLocaleString('id-ID')}`,
-        code: 'NOT_BALANCED',
-        totalDebit: totalDebitCents / 100,
-        totalKredit: totalKreditCents / 100,
-        selisih: selisihCents / 100,
-      });
+      // Validate journal is balanced before posting (integer cents comparison)
+      const balanceCheck = await client.query(
+        `SELECT COALESCE(SUM(debit),0) AS total_debit, COALESCE(SUM(kredit),0) AS total_kredit
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id = jl.entry_id
+         WHERE je.tenant_id=$1 AND je.tipetransaksi='OPENING_BALANCE'`,
+        [a.tenantId]
+      );
+      const { total_debit, total_kredit } = balanceCheck.rows[0] as any;
+      const totalDebitCents = dbNumericToCents(total_debit);
+      const totalKreditCents = dbNumericToCents(total_kredit);
+      if (totalDebitCents !== totalKreditCents) {
+        const selisihCents = totalDebitCents - totalKreditCents;
+        await client.query('ROLLBACK');
+        return reply.status(400).send({
+          error: `Jurnal tidak balance. Debit: Rp ${(totalDebitCents/100).toLocaleString('id-ID')}, Kredit: Rp ${(totalKreditCents/100).toLocaleString('id-ID')}, Selisih: Rp ${(selisihCents/100).toLocaleString('id-ID')}`,
+          code: 'NOT_BALANCED',
+          totalDebit: totalDebitCents / 100,
+          totalKredit: totalKreditCents / 100,
+          selisih: selisihCents / 100,
+        });
+      }
+      
+      // Post it (inside transaction)
+      await client.query(
+        `UPDATE tenants 
+         SET status_saldo_awal = 'POSTED',
+             saldo_awal_locked = true, 
+             saldo_awal_locked_at = now(), 
+             saldo_awal_locked_by = $2
+         WHERE id = $1`,
+        [a.tenantId, a.userId]
+      );
+      
+      await client.query('COMMIT');
+      return { success: true, message: 'Saldo awal berhasil diposting', status: 'POSTED' };
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return reply.status(500).send({ error: 'Gagal posting saldo awal: ' + e.message });
+    } finally {
+      client.release();
     }
-    
-    // Post it (set status to POSTED, keep backward compat boolean in sync)
-    await pool.query(
-      `UPDATE tenants 
-       SET status_saldo_awal = 'POSTED',
-           saldo_awal_locked = true, 
-           saldo_awal_locked_at = now(), 
-           saldo_awal_locked_by = $2
-       WHERE id = $1`,
-      [a.tenantId, a.userId]
-    );
-    
-    return { message: 'Saldo awal berhasil diposting', status: 'POSTED' };
   });
 
   // POST /accounting/saldo-awal/unpost — unpost saldo awal (set status back to DRAFT, allow editing)
