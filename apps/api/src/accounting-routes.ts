@@ -5,7 +5,7 @@ import { seedDefaultCoa } from './coa-seed.js';
 import { validateJournalBalance, validateJournalLine } from './utils/journal-balance.js';
 import { parseYmdStrict, compareYmd, isValidYmd } from './utils/date-helpers.js';
 import { parseMoneyStrict, dbNumericToCents, MAX_AMOUNT } from './utils/money-helpers.js';
-import { calculateHppCents, validateHppNotZero } from './utils/hpp-helpers.js';
+import { calculateHppCents, validateHppNotZero, getInventoryAverageCost } from './utils/hpp-helpers.js';
 import { validateQuickTxSource, validateQuickTxTarget } from './utils/quick-tx-validation.js';
 import { computeLabaRugiMonthlyGrouped } from './utils/monthly-pl.js';
 import {
@@ -3486,26 +3486,20 @@ export async function accountingRoutes(app: FastifyInstance) {
                 });
               }
 
-              const hppRes = await client.query(
-                `SELECT COALESCE(SUM(jl.debit), 0) AS total_cost,
-                        COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) AS total_qty
-                 FROM journal_lines jl
-                 JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
-                 WHERE jl.inventory_item_id = $1`,
-                [inventoryItemId, a.tenantId]
-              );
-              const totalCost = Number(hppRes.rows[0].total_cost) || 0;
-              const totalQty = Number(hppRes.rows[0].total_qty) || 0;
+              // Fix #21: Calculate HPP from remaining inventory as of transaction date
+              const avgResult = await getInventoryAverageCost(client, inventoryItemId, a.tenantId!, tanggal);
+              const totalCostCents = avgResult.totalCostCents;
+              const totalQty = avgResult.totalQty;
 
-              if (totalQty <= 0 || totalCost < 0) {
+              if (totalQty <= 0 || totalCostCents <= 0) {
                 await client.query('ROLLBACK');
                 return reply.code(400).send({
-                  error: `Data persediaan tidak valid: totalCost=${totalCost}, totalQty=${totalQty}. Periksa data persediaan masuk.`,
+                  error: `Stok/HPP tidak cukup untuk menghitung harga pokok persediaan. totalCostCents=${totalCostCents}, totalQty=${totalQty}. Periksa data persediaan masuk.`,
                 });
               }
 
-              if (totalQty > 0 && totalCost > 0) {
-                const hppResult = calculateHppCents(totalCost, totalQty, qty || 1);
+              if (totalQty > 0 && totalCostCents > 0) {
+                const hppResult = calculateHppCents(totalCostCents / 100, totalQty, qty || 1);
                 validateHppNotZero(hppResult.hppTotalCents, desc || 'item');
                 hppTotalStr = hppResult.hppTotalStr;
               }
@@ -3811,26 +3805,20 @@ export async function accountingRoutes(app: FastifyInstance) {
         // Calculate HPP using integer cents helper
         let hpp = 0;
         let hppTotalCents = 0;
-        const hppRes = await client.query(
-          `SELECT COALESCE(SUM(jl.debit), 0) AS total_cost,
-                  COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) AS total_qty
-           FROM journal_lines jl
-           JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
-           WHERE jl.inventory_item_id = $1`,
-          [item.inventory_item_id, a.tenantId]
-        );
-        const totalCost = Number(hppRes.rows[0].total_cost) || 0;
-        const totalQty = Number(hppRes.rows[0].total_qty) || 0;
+        // Fix #21: Calculate HPP from remaining inventory as of transaction date
+        const avgResult = await getInventoryAverageCost(client, item.inventory_item_id, a.tenantId!, tanggal);
+        const totalCostCents = avgResult.totalCostCents;
+        const totalQty = avgResult.totalQty;
 
-        if (totalQty > 0 && totalCost > 0) {
-          const hppResult = calculateHppCents(totalCost, totalQty, item.qty);
+        if (totalQty > 0 && totalCostCents > 0) {
+          const hppResult = calculateHppCents(totalCostCents / 100, totalQty, item.qty);
           hpp = hppResult.hppPerUnitCents / 100;
           hppTotalCents = hppResult.hppTotalCents;
           validateHppNotZero(hppTotalCents, itemName);
-        } else if (totalQty <= 0 || totalCost < 0) {
+        } else if (totalQty <= 0 || totalCostCents <= 0) {
           await client.query('ROLLBACK');
           return reply.code(400).send({
-            error: `Data persediaan tidak valid untuk "${itemName}": totalCost=${totalCost}, totalQty=${totalQty}. Periksa data persediaan masuk.`,
+            error: `Stok/HPP tidak cukup untuk "${itemName}": totalCostCents=${totalCostCents}, totalQty=${totalQty}. Periksa data persediaan masuk.`,
           });
         }
 
@@ -3949,7 +3937,7 @@ export async function accountingRoutes(app: FastifyInstance) {
            WHERE jl_hpp.entry_id = je.id AND c_hpp.kode LIKE '5.%'
          )
        GROUP BY je.id, je.no_jurnal, je.tanggal, je.keterangan
-       ORDER BY je.tanggal`,
+       ORDER BY je.tanggal ASC, je.created_at ASC`,
       [tid]
     );
 
@@ -3974,7 +3962,7 @@ export async function accountingRoutes(app: FastifyInstance) {
   // ── Guided Auto-Fix: Execute HPP correction (2-phase: pre-validate → atomic insert) ──
   app.post('/fix-missing-hpp/execute', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
-    const tid = a.tenantId;
+    const tid = a.tenantId!;
     const { entry_ids } = req.body as any;
 
     // ── Input validation ──
@@ -3995,6 +3983,18 @@ export async function accountingRoutes(app: FastifyInstance) {
 
     // Deduplicate entry_ids
     const uniqueIds = [...new Set(entry_ids)];
+
+    // Fix #21: Sort entries chronologically before processing (tanggal ASC, created_at ASC)
+    // This ensures older sales get HPP calculated first, making inventory state correct for later entries
+    const sortRes = await pool.query(
+      `SELECT id FROM journal_entries
+       WHERE id = ANY($1::uuid[]) AND tenant_id = $2
+       ORDER BY tanggal ASC, created_at ASC`,
+      [uniqueIds, tid]
+    );
+    const sortedIds = sortRes.rows.map((r: any) => r.id);
+    // Append any IDs not found in DB (will be caught as FAILED in validation loop)
+    const sortedAllIds = [...sortedIds, ...uniqueIds.filter((id: string) => !sortedIds.includes(id))];
 
     // Find required accounts (outside transaction — read-only)
     const [hppAkun, persediaanAkun] = await Promise.all([
@@ -4017,7 +4017,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const fixable: PreValidatedEntry[] = [];
     const results: Array<{ entry_id: string; no_jurnal: string; status: string; message: string }> = [];
 
-    for (const entryId of uniqueIds) {
+    for (const entryId of sortedAllIds) {
       // 1. Validate entry exists, belongs to tenant, is posted
       const origRes = await pool.query(
         `SELECT je.id, je.no_jurnal, je.tanggal, je.bulan, je.tahun, je.keterangan
@@ -4086,21 +4086,17 @@ export async function accountingRoutes(app: FastifyInstance) {
           continue;
         }
 
-        // Calculate moving average HPP from inventory data
-        const hppRes = await pool.query(
-          `SELECT COALESCE(SUM(jl.debit), 0) AS total_cost,
-                  COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) AS total_qty
-           FROM journal_lines jl
-           JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
-           WHERE jl.inventory_item_id = $1`,
-          [rl.inventory_item_id, tid]
-        );
-        const totalCost = Number(hppRes.rows[0].total_cost) || 0;
-        const totalQty = Number(hppRes.rows[0].total_qty) || 0;
+        // Fix #21: Calculate HPP from remaining inventory as of entry's tanggal (not today)
+        const entryTanggal = orig.tanggal instanceof Date
+          ? orig.tanggal.toISOString().slice(0, 10)
+          : String(orig.tanggal);
+        const avgResult = await getInventoryAverageCost(pool, rl.inventory_item_id, tid, entryTanggal);
+        const totalCostCents = avgResult.totalCostCents;
+        const totalQty = avgResult.totalQty;
 
-        if (totalQty <= 0) {
+        if (totalQty <= 0 || totalCostCents <= 0) {
           needsManualReview = true;
-          manualReviewReasons.push(`Baris ${rl.id}: tidak ada data persediaan masuk untuk menghitung HPP`);
+          manualReviewReasons.push(`Baris ${rl.id}: tidak ada data persediaan masuk untuk menghitung HPP (s/d ${entryTanggal})`);
           continue;
         }
 
@@ -4108,7 +4104,7 @@ export async function accountingRoutes(app: FastifyInstance) {
         const qtyToReduce = Number(rl.qty) || 1;
         let hppTotalCents = 0;
         try {
-          const hppResult = calculateHppCents(totalCost, totalQty, Math.round(qtyToReduce));
+          const hppResult = calculateHppCents(totalCostCents / 100, totalQty, Math.round(qtyToReduce));
           hppTotalCents = hppResult.hppTotalCents;
           validateHppNotZero(hppTotalCents, `baris ${rl.id}`);
         } catch (e: any) {
