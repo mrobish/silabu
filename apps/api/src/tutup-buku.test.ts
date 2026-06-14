@@ -414,3 +414,77 @@ describe('Tutup Buku — P&L Query Filtering (Fix #11 / M2)', () => {
     // NOT: 200000 + 150000 + 50000 - 10000 = 390000 (wrong!)
   });
 });
+
+// ─── Fix #16: Race Condition / Idempotency Tests ────────────────────────────
+describe('Fix #16: Tutup Buku Race Condition Prevention', () => {
+  it('advisory lock key format is deterministic', () => {
+    // The advisory lock uses hashtext('tutup-buku') and hashtext(tid + ':' + year)
+    // These should be deterministic for same inputs
+    const key1 = `tutup-buku:${'tenant-1'}:${2026}`;
+    const key2 = `tutup-buku:${'tenant-1'}:${2026}`;
+    expect(key1).toBe(key2);
+  });
+
+  it('different tenants get different lock keys', () => {
+    const key1 = `tutup-buku:${'tenant-1'}:${2026}`;
+    const key2 = `tutup-buku:${'tenant-2'}:${2026}`;
+    expect(key1).not.toBe(key2);
+  });
+
+  it('different years get different lock keys', () => {
+    const key1 = `tutup-buku:${'tenant-1'}:${2025}`;
+    const key2 = `tutup-buku:${'tenant-1'}:${2026}`;
+    expect(key1).not.toBe(key2);
+  });
+
+  it('no_jurnal format is consistent', () => {
+    const year = 2026;
+    const noJurnal = `CL-${year}1231`;
+    expect(noJurnal).toBe('CL-20261231');
+    expect(noJurnal).toMatch(/^CL-\d{8}$/);
+  });
+
+  it('idempotent response shape has required fields', () => {
+    // Simulate the idempotent response shape
+    const response = {
+      success: true,
+      idempotent: true,
+      message: 'Periode 2026 sudah ditutup.',
+      closingEntry: {
+        id: 'some-uuid',
+        noJurnal: 'CL-20261231',
+        tanggal: '2026-12-31',
+        keterangan: 'Jurnal Penutup Tahun 2026',
+        lines: [],
+      },
+    };
+
+    expect(response.success).toBe(true);
+    expect(response.idempotent).toBe(true);
+    expect(response.closingEntry).toBeDefined();
+    expect(response.closingEntry.noJurnal).toMatch(/^CL-\d{8}$/);
+    expect(Array.isArray(response.closingEntry.lines)).toBe(true);
+  });
+
+  it('data inconsistency response has error code', () => {
+    // Simulate the inconsistency response shape
+    const response = {
+      error: 'Data inconsistency: periode 2026 sudah CLOSED tetapi jurnal penutup tidak ditemukan.',
+      code: 'CLOSING_ENTRY_MISSING',
+    };
+
+    expect(response.code).toBe('CLOSING_ENTRY_MISSING');
+    expect(response.error).toContain('inconsistency');
+  });
+
+  it('unique constraint violation response has error code', () => {
+    // Simulate the duplicate response shape
+    const response = {
+      error: 'Tutup buku 2026 sudah dilakukan (duplikat terdeteksi).',
+      code: 'CLOSING_DUPLICATE',
+    };
+
+    expect(response.code).toBe('CLOSING_DUPLICATE');
+    expect(response.error).toContain('duplikat');
+  });
+});

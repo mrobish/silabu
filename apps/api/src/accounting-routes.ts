@@ -2741,7 +2741,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     return { periods: r.rows };
   });
 
-  // POST /tutup-buku — jurnal penutup + lock periode
+  // POST /tutup-buku — jurnal penutup + lock periode (Fix #16: Opsi D — advisory lock + idempotent)
   app.post('/tutup-buku', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
     const { tahun } = req.body as { tahun: number };
@@ -2750,105 +2750,156 @@ export async function accountingRoutes(app: FastifyInstance) {
     if (!year || year < 2000 || year > 2099) return reply.code(400).send({ error: 'Tahun tidak valid' });
     const tid = a.tenantId!;
 
-    // Cek tahun sebelumnya — harus sudah ditutup
-    if (year > 2000) {
-      const prev = await pool.query(
-        `SELECT id, status FROM financial_periods WHERE tenant_id=$1 AND tahun=$2 LIMIT 1`,
-        [tid, year - 1]
-      );
-      if (prev.rows.length && (prev.rows[0] as any).status !== 'CLOSED') {
-        return reply.code(400).send({ error: `Tahun ${year - 1} masih OPEN. Tutup buku tahun sebelumnya dulu!` });
-      }
-    }
-
-    // Cek periode ini — jika sudah CLOSED, tolak
-    const cur = await pool.query(
-      `SELECT id, status FROM financial_periods WHERE tenant_id=$1 AND tahun=$2 LIMIT 1`,
-      [tid, year]
-    );
-    if (cur.rows.length && (cur.rows[0] as any).status === 'CLOSED') {
-      return reply.code(400).send({ error: `Periode ${year} sudah ditutup.` });
-    }
-
-    // Hitung saldo akhir Gol 4-7 per 31 Des (P&L)
-    // FIX #11 (M2): Range periode penuh (Jan 1 – Dec 31) + exclude OPENING_BALANCE & CLOSING
-    // agar tidak menarik saldo P&L tahun sebelumnya atau jurnal sistem.
-    const startDate = `${year}-01-01`;
-    const endDate = `${year}-12-31`;
-    const pnL = await pool.query(
-      `SELECT ca.id, ca.kode, ca.nama, ca.saldonormal,
-              COALESCE(SUM(
-                CASE WHEN ca.saldonormal='D' THEN jl.debit - jl.kredit
-                     ELSE jl.kredit - jl.debit END
-              ), 0) AS saldo
-       FROM journal_lines jl
-       JOIN journal_entries je ON je.id=jl.entry_id
-       JOIN chart_of_accounts ca ON ca.id=jl.akun_id AND ca.tenant_id=$1
-       WHERE je.tenant_id=$1 AND je.tanggal >= $2 AND je.tanggal <= $3
-         AND je.tipetransaksi NOT IN ('OPENING_BALANCE', 'CLOSING')
-         AND LEFT(ca.kode,1) IN ('4','5','6','7')
-       GROUP BY ca.id, ca.kode, ca.nama, ca.saldonormal
-       HAVING COALESCE(SUM(
-         CASE WHEN ca.saldonormal='D' THEN jl.debit - jl.kredit
-              ELSE jl.kredit - jl.debit END
-       ), 0) != 0
-       ORDER BY ca.kode`,
-      [tid, startDate, endDate]
-    );
-
-    // Hitung saldo Prive (Gol 3.2.x — Pengambilan oleh Pemilik) per 31 Des
-    // FIX #11 (M2): Same range + exclude filter as P&L query
-    const priveQuery = await pool.query(
-      `SELECT ca.id, ca.kode, ca.nama, ca.saldonormal,
-              COALESCE(SUM(
-                CASE WHEN ca.saldonormal='D' THEN jl.debit - jl.kredit
-                     ELSE jl.kredit - jl.debit END
-              ), 0) AS saldo
-       FROM journal_lines jl
-       JOIN journal_entries je ON je.id=jl.entry_id
-       JOIN chart_of_accounts ca ON ca.id=jl.akun_id AND ca.tenant_id=$1
-       WHERE je.tenant_id=$1 AND je.tanggal >= $2 AND je.tanggal <= $3
-         AND je.tipetransaksi NOT IN ('OPENING_BALANCE', 'CLOSING')
-         AND ca.kode LIKE '3.2%'
-       GROUP BY ca.id, ca.kode, ca.nama, ca.saldonormal
-       HAVING COALESCE(SUM(
-         CASE WHEN ca.saldonormal='D' THEN jl.debit - jl.kredit
-              ELSE jl.kredit - jl.debit END
-       ), 0) != 0
-       ORDER BY ca.kode`,
-      [tid, startDate, endDate]
-    );
-
-    if (!pnL.rows.length && !priveQuery.rows.length) {
-      return reply.code(400).send({ error: 'Tidak ada saldo akun Laba/Rugi atau Prive yang perlu ditutup.' });
-    }
-
-    // Hitung Laba Bersih
-    let totalPendapatan = 0, totalBeban = 0;
-    for (const r of pnL.rows) {
-      const saldo = Number((r as any).saldo);
-      if (String((r as any).kode).startsWith('4')) {
-        totalPendapatan += saldo;
-      } else {
-        totalBeban += saldo;
-      }
-    }
-    const labaBersih = totalPendapatan - totalBeban;
-
-    // Cari akun Laba Ditahan (Saldo Laba Tidak Dicadangkan — 3.3.01.01)
-    // FIX: tambah ispostable=true agar tidak salah pilih 3.3.01.00 (parent, not postable)
-    const labaDitahan = await pool.query(
-      `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode='3.3.01.01' AND ispostable=true LIMIT 1`,
-      [tid]
-    );
-    if (!labaDitahan.rows.length) {
-      return reply.code(400).send({ error: 'Akun Saldo Laba Tidak Dicadangkan (3.3.01.01) tidak ditemukan. Seed CoA dulu.' });
-    }
-    const labaDitahanId = (labaDitahan.rows[0] as any).id;
-
+    // Fix #16: ALL database operations inside transaction with advisory lock
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+
+      // Advisory lock: serialize per tenant+tahun (not global)
+      // This blocks parallel requests until this transaction commits/rollbacks
+      await client.query(
+        `SELECT pg_advisory_xact_lock(hashtext('tutup-buku'), hashtext($1 || ':' || $2))`,
+        [tid, String(year)]
+      );
+
+      // Check tahun sebelumnya — harus sudah ditutup
+      if (year > 2000) {
+        const prev = await client.query(
+          `SELECT id, status FROM financial_periods WHERE tenant_id=$1 AND tahun=$2 LIMIT 1`,
+          [tid, year - 1]
+        );
+        if (prev.rows.length && (prev.rows[0] as any).status !== 'CLOSED') {
+          await client.query('ROLLBACK');
+          return reply.code(400).send({ error: `Tahun ${year - 1} masih OPEN. Tutup buku tahun sebelumnya dulu!` });
+        }
+      }
+
+      // Check current period + FOR UPDATE (row lock)
+      // Ensure row exists first (create if not)
+      await client.query(
+        `INSERT INTO financial_periods (tenant_id, tahun, status)
+         VALUES ($1, $2, 'OPEN')
+         ON CONFLICT (tenant_id, tahun) DO NOTHING`,
+        [tid, year]
+      );
+      const cur = await client.query(
+        `SELECT id, status FROM financial_periods WHERE tenant_id=$1 AND tahun=$2 FOR UPDATE`,
+        [tid, year]
+      );
+      const periodStatus = (cur.rows[0] as any).status;
+
+      // If already CLOSED → idempotent response
+      if (periodStatus === 'CLOSED') {
+        // Find the existing closing entry
+        const closingEntry = await client.query(
+          `SELECT id, no_jurnal AS "noJurnal", tanggal, keterangan
+           FROM journal_entries
+           WHERE tenant_id=$1 AND tipetransaksi='CLOSING' AND tahun=$2
+           LIMIT 1`,
+          [tid, year]
+        );
+
+        if (closingEntry.rowCount) {
+          // Normal case: period CLOSED and closing entry exists
+          const lines = await client.query(
+            `SELECT * FROM journal_lines WHERE entry_id=$1 ORDER BY created_at`,
+            [closingEntry.rows[0].id]
+          );
+          await client.query('ROLLBACK'); // Read-only, no changes needed
+          return {
+            success: true,
+            idempotent: true,
+            message: `Periode ${year} sudah ditutup.`,
+            closingEntry: {
+              ...closingEntry.rows[0],
+              lines: lines.rows,
+            },
+          };
+        } else {
+          // Abnormal: period CLOSED but no closing entry → data inconsistency
+          await client.query('ROLLBACK');
+          return reply.code(409).send({
+            error: `Data inconsistency: periode ${year} sudah CLOSED tetapi jurnal penutup tidak ditemukan. Hubungi admin.`,
+            code: 'CLOSING_ENTRY_MISSING',
+          });
+        }
+      }
+
+      // Period is OPEN → proceed with closing
+      const startDate = `${year}-01-01`;
+      const endDate = `${year}-12-31`;
+
+      // Hitung saldo akhir Gol 4-7 per 31 Des (P&L)
+      const pnL = await client.query(
+        `SELECT ca.id, ca.kode, ca.nama, ca.saldonormal,
+                COALESCE(SUM(
+                  CASE WHEN ca.saldonormal='D' THEN jl.debit - jl.kredit
+                       ELSE jl.kredit - jl.debit END
+                ), 0) AS saldo
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id=jl.entry_id
+         JOIN chart_of_accounts ca ON ca.id=jl.akun_id AND ca.tenant_id=$1
+         WHERE je.tenant_id=$1 AND je.tanggal >= $2 AND je.tanggal <= $3
+           AND je.tipetransaksi NOT IN ('OPENING_BALANCE', 'CLOSING')
+           AND LEFT(ca.kode,1) IN ('4','5','6','7')
+         GROUP BY ca.id, ca.kode, ca.nama, ca.saldonormal
+         HAVING COALESCE(SUM(
+           CASE WHEN ca.saldonormal='D' THEN jl.debit - jl.kredit
+                ELSE jl.kredit - jl.debit END
+         ), 0) != 0
+         ORDER BY ca.kode`,
+        [tid, startDate, endDate]
+      );
+
+      // Hitung saldo Prive (Gol 3.2.x)
+      const priveQuery = await client.query(
+        `SELECT ca.id, ca.kode, ca.nama, ca.saldonormal,
+                COALESCE(SUM(
+                  CASE WHEN ca.saldonormal='D' THEN jl.debit - jl.kredit
+                       ELSE jl.kredit - jl.debit END
+                ), 0) AS saldo
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id=jl.entry_id
+         JOIN chart_of_accounts ca ON ca.id=jl.akun_id AND ca.tenant_id=$1
+         WHERE je.tenant_id=$1 AND je.tanggal >= $2 AND je.tanggal <= $3
+           AND je.tipetransaksi NOT IN ('OPENING_BALANCE', 'CLOSING')
+           AND ca.kode LIKE '3.2%'
+         GROUP BY ca.id, ca.kode, ca.nama, ca.saldonormal
+         HAVING COALESCE(SUM(
+           CASE WHEN ca.saldonormal='D' THEN jl.debit - jl.kredit
+                ELSE jl.kredit - jl.debit END
+         ), 0) != 0
+         ORDER BY ca.kode`,
+        [tid, startDate, endDate]
+      );
+
+      if (!pnL.rows.length && !priveQuery.rows.length) {
+        await client.query('ROLLBACK');
+        return reply.code(400).send({ error: 'Tidak ada saldo akun Laba/Rugi atau Prive yang perlu ditutup.' });
+      }
+
+      // Hitung Laba Bersih
+      let totalPendapatan = 0, totalBeban = 0;
+      for (const r of pnL.rows) {
+        const saldo = Number((r as any).saldo);
+        if (String((r as any).kode).startsWith('4')) {
+          totalPendapatan += saldo;
+        } else {
+          totalBeban += saldo;
+        }
+      }
+      const labaBersih = totalPendapatan - totalBeban;
+
+      // Cari akun Laba Ditahan (3.3.01.01)
+      const labaDitahan = await client.query(
+        `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode='3.3.01.01' AND ispostable=true LIMIT 1`,
+        [tid]
+      );
+      if (!labaDitahan.rows.length) {
+        await client.query('ROLLBACK');
+        return reply.code(400).send({ error: 'Akun Saldo Laba Tidak Dicadangkan (3.3.01.01) tidak ditemukan. Seed CoA dulu.' });
+      }
+      const labaDitahanId = (labaDitahan.rows[0] as any).id;
 
       // Buat jurnal penutup
       const noJurnal = `CL-${year}1231`;
@@ -2867,7 +2918,6 @@ export async function accountingRoutes(app: FastifyInstance) {
         const saldo = Number((r as any).saldo);
         if (saldo !== 0) {
           if (saldo > 0) {
-            // Saldo positif = debit (beban) → kredit-kan, kredit (pendapatan) → debit-kan
             if ((r as any).saldonormal === 'D') {
               lines.push({ akunId: (r as any).id, debit: 0, kredit: saldo });
               totalKredit += saldo;
@@ -2876,7 +2926,6 @@ export async function accountingRoutes(app: FastifyInstance) {
               totalDebit += saldo;
             }
           } else {
-            // Saldo negatif → flip
             if ((r as any).saldonormal === 'D') {
               lines.push({ akunId: (r as any).id, debit: Math.abs(saldo), kredit: 0 });
               totalDebit += Math.abs(saldo);
@@ -2888,26 +2937,24 @@ export async function accountingRoutes(app: FastifyInstance) {
         }
       }
 
-      // Zeroing Prive (Gol 3.2.x): credit to zero, debit Saldo Laba
+      // Zeroing Prive (Gol 3.2.x)
       let totalPrive = 0;
       for (const r of priveQuery.rows) {
         const saldo = Number((r as any).saldo);
         if (saldo !== 0) {
-          // Prive has saldoNormal='D' (debit). To zero: credit it.
           if (saldo > 0) {
             lines.push({ akunId: (r as any).id, debit: 0, kredit: saldo });
             totalKredit += saldo;
             totalPrive += saldo;
           } else {
-            // Negative Prive (unusual) → debit to zero
             lines.push({ akunId: (r as any).id, debit: Math.abs(saldo), kredit: 0 });
             totalDebit += Math.abs(saldo);
-            totalPrive += saldo; // negative
+            totalPrive += saldo;
           }
         }
       }
 
-      // Net ke Saldo Laba: laba bersih dikurangi Prive
+      // Net ke Saldo Laba
       const netToSaldoLaba = labaBersih - totalPrive;
       if (netToSaldoLaba > 0) {
         lines.push({ akunId: labaDitahanId, debit: 0, kredit: netToSaldoLaba });
@@ -2917,7 +2964,7 @@ export async function accountingRoutes(app: FastifyInstance) {
         totalDebit += Math.abs(netToSaldoLaba);
       }
 
-      // Balance check — FIX #11: integer cents via validateJournalBalance()
+      // Balance check — integer cents
       const balanceResult = validateJournalBalance(lines as any);
       if (!balanceResult.valid) {
         await client.query('ROLLBACK');
@@ -2934,9 +2981,8 @@ export async function accountingRoutes(app: FastifyInstance) {
 
       // Update period → CLOSED
       await client.query(
-        `INSERT INTO financial_periods (tenant_id, tahun, status, closed_at, closed_by)
-         VALUES ($1, $2, 'CLOSED', $3, NULL)
-         ON CONFLICT (tenant_id, tahun) DO UPDATE SET status='CLOSED', closed_at=$3, closed_by=NULL`,
+        `UPDATE financial_periods SET status='CLOSED', closed_at=$3, closed_by=NULL
+         WHERE tenant_id=$1 AND tahun=$2`,
         [tid, year, new Date()]
       );
 
@@ -2963,7 +3009,39 @@ export async function accountingRoutes(app: FastifyInstance) {
         message: `Tutup buku ${year} berhasil. Laba bersih Rp ${labaBersih.toLocaleString('id-ID')}${totalPrive > 0 ? `, Prive Rp ${totalPrive.toLocaleString('id-ID')}` : ''} → Saldo Laba Rp ${netToSaldoLaba.toLocaleString('id-ID')}.`,
       };
     } catch (e: any) {
-      await client.query('ROLLBACK');
+      // Safety net: catch unique constraint violation on no_jurnal
+      if (e.code === '23505' && e.constraint?.includes('no_jurnal')) {
+        // Double-submit caught by unique constraint → try to return idempotent response
+        try {
+          const closingEntry = await pool.query(
+            `SELECT id, no_jurnal AS "noJurnal", tanggal, keterangan
+             FROM journal_entries
+             WHERE tenant_id=$1 AND tipetransaksi='CLOSING' AND tahun=$2
+             LIMIT 1`,
+            [tid, year]
+          );
+          if (closingEntry.rowCount) {
+            const lines = await pool.query(
+              `SELECT * FROM journal_lines WHERE entry_id=$1 ORDER BY created_at`,
+              [closingEntry.rows[0].id]
+            );
+            return {
+              success: true,
+              idempotent: true,
+              message: `Periode ${year} sudah ditutup (detected via unique constraint).`,
+              closingEntry: {
+                ...closingEntry.rows[0],
+                lines: lines.rows,
+              },
+            };
+          }
+        } catch { /* fall through to generic error */ }
+        return reply.code(409).send({
+          error: `Tutup buku ${year} sudah dilakukan (duplikat terdeteksi).`,
+          code: 'CLOSING_DUPLICATE',
+        });
+      }
+      await client.query('ROLLBACK').catch(() => {});
       return reply.code(500).send({ error: e.message });
     } finally {
       client.release();
