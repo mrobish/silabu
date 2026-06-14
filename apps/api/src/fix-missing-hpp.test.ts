@@ -45,6 +45,11 @@ function isBalanced(totalDebit: number, totalKredit: number): boolean {
   return Math.round(totalDebit * 100) === Math.round(totalKredit * 100);
 }
 
+// ── 2-phase gate: should block if any entry is FAILED/NEED_MANUAL_REVIEW ──
+function shouldBlockAll(results: Array<{ status: string }>): boolean {
+  return results.some(r => r.status === 'FAILED' || r.status === 'NEED_MANUAL_REVIEW');
+}
+
 describe('fix-missing-hpp: Input validation', () => {
   it('rejects empty entry_ids', () => {
     const result = validateEntryIds([]);
@@ -124,17 +129,14 @@ describe('fix-missing-hpp: HPP calculation (integer cents)', () => {
   });
 
   it('handles decimal costs correctly (rounding)', () => {
-    // totalCost=100000.50, totalQty=3 → 33333.50/unit → round to cents
     const result = calculateHppCents(100000.50, 3, 1);
-    // 100000.50/3 = 33333.5 → round(33333.5*100) = 3333350 cents
     expect(result).toBe(3333350);
   });
 
   it('handles floating point precision', () => {
-    // 0.1 + 0.2 = 0.30000000000000004 in float, but Math.round fixes it
     const cost = 0.1 + 0.2; // 0.30000000000000004
     const result = calculateHppCents(cost, 1, 1);
-    expect(result).toBe(30); // Math.round(0.3 * 100) = 30
+    expect(result).toBe(30);
   });
 });
 
@@ -148,11 +150,67 @@ describe('fix-missing-hpp: Balance check (integer cents)', () => {
   });
 
   it('handles floating point near-equal', () => {
-    // 0.1 + 0.2 vs 0.3 — both round to 30 cents
     expect(isBalanced(0.1 + 0.2, 0.3)).toBe(true);
   });
 
   it('handles zero balance', () => {
     expect(isBalanced(0, 0)).toBe(true);
+  });
+});
+
+describe('fix-missing-hpp: 2-phase gate (all-or-nothing)', () => {
+  it('does NOT block when all entries are FIXED', () => {
+    expect(shouldBlockAll([
+      { status: 'FIXED' },
+      { status: 'FIXED' },
+    ])).toBe(false);
+  });
+
+  it('does NOT block when entries are FIXED + SKIP', () => {
+    expect(shouldBlockAll([
+      { status: 'FIXED' },
+      { status: 'SKIP' },
+    ])).toBe(false);
+  });
+
+  it('does NOT block when all entries are SKIP', () => {
+    expect(shouldBlockAll([
+      { status: 'SKIP' },
+      { status: 'SKIP' },
+    ])).toBe(false);
+  });
+
+  it('BLOCKS when any entry is FAILED', () => {
+    expect(shouldBlockAll([
+      { status: 'FIXED' },
+      { status: 'FAILED' },
+    ])).toBe(true);
+  });
+
+  it('BLOCKS when any entry is NEED_MANUAL_REVIEW', () => {
+    expect(shouldBlockAll([
+      { status: 'FIXED' },
+      { status: 'FIXED' },
+      { status: 'NEED_MANUAL_REVIEW' },
+    ])).toBe(true);
+  });
+
+  it('BLOCKS when mixed FAILED and NEED_MANUAL_REVIEW', () => {
+    expect(shouldBlockAll([
+      { status: 'FIXED' },
+      { status: 'FAILED' },
+      { status: 'NEED_MANUAL_REVIEW' },
+      { status: 'SKIP' },
+    ])).toBe(true);
+  });
+
+  it('BLOCKS even if only one entry has problem', () => {
+    expect(shouldBlockAll([
+      { status: 'FIXED' },
+      { status: 'FIXED' },
+      { status: 'FIXED' },
+      { status: 'FIXED' },
+      { status: 'NEED_MANUAL_REVIEW' },
+    ])).toBe(true);
   });
 });

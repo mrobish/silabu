@@ -3361,7 +3361,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     };
   });
 
-  // ── Guided Auto-Fix: Execute HPP correction (single atomic transaction) ──
+  // ── Guided Auto-Fix: Execute HPP correction (2-phase: pre-validate → atomic insert) ──
   app.post('/fix-missing-hpp/execute', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
     const tid = a.tenantId;
@@ -3386,7 +3386,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     // Deduplicate entry_ids
     const uniqueIds = [...new Set(entry_ids)];
 
-    // Find required accounts
+    // Find required accounts (outside transaction — read-only)
     const [hppAkun, persediaanAkun] = await Promise.all([
       findAccountByRole(tid!, 'HPP'),
       findAccountByRole(tid!, 'PERSEDIAAN'),
@@ -3394,134 +3394,185 @@ export async function accountingRoutes(app: FastifyInstance) {
     if (!hppAkun) return reply.code(400).send({ error: 'Akun HPP tidak ditemukan. Silakan buat akun HPP terlebih dahulu.' });
     if (!persediaanAkun) return reply.code(400).send({ error: 'Akun Persediaan tidak ditemukan. Silakan buat akun Persediaan terlebih dahulu.' });
 
-    const client = await pool.connect();
+    // ══════════════════════════════════════════════════════════════
+    // FASE 1: PRE-VALIDASI (tanpa transaksi, read-only queries)
+    // ══════════════════════════════════════════════════════════════
+    type PreValidatedEntry = {
+      entryId: string;
+      orig: any;
+      hppDetails: Array<{ debitCents: number; kreditCents: number; inventory_item_id: string | null; qty: number }>;
+      totalHppCents: number;
+    };
+
+    const fixable: PreValidatedEntry[] = [];
     const results: Array<{ entry_id: string; no_jurnal: string; status: string; message: string }> = [];
 
+    for (const entryId of uniqueIds) {
+      // 1. Validate entry exists, belongs to tenant, is posted
+      const origRes = await pool.query(
+        `SELECT je.id, je.no_jurnal, je.tanggal, je.bulan, je.tahun, je.keterangan
+         FROM journal_entries je
+         WHERE je.id=$1 AND je.tenant_id=$2 AND je.isposted=true`,
+        [entryId, tid]
+      );
+      if (!origRes.rowCount) {
+        results.push({ entry_id: entryId, no_jurnal: '-', status: 'FAILED', message: 'Entry tidak ditemukan atau bukan milik tenant aktif' });
+        continue;
+      }
+      const orig = origRes.rows[0];
+
+      // 2. Check if already has HPP lines
+      const hasHpp = await pool.query(
+        `SELECT 1 FROM journal_lines jl
+         JOIN chart_of_accounts c ON c.id = jl.akun_id
+         WHERE jl.entry_id=$1 AND c.kode LIKE '5.%'`,
+        [entryId]
+      );
+      if (hasHpp.rowCount) {
+        results.push({ entry_id: entryId, no_jurnal: orig.no_jurnal, status: 'SKIP', message: 'Sudah punya HPP — tidak perlu koreksi' });
+        continue;
+      }
+
+      // 3. Duplicate correction check via referensi
+      const dupCheck = await pool.query(
+        `SELECT id FROM journal_entries
+         WHERE tenant_id=$1 AND referensi=$2 AND tipeTransaksi='KOREKSI_HPP'
+         LIMIT 1`,
+        [tid, `KOREKSI_HPP:${entryId}`]
+      );
+      if (dupCheck.rowCount) {
+        results.push({ entry_id: entryId, no_jurnal: orig.no_jurnal, status: 'SKIP', message: 'Koreksi HPP sudah pernah dibuat sebelumnya (duplikat dicegah)' });
+        continue;
+      }
+
+      // 4. Get revenue lines with inventory_item_id
+      const revenueLines = await pool.query(
+        `SELECT jl.id, jl.kredit, jl.debit, jl.inventory_item_id, jl.qty, c.kode
+         FROM journal_lines jl
+         JOIN chart_of_accounts c ON c.id = jl.akun_id
+         WHERE jl.entry_id=$1 AND c.kode LIKE '4.2%'`,
+        [entryId]
+      );
+
+      if (!revenueLines.rowCount) {
+        results.push({ entry_id: entryId, no_jurnal: orig.no_jurnal, status: 'FAILED', message: 'Tidak ditemukan baris pendapatan penjualan (4.2.x)' });
+        continue;
+      }
+
+      // 5. Calculate HPP per item (NO estimate — must have valid inventory data)
+      let totalHppCents = 0;
+      const hppDetails: Array<{ debitCents: number; kreditCents: number; inventory_item_id: string | null; qty: number }> = [];
+      let hasValidHpp = false;
+      let needsManualReview = false;
+      const manualReviewReasons: string[] = [];
+
+      for (const rl of revenueLines.rows) {
+        const netRevenueCents = Math.round((Number(rl.kredit) - Number(rl.debit)) * 100);
+        if (netRevenueCents <= 0) continue;
+
+        if (!rl.inventory_item_id) {
+          needsManualReview = true;
+          manualReviewReasons.push(`Baris ${rl.id}: item persediaan tidak terhubung ke inventory`);
+          continue;
+        }
+
+        // Calculate moving average HPP from inventory data
+        const hppRes = await pool.query(
+          `SELECT COALESCE(SUM(jl.debit), 0) AS total_cost,
+                  COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) AS total_qty
+           FROM journal_lines jl
+           JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
+           WHERE jl.inventory_item_id = $1`,
+          [rl.inventory_item_id, tid]
+        );
+        const totalCost = Number(hppRes.rows[0].total_cost) || 0;
+        const totalQty = Number(hppRes.rows[0].total_qty) || 0;
+
+        if (totalQty <= 0) {
+          needsManualReview = true;
+          manualReviewReasons.push(`Baris ${rl.id}: tidak ada data persediaan masuk untuk menghitung HPP`);
+          continue;
+        }
+
+        const hppPerUnitCents = Math.round((totalCost / totalQty) * 100);
+        const qtyToReduce = Number(rl.qty) || 1;
+        const hppTotalCents = hppPerUnitCents * Math.round(qtyToReduce);
+
+        if (hppTotalCents <= 0) {
+          needsManualReview = true;
+          manualReviewReasons.push(`Baris ${rl.id}: HPP bernilai nol atau negatif`);
+          continue;
+        }
+
+        totalHppCents += hppTotalCents;
+        hppDetails.push({
+          debitCents: hppTotalCents,
+          kreditCents: hppTotalCents,
+          inventory_item_id: rl.inventory_item_id,
+          qty: qtyToReduce,
+        });
+        hasValidHpp = true;
+      }
+
+      // If no valid HPP could be calculated → FAILED/NEED_MANUAL_REVIEW
+      if (!hasValidHpp || totalHppCents <= 0) {
+        results.push({
+          entry_id: entryId,
+          no_jurnal: orig.no_jurnal,
+          status: needsManualReview ? 'NEED_MANUAL_REVIEW' : 'FAILED',
+          message: needsManualReview
+            ? `HPP tidak bisa dihitung otomatis: ${manualReviewReasons.join('; ')}`
+            : 'Tidak ada HPP yang perlu dikoreksi',
+        });
+        continue;
+      }
+
+      // Entry valid → masuk daftar fixable
+      fixable.push({ entryId, orig, hppDetails, totalHppCents });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // FASE 2: KEPUTUSAN — tolak semua jika ada FAILED/NEED_MANUAL_REVIEW
+    // ══════════════════════════════════════════════════════════════
+    const hasBlockers = results.some(r => r.status === 'FAILED' || r.status === 'NEED_MANUAL_REVIEW');
+
+    if (hasBlockers) {
+      // Return 400 — TIDAK ADA perubahan data, semua ditolak
+      const failed = results.filter(r => r.status === 'FAILED' || r.status === 'NEED_MANUAL_REVIEW');
+      return reply.code(400).send({
+        success: false,
+        blocked: true,
+        message: `Koreksi HPP dibatalkan. ${failed.length} entry bermasalah — perbaiki dulu sebelum koreksi otomatis.`,
+        summary: {
+          fixable: fixable.length,
+          skipped: results.filter(r => r.status === 'SKIP').length,
+          blocked: failed.length,
+        },
+        results,
+      });
+    }
+
+    // Jika tidak ada entry yang perlu dikoreksi (semua SKIP)
+    if (fixable.length === 0) {
+      return {
+        success: true,
+        summary: { fixed: 0, skipped: results.filter(r => r.status === 'SKIP').length, blocked: 0 },
+        results,
+        message: 'Semua entry sudah dikoreksi sebelumnya (SKIP). Tidak ada perubahan baru.',
+      };
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // FASE 3: TRANSAKSI — hanya entry yang sudah tervalidasi
+    // ══════════════════════════════════════════════════════════════
+    const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      for (const entryId of uniqueIds) {
-        // ── 1. Validate entry exists, belongs to tenant, is posted ──
-        const origRes = await client.query(
-          `SELECT je.id, je.no_jurnal, je.tanggal, je.bulan, je.tahun, je.keterangan
-           FROM journal_entries je
-           WHERE je.id=$1 AND je.tenant_id=$2 AND je.isposted=true`,
-          [entryId, tid]
-        );
-        if (!origRes.rowCount) {
-          results.push({ entry_id: entryId, no_jurnal: '-', status: 'FAILED', message: 'Entry tidak ditemukan atau bukan milik tenant aktif' });
-          continue;
-        }
-        const orig = origRes.rows[0];
+      for (const entry of fixable) {
+        const { entryId, orig, hppDetails, totalHppCents } = entry;
 
-        // ── 2. Check if already has HPP lines (genuine, not our correction) ──
-        const hasHpp = await client.query(
-          `SELECT 1 FROM journal_lines jl
-           JOIN chart_of_accounts c ON c.id = jl.akun_id
-           WHERE jl.entry_id=$1 AND c.kode LIKE '5.%'`,
-          [entryId]
-        );
-        if (hasHpp.rowCount) {
-          results.push({ entry_id: entryId, no_jurnal: orig.no_jurnal, status: 'SKIP', message: 'Sudah punya HPP — tidak perlu koreksi' });
-          continue;
-        }
-
-        // ── 3. Duplicate correction check via referensi ──
-        const dupCheck = await client.query(
-          `SELECT id FROM journal_entries
-           WHERE tenant_id=$1 AND referensi=$2 AND tipeTransaksi='KOREKSI_HPP'
-           LIMIT 1`,
-          [tid, `KOREKSI_HPP:${entryId}`]
-        );
-        if (dupCheck.rowCount) {
-          results.push({ entry_id: entryId, no_jurnal: orig.no_jurnal, status: 'SKIP', message: 'Koreksi HPP sudah pernah dibuat sebelumnya (duplikat dicegah)' });
-          continue;
-        }
-
-        // ── 4. Get revenue lines with inventory_item_id ──
-        const revenueLines = await client.query(
-          `SELECT jl.id, jl.kredit, jl.debit, jl.inventory_item_id, jl.qty, c.kode
-           FROM journal_lines jl
-           JOIN chart_of_accounts c ON c.id = jl.akun_id
-           WHERE jl.entry_id=$1 AND c.kode LIKE '4.2%'`,
-          [entryId]
-        );
-
-        if (!revenueLines.rowCount) {
-          results.push({ entry_id: entryId, no_jurnal: orig.no_jurnal, status: 'FAILED', message: 'Tidak ditemukan baris pendapatan penjualan (4.2.x)' });
-          continue;
-        }
-
-        // ── 5. Calculate HPP per item (NO estimate — must have valid inventory data) ──
-        let totalHppCents = 0; // integer cents
-        const hppDetails: Array<{ debitCents: number; kreditCents: number; inventory_item_id: string | null; qty: number }> = [];
-        let hasValidHpp = false;
-        let needsManualReview = false;
-        const manualReviewReasons: string[] = [];
-
-        for (const rl of revenueLines.rows) {
-          const netRevenueCents = Math.round((Number(rl.kredit) - Number(rl.debit)) * 100);
-          if (netRevenueCents <= 0) continue;
-
-          if (!rl.inventory_item_id) {
-            // No inventory_item_id → cannot calculate HPP reliably
-            needsManualReview = true;
-            manualReviewReasons.push(`Baris ${rl.id}: item persediaan tidak terhubung ke inventory`);
-            continue;
-          }
-
-          // Calculate moving average HPP from inventory data
-          const hppRes = await client.query(
-            `SELECT COALESCE(SUM(jl.debit), 0) AS total_cost,
-                    COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) AS total_qty
-             FROM journal_lines jl
-             JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
-             WHERE jl.inventory_item_id = $1`,
-            [rl.inventory_item_id, tid]
-          );
-          const totalCost = Number(hppRes.rows[0].total_cost) || 0;
-          const totalQty = Number(hppRes.rows[0].total_qty) || 0;
-
-          if (totalQty <= 0) {
-            needsManualReview = true;
-            manualReviewReasons.push(`Baris ${rl.id}: tidak ada data persediaan masuk untuk menghitung HPP`);
-            continue;
-          }
-
-          const hppPerUnitCents = Math.round((totalCost / totalQty) * 100);
-          const qtyToReduce = Number(rl.qty) || 1;
-          const hppTotalCents = hppPerUnitCents * Math.round(qtyToReduce);
-
-          if (hppTotalCents <= 0) {
-            needsManualReview = true;
-            manualReviewReasons.push(`Baris ${rl.id}: HPP bernilai nol atau negatif`);
-            continue;
-          }
-
-          totalHppCents += hppTotalCents;
-          hppDetails.push({
-            debitCents: hppTotalCents,
-            kreditCents: hppTotalCents,
-            inventory_item_id: rl.inventory_item_id,
-            qty: qtyToReduce,
-          });
-          hasValidHpp = true;
-        }
-
-        // If no valid HPP could be calculated → FAILED/NEED_MANUAL_REVIEW
-        if (!hasValidHpp || totalHppCents <= 0) {
-          results.push({
-            entry_id: entryId,
-            no_jurnal: orig.no_jurnal,
-            status: needsManualReview ? 'NEED_MANUAL_REVIEW' : 'FAILED',
-            message: needsManualReview
-              ? `HPP tidak bisa dihitung otomatis: ${manualReviewReasons.join('; ')}`
-              : 'Tidak ada HPP yang perlu dikoreksi',
-          });
-          continue;
-        }
-
-        // ── 6. Create correction journal (inside same transaction) ──
+        // Create correction journal
         const now = new Date();
         const corrTanggal = now.toISOString().slice(0, 10);
         const corrBulan = now.getMonth() + 1;
@@ -3561,7 +3612,7 @@ export async function accountingRoutes(app: FastifyInstance) {
           );
         }
 
-        // ── 7. Balance validation (integer cents) ──
+        // Balance validation (integer cents)
         const balanceCheck = await client.query(
           `SELECT COALESCE(SUM(debit), 0) AS total_debit, COALESCE(SUM(kredit), 0) AS total_kredit
            FROM journal_lines WHERE entry_id=$1`,
@@ -3581,7 +3632,7 @@ export async function accountingRoutes(app: FastifyInstance) {
         });
       }
 
-      // ── COMMIT single atomic transaction ──
+      // COMMIT — semua atau tidak sama sekali
       await client.query('COMMIT');
     } catch (e: any) {
       await client.query('ROLLBACK');
@@ -3596,20 +3647,16 @@ export async function accountingRoutes(app: FastifyInstance) {
     // ── Summary response ──
     const fixed = results.filter(r => r.status === 'FIXED');
     const skipped = results.filter(r => r.status === 'SKIP');
-    const failed = results.filter(r => r.status === 'FAILED' || r.status === 'NEED_MANUAL_REVIEW');
 
     return {
-      success: fixed.length > 0,
+      success: true,
       summary: {
         fixed: fixed.length,
         skipped: skipped.length,
-        failed: failed.length,
-        total: results.length,
+        blocked: 0,
       },
       results,
-      message: fixed.length > 0
-        ? `Koreksi selesai: ${fixed.length} diperbaiki, ${skipped.length} dilewati, ${failed.length} gagal/perlu review`
-        : `Tidak ada koreksi yang diperbaiki. ${skipped.length} dilewati, ${failed.length} gagal/perlu review`,
+      message: `Koreksi selesai: ${fixed.length} diperbaiki, ${skipped.length} dilewati`,
     };
   });
 }
