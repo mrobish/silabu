@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useDateFilter } from '../hooks/useDateFilter';
 import { Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
@@ -31,10 +32,7 @@ function formatRupiah(v?: number) {
 }
 
 export default function PerubahanModalPage() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const [startDate, setStartDate] = useState(`${y}-01-01`);
-  const [endDate, setEndDate] = useState(`${y}-12-31`);
+  const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const [data, setData] = useState<PerubahanModalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

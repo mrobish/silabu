@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useDateFilter } from '../hooks/useDateFilter';
 import { FileText, Loader2, ChevronDown, ChevronRight, Printer } from 'lucide-react';
 import DateRangePicker from './DateRangePicker';
 
@@ -55,12 +56,7 @@ function Section({ title, n, children }: { title: string; n: number; children: R
 }
 
 export default function CalkPage() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
-  const [startDate, setStartDate] = useState(`${y}-${m}-01`);
-  const [endDate, setEndDate] = useState(`${y}-${m}-${String(lastDay).padStart(2, '0')}`);
+  const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const [narasi, setNarasi] = useState(DEFAULT_NARRATIVE);
   const [data, setData] = useState<CalkData | null>(null);
   const [loading, setLoading] = useState(false);

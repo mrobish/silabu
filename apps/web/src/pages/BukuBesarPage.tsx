@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useDateFilter } from '../hooks/useDateFilter';
 import { BookOpen, Calendar, Search, X } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
@@ -27,16 +28,12 @@ const fmtIdDate = (d: string) => { const p = d.split('-'); return `${parseInt(p[
 
 // ─── Component ───────────────────────────────────────────────
 export default function BukuBesarPage() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+
   const [coaList, setCoaList] = useState<CoAAccount[]>([]);
   const [akunId, setAkunId] = useState('');
   const [search, setSearch] = useState('');
   const [openSearch, setOpenSearch] = useState(false);
-  const [startDate, setStartDate] = useState(`${y}-${m}-01`);
-  const [endDate, setEndDate] = useState(`${y}-${m}-${String(lastDay).padStart(2, '0')}`);
+  const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const [data, setData] = useState<BukuBesarData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useDateFilter } from '../hooks/useDateFilter';
 import { DollarSign, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, ChevronDown, ChevronRight, Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
@@ -77,8 +78,7 @@ function AktivitasBlock({ title, icon, data, color, open, onToggle }: {
 }
 
 export default function ArusKasPage() {
-  const [start, setStart] = useState(() => { const d = new Date(); d.setMonth(0, 1); return d.toISOString().slice(0, 10); });
-  const [end, setEnd] = useState(new Date().toISOString().slice(0, 10));
+  const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const [data, setData] = useState<ArusKasData | null>(null);
   const [loading, setLoading] = useState(false);
   const [exp, setExp] = useState<Record<string, boolean>>({ operasi: true, investasi: true, pendanaan: true });
@@ -86,13 +86,13 @@ export default function ArusKasPage() {
 
   const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   const fmtIdDate = (d: string) => { const p = d.split('-'); return `${parseInt(p[2])} ${MONTHS_ID[parseInt(p[1]) - 1]} ${p[0]}`; };
-  const periodLabelArus = `Periode: ${fmtIdDate(start)} s/d ${fmtIdDate(end)}`;
+  const periodLabelArus = `Periode: ${fmtIdDate(startDate)} s/d ${fmtIdDate(endDate)}`;
 
   const token = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
   const fetchD = async () => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/accounting/arus-kas?start_date=${start}&end_date=${end}`, { headers: { Authorization: 'Bearer ' + token() } });
+      const r = await fetch(`/api/accounting/arus-kas?start_date=${startDate}&end_date=${endDate}`, { headers: { Authorization: 'Bearer ' + token() } });
       if (!r.ok) return;
       setData(await r.json());
     } finally { setLoading(false); }
@@ -117,10 +117,10 @@ export default function ArusKasPage() {
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
           <div className="sm:col-span-2" data-help-target="filter-periode">
             <DateRangePicker
-              startDate={start}
-              endDate={end}
-              onStartChange={setStart}
-              onEndChange={setEnd}
+              startDate={startDate}
+              endDate={endDate}
+              onStartChange={setStartDate}
+              onEndChange={setEndDate}
             />
           </div>
           <div className="flex gap-2 sm:col-span-2">

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useDateFilter } from '../hooks/useDateFilter';
 import { TrendingUp, TrendingDown, ChevronDown, ChevronRight, DollarSign, BarChart4, Receipt, Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
@@ -56,9 +57,7 @@ function AkunRow({ a, indent = false }: { a: AkunSaldo; indent?: boolean }) {
 }
 
 export default function LabaRugiPage() {
-  const now = new Date();
-  const [startDate, setStartDate] = useState('2026-01-01');
-  const [endDate, setEndDate] = useState(now.toISOString().slice(0, 10));
+  const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const [data, setData] = useState<LabaRugiData | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({

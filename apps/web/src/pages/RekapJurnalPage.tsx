@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useDateFilter } from '../hooks/useDateFilter';
 import { FileText } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
@@ -27,17 +28,13 @@ const fmtIdDate = (d: string) => { const p = d.split('-'); return `${parseInt(p[
 
 // ─── Component ───────────────────────────────────────────────
 export default function RekapJurnalPage() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+
   const [coaMap, setCoaMap] = useState<Record<string, CoAAccount>>({});
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [journalType, setJournalType] = useState<'ALL' | 'GENERAL' | 'ADJUSTMENT'>('ALL');
-  const [startDate, setStartDate] = useState(`${y}-${m}-01`);
-  const [endDate, setEndDate] = useState(`${y}-${m}-${String(lastDay).padStart(2, '0')}`);
+  const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const [printOpen, setPrintOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
 

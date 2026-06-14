@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useDateFilter } from '../hooks/useDateFilter';
 import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, FileDown } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
@@ -77,12 +78,7 @@ function BalanceBanner({ isBalanced, totalAset, totalPassiva, selisih }: { isBal
 }
 
 export default function NeracaPage() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
-  const [startDate, setStartDate] = useState(`${y}-${m}-01`);
-  const [endDate, setEndDate] = useState(`${y}-${m}-${String(lastDay).padStart(2, '0')}`);
+  const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const [data, setData] = useState<NeracaData | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ lancar: true, tetap: true, lain: true, kewajiban: true, ekuitas: true });
