@@ -32,6 +32,13 @@ function formatRupiah(v?: number) {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(v || 0);
 }
 
+// Prive display: positive = reduction (red, parentheses), negative = reversal (green), zero = neutral
+function displayPrive(v: number) {
+  if (v === 0) return { text: formatRupiah(0), className: 'tabular-nums text-slate-400' };
+  if (v > 0) return { text: `(${formatRupiah(v)})`, className: 'tabular-nums text-red-600' };
+  return { text: formatRupiah(Math.abs(v)), className: 'tabular-nums text-emerald-600' };
+}
+
 export default function PerubahanModalPage() {
   const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const cutoff = useCutoffDate();
@@ -152,12 +159,12 @@ export default function PerubahanModalPage() {
                 </tr>
                 <tr>
                   <td className="px-4 py-3 pl-8 text-slate-600">(−) Prive / Penarikan Modal</td>
-                  <td className="px-4 py-3 text-right text-red-600 tabular-nums">({formatRupiah(data.prive)})</td>
+                  <td className={`px-4 py-3 text-right ${displayPrive(data.prive).className}`}>{displayPrive(data.prive).text}</td>
                 </tr>
                 {data.priveDetail.length > 0 && data.priveDetail.map((d, i) => (
                   <tr key={'p' + i} className="bg-slate-50/30">
                     <td className="px-4 py-2 pl-12 text-xs text-slate-500">{d.kode} — {d.nama}</td>
-                    <td className="px-4 py-2 text-right text-xs text-red-500 tabular-nums">({formatRupiah(d.debit)})</td>
+                    <td className={`px-4 py-2 text-right text-xs ${displayPrive(d.debit - d.kredit).className}`}>{displayPrive(d.debit - d.kredit).text}</td>
                   </tr>
                 ))}
                 <tr className="bg-emerald-50/50 border-t-2 border-emerald-200">
@@ -209,11 +216,11 @@ export default function PerubahanModalPage() {
                 </tr>
               ))}
               <tr className="border-b border-slate-100 border-t border-gray-800"><td className="py-1.5 pl-4 font-semibold">(+) Laba Bersih Periode</td><td className="text-right py-1.5 tabular-nums">{formatRupiah(data.labaBersih)}</td></tr>
-              <tr className="border-b border-slate-100"><td className="py-1.5 pl-4 font-semibold">(−) Prive / Penarikan Modal</td><td className="text-right py-1.5 tabular-nums text-red-600 print:text-red-600">({formatRupiah(data.prive)})</td></tr>
+              <tr className="border-b border-slate-100"><td className="py-1.5 pl-4 font-semibold">(−) Prive / Penarikan Modal</td><td className={`text-right py-1.5 ${displayPrive(data.prive).className} print:${displayPrive(data.prive).className}`}>{displayPrive(data.prive).text}</td></tr>
               {data.priveDetail.length > 0 && data.priveDetail.map((d, i) => (
                 <tr key={'pp' + i} className="border-b border-slate-100">
                   <td className="py-1 pl-6 text-slate-600">{d.kode} — {d.nama}</td>
-                  <td className="text-right py-1 tabular-nums text-red-600 print:text-red-600">({formatRupiah(d.debit)})</td>
+                  <td className={`text-right py-1 ${displayPrive(d.debit - d.kredit).className} print:${displayPrive(d.debit - d.kredit).className}`}>{displayPrive(d.debit - d.kredit).text}</td>
                 </tr>
               ))}
               <tr className="bg-gray-100 print:bg-gray-100 border-t border-gray-800 border-b-4 border-double border-gray-900"><td className="py-2 font-extrabold">Modal Akhir per {fmtIdDate(endDate)}</td><td className="text-right py-2 font-extrabold tabular-nums">{formatRupiah(data.modalAkhir)}</td></tr>
