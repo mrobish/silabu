@@ -1066,8 +1066,11 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
         kredit: Number(l.kredit) > 0 ? formatCurrencyDisplay(String(Number(l.kredit))) : '',
         keterangan: l.keterangan || '',
         searchTerm: '',
+        contact_id: l.contactId || l.contact_id || null,
+        inventory_item_id: l.inventoryItemId || l.inventory_item_id || null,
+        qty: l.qty || null,
       }));
-      while (loaded.length < 2) loaded.push({ akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' });
+      while (loaded.length < 2) loaded.push({ akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '', contact_id: null, inventory_item_id: null, qty: null });
       setEditLines(loaded);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e: any) {
@@ -1100,13 +1103,13 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
   }
 
   function addEditLine() {
-    setEditLines(prev => [...prev, { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' }]);
+    setEditLines(prev => [...prev, { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '', contact_id: null, inventory_item_id: null, qty: null }]);
   }
 
   function removeEditLine(i: number) {
     setEditLines(prev => {
       const next = prev.filter((_, idx) => idx !== i);
-      while (next.length < 2) next.push({ akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '' });
+      while (next.length < 2) next.push({ akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '', contact_id: null, inventory_item_id: null, qty: null });
       return next;
     });
   }
@@ -1134,6 +1137,9 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
           debit: parseCurrencyInput(l.debit),
           kredit: parseCurrencyInput(l.kredit),
           keterangan: l.keterangan,
+          contact_id: l.contact_id || null,
+          inventory_item_id: l.inventory_item_id || null,
+          qty: l.qty || null,
         })),
       };
       const res = await fetch('/api/accounting/jurnal-umum/' + editingId, {

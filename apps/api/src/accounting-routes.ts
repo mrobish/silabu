@@ -726,7 +726,8 @@ export async function accountingRoutes(app: FastifyInstance) {
     );
     if (!r.rowCount) return { error: 'Jurnal tidak ditemukan' };
     const lines = await pool.query(
-      `SELECT l.id, l.akun_id AS "akunId", l.debit, l.kredit, l.keterangan, l.unit_usaha AS "unitUsaha"
+      `SELECT l.id, l.akun_id AS "akunId", l.debit, l.kredit, l.keterangan, l.unit_usaha AS "unitUsaha",
+              l.contact_id AS "contactId", l.inventory_item_id AS "inventoryItemId", l.qty
        FROM journal_lines l WHERE l.entry_id=$1 ORDER BY l.created_at`,
       [id]
     );
@@ -843,9 +844,9 @@ export async function accountingRoutes(app: FastifyInstance) {
       await client.query(`DELETE FROM journal_lines WHERE entry_id=$1`, [id]);
       for (const l of lines) {
         await client.query(
-          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan)
-           VALUES ($1,$2,$3,$4,$5)`,
-          [id, l.akun_id, String(l.debit || '0'), String(l.kredit || '0'), l.keterangan || null]
+          `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit, keterangan, contact_id, inventory_item_id, qty)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [id, l.akun_id, String(l.debit || '0'), String(l.kredit || '0'), l.keterangan || null, l.contact_id || null, l.inventory_item_id || null, l.qty || null]
         );
       }
 
