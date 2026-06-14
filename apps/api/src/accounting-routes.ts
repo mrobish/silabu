@@ -18,31 +18,48 @@ async function checkPeriodLock(tenantId: string, tahun: number): Promise<void> {
 }
 
 /**
- * Cek apakah tanggal transaksi >= tanggal cutoff (OPENING_BALANCE).
- * Mencegah input transaksi di periode yang sudah punya Saldo Awal.
+ * Cek apakah tanggal transaksi >= tanggal cutoff.
+ * Cutoff ditentukan oleh jurnal sistem terbaru:
+ *   - OPENING_BALANCE (Saldo Awal): blokir semua transaksi SEBELUM tanggal ini
+ *   - CLOSING (Tutup Buku): blokir semua transaksi PADA & SEBELUM tanggal ini
  *
  * Validasi:
- *  1. Gunakan MAX(tanggal) → jika ada multiple OPENING_BALANCE (2025 & 2026), ambil terbaru
- *  2. Jika NULL (belum ada saldo awal) → loloskan semua transaksi
- *  3. Bypass untuk OPENING_BALANCE → Saldo Awal boleh diedit kapan saja
+ *  1. Bypass array: OPENING_BALANCE & CLOSING → jurnal sistem bisa lewat
+ *  2. MAX(tanggal) dari kedua tipe → handle multi-tahun (2025 & 2026)
+ *  3. NULL safe → BUM Desa baru tanpa saldo awal lolos semua
+ *  4. CLOSING pakai <= (31 Des ditutup), OPENING_BALANCE pakai < (1 Jan lolos)
  */
 async function checkCutoffDate(
   tenantId: string,
   tanggal: string,
   opts?: { tipetransaksi?: string },
 ): Promise<void> {
-  // Celah 3: Bypass untuk OPENING_BALANCE — Saldo Awal boleh diedit kapan saja
-  if (opts?.tipetransaksi === 'OPENING_BALANCE') return;
+  // ① Bypass untuk Jurnal Sistem (Saldo Awal & Tutup Buku)
+  const bypassTypes = ['OPENING_BALANCE', 'CLOSING'];
+  if (opts?.tipetransaksi && bypassTypes.includes(opts.tipetransaksi)) return;
 
-  // Celah 1: Gunakan MAX(tanggal) untuk handle multiple OPENING_BALANCE
+  // ② Query MAX gabungan — cari cutoff terbaru dari kedua tipe
   const r = await pool.query(
-    `SELECT MAX(tanggal) AS cutoff FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE'`,
+    `SELECT tanggal AS cutoff, tipetransaksi AS cutoff_type
+     FROM journal_entries
+     WHERE tenant_id=$1 AND tipetransaksi IN ('OPENING_BALANCE','CLOSING')
+     ORDER BY tanggal DESC LIMIT 1`,
     [tenantId]
   );
-  const cutoff = (r.rows[0] as any).cutoff as string | null;
-  // Celah 2: NULL = belum ada saldo awal → loloskan semua
-  if (!cutoff) return;
-  if (tanggal < cutoff) {
+  if (!r.rows.length) return; // ③ NULL = belum ada apa-apa → loloskan semua
+
+  const row = r.rows[0] as any;
+  const cutoff: string = row.cutoff;
+  const cutoffType: string = row.cutoff_type;
+
+  // ④ Logika pemblokiran:
+  //    CLOSING (31 Des 2025) → blokir <= 31 Des (tahun sudah tutup, tidak bisa input lagi)
+  //    OPENING_BALANCE (1 Jan 2026) → blokir < 1 Jan (1 Jan sendiri masih boleh)
+  const blocked = cutoffType === 'CLOSING'
+    ? tanggal <= cutoff   // Tutup Buku: termasuk tanggal closing
+    : tanggal < cutoff;   // Saldo Awal: sebelum tanggal opening
+
+  if (blocked) {
     throw Object.assign(
       new Error(`Transaksi ditolak. Anda tidak bisa memasukkan transaksi pada periode yang sudah ditutup (sebelum ${cutoff}).`),
       { statusCode: 422 }
