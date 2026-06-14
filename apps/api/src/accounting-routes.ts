@@ -1505,7 +1505,7 @@ export async function accountingRoutes(app: FastifyInstance) {
       `SELECT COALESCE(SUM(${mutasiExpr}), 0) AS saldo
        FROM journal_lines jl
        JOIN journal_entries je ON je.id = jl.entry_id
-       WHERE jl.akun_id = $1 AND je.tenant_id = $2${saldoAwalDateClause}`,
+       WHERE jl.akun_id = $1 AND je.tenant_id = $2 AND je.isposted = true${saldoAwalDateClause}`,
       saldoAwalParams
     );
     const saldoAwal = Number((saldoAwalRes.rows[0] as any).saldo);
@@ -1535,7 +1535,7 @@ export async function accountingRoutes(app: FastifyInstance) {
                       ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "saldoBerjalan"
        FROM journal_lines jl
        JOIN journal_entries je ON je.id = jl.entry_id
-       WHERE jl.akun_id = $1 AND je.tenant_id = $2${dateClause}
+       WHERE jl.akun_id = $1 AND je.tenant_id = $2 AND je.isposted = true${dateClause}
        ORDER BY je.tanggal, je.created_at, jl.created_at`,
       mutasiParams
     );
@@ -1589,6 +1589,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_lines jl
          JOIN journal_entries je ON je.id = jl.entry_id
               AND je.tenant_id = $1
+             AND je.isposted = true
               AND je.tipetransaksi NOT IN ('OPENING_BALANCE', 'CLOSING')${dateClause}
        ) m ON m.akun_id = c.id
        WHERE c.tenant_id = $1 AND c.ispostable = true
@@ -1681,6 +1682,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          SELECT jl.akun_id, jl.debit, jl.kredit
          FROM journal_lines jl
          JOIN journal_entries je ON je.id = jl.entry_id AND je.tenant_id = $1
+              AND je.isposted = true
        ) m ON m.akun_id = c.id
        WHERE c.tenant_id = $1 AND c.ispostable = true AND c.kode LIKE '1.1.01%'`,
       [tenantId]
@@ -1690,7 +1692,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     // 3. Jumlah transaksi bulan ini
     const txCount = await pool.query(
       `SELECT COUNT(*)::int AS count FROM journal_entries
-       WHERE tenant_id=$1 AND tipetransaksi <> 'OPENING_BALANCE'
+       WHERE tenant_id=$1 AND isposted = true AND tipetransaksi <> 'OPENING_BALANCE'
          AND tanggal >= $2 AND tanggal <= $3`,
       [tenantId, `${currentYear}-${String(now.getMonth()+1).padStart(2,'0')}-01`, today]
     );
@@ -1741,6 +1743,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_lines jl
          JOIN journal_entries je ON je.id = jl.entry_id
               AND je.tenant_id = $1
+              AND je.isposted = true
               AND je.tipetransaksi <> 'CLOSING'
               AND je.tanggal <= $2
        ) m ON m.akun_id = c.id
@@ -1850,6 +1853,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_lines jl
          JOIN journal_entries je ON je.id = jl.entry_id
               AND je.tenant_id = $1
+              AND je.isposted = true
               AND (
                 je.tipetransaksi = 'OPENING_BALANCE'
                 OR je.tanggal < $2
@@ -1872,6 +1876,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_lines jl
          JOIN journal_entries je ON je.id = jl.entry_id
               AND je.tenant_id = $1
+              AND je.isposted = true
               AND je.tipetransaksi NOT IN ('OPENING_BALANCE', 'CLOSING')
               AND je.tanggal >= $2 AND je.tanggal <= $3
        ) m ON m.akun_id = c.id
@@ -1929,6 +1934,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_lines jl
          JOIN journal_entries je ON je.id = jl.entry_id
               AND je.tenant_id = $1
+              AND je.isposted = true
               AND je.tipetransaksi <> 'CLOSING'
               AND je.tanggal <= $2
        ) m ON m.akun_id = c.id
@@ -1993,6 +1999,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_lines jl
          JOIN journal_entries je ON je.id = jl.entry_id
               AND je.tenant_id = $1
+              AND je.isposted = true
               ${closingFilter}
               AND je.tanggal <= $2
        ) m ON m.akun_id = c.id
@@ -2041,7 +2048,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          SELECT jl.akun_id, jl.debit, jl.kredit
          FROM journal_lines jl
          JOIN journal_entries je ON je.id = jl.entry_id
-              AND je.tenant_id = $1 AND je.tanggal <= $2
+              AND je.tenant_id = $1 AND je.isposted = true AND je.tanggal <= $2
        ) m ON m.akun_id = c.id
        WHERE c.tenant_id = $1 AND c.ispostable = true
              AND LEFT(c.kode,1) IN ('1','2','3','4','5','6','7')
@@ -2171,6 +2178,7 @@ export async function accountingRoutes(app: FastifyInstance) {
              SELECT jl.akun_id, SUM(jl.debit) AS debit, SUM(jl.kredit) AS kredit
              FROM journal_lines jl
              JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1
+               AND je.isposted = true
                AND je.tipetransaksi = 'OPENING_BALANCE'
              GROUP BY jl.akun_id
            ) m ON m.akun_id=c.id
@@ -2186,6 +2194,7 @@ export async function accountingRoutes(app: FastifyInstance) {
            SELECT jl.akun_id, SUM(jl.debit) AS debit, SUM(jl.kredit) AS kredit
            FROM journal_lines jl
            JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1
+             AND je.isposted = true
              AND (je.tanggal < $2 AND je.tipetransaksi <> 'CLOSING' OR je.tipetransaksi = 'OPENING_BALANCE')
            GROUP BY jl.akun_id
          ) m ON m.akun_id=c.id
@@ -2204,7 +2213,7 @@ export async function accountingRoutes(app: FastifyInstance) {
         SELECT DISTINCT je.id AS entry_id, je.tanggal
         FROM journal_lines jl
         JOIN chart_of_accounts c ON c.id=jl.akun_id AND (c.kode LIKE '1.1.01%' OR c.kode LIKE '1.1.02%')
-        JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal>=$2 AND je.tanggal<=$3 AND je.tipetransaksi NOT IN ('OPENING_BALANCE','CLOSING')
+        JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.isposted = true AND je.tanggal>=$2 AND je.tanggal<=$3 AND je.tipetransaksi NOT IN ('OPENING_BALANCE','CLOSING')
       ),
       kas_net AS (
         SELECT ke.entry_id, ke.tanggal,
@@ -2287,6 +2296,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          SELECT jl.akun_id, SUM(jl.debit) AS debit, SUM(jl.kredit) AS kredit
          FROM journal_lines jl
          JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1
+           AND je.isposted = true
            AND ((je.tanggal<= $2 AND je.tipetransaksi <> 'CLOSING') OR je.tipetransaksi = 'OPENING_BALANCE')
          GROUP BY jl.akun_id
        ) m ON m.akun_id=c.id
@@ -2322,7 +2332,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM chart_of_accounts c
          LEFT JOIN (
            SELECT jl.akun_id, SUM(jl.debit) AS debit, SUM(jl.kredit) AS kredit
-           FROM journal_lines jl JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal<=$2 AND je.tipetransaksi <> 'CLOSING'
+           FROM journal_lines jl JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.isposted = true AND je.tanggal<=$2 AND je.tipetransaksi <> 'CLOSING'
            GROUP BY jl.akun_id
          ) m ON m.akun_id=c.id
          WHERE c.tenant_id=$1 AND c.ispostable=true AND ${kodeLike}
@@ -2898,7 +2908,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_lines jl
          JOIN journal_entries je ON je.id=jl.entry_id
          JOIN chart_of_accounts ca ON ca.id=jl.akun_id AND ca.tenant_id=$1
-         WHERE je.tenant_id=$1 AND je.tanggal >= $2 AND je.tanggal <= $3
+         WHERE je.tenant_id=$1 AND je.isposted = true AND je.tanggal >= $2 AND je.tanggal <= $3
            AND je.tipetransaksi NOT IN ('OPENING_BALANCE', 'CLOSING')
            AND LEFT(ca.kode,1) IN ('4','5','6','7')
          GROUP BY ca.id, ca.kode, ca.nama, ca.saldonormal
@@ -2920,7 +2930,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_lines jl
          JOIN journal_entries je ON je.id=jl.entry_id
          JOIN chart_of_accounts ca ON ca.id=jl.akun_id AND ca.tenant_id=$1
-         WHERE je.tenant_id=$1 AND je.tanggal >= $2 AND je.tanggal <= $3
+         WHERE je.tenant_id=$1 AND je.isposted = true AND je.tanggal >= $2 AND je.tanggal <= $3
            AND je.tipetransaksi NOT IN ('OPENING_BALANCE', 'CLOSING')
            AND ca.kode LIKE '3.2%'
          GROUP BY ca.id, ca.kode, ca.nama, ca.saldonormal

@@ -60,6 +60,7 @@ export async function computeLabaRugiMonthlyGrouped(
      JOIN journal_lines jl ON jl.akun_id = c.id
      JOIN journal_entries je ON je.id = jl.entry_id
           AND je.tenant_id = $1
+          AND je.isposted = true
           AND je.tanggal >= $2
           AND je.tanggal <= $3
           AND je.tipetransaksi NOT IN ('OPENING_BALANCE', 'CLOSING')
