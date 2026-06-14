@@ -58,6 +58,11 @@ const token = () =>
 
 const rupiah = (n: number) => 'Rp ' + Number(n).toLocaleString('id-ID');
 
+const rupiahPrint = (n: number) => {
+  if (n < 0) return '(' + 'Rp ' + Math.abs(n).toLocaleString('id-ID') + ')';
+  return 'Rp ' + Number(n).toLocaleString('id-ID');
+};
+
 const inputCls =
   'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition';
 const br = 'rounded-2xl border border-white/70 bg-white/80 backdrop-blur-xl shadow-sm';
@@ -570,54 +575,54 @@ export default function BukuPembantuPersediaanPage() {
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800">
-                      <th className="text-left py-1 pr-2 font-bold">Tanggal</th>
-                      <th className="text-left py-1 pr-2 font-bold">No Jurnal</th>
-                      <th className="text-left py-1 pr-2 font-bold">Keterangan</th>
-                      <th className="text-left py-1 pr-2 font-bold">Referensi</th>
-                      <th className="text-right py-1 pr-2 font-bold">Debit</th>
-                      <th className="text-right py-1 pr-2 font-bold">Kredit</th>
-                      <th className="text-right py-1 font-bold">Saldo</th>
+                      <th className="text-left py-1.5 px-3 font-bold">Tanggal</th>
+                      <th className="text-left py-1.5 px-3 font-bold">No Jurnal</th>
+                      <th className="text-left py-1.5 px-3 font-bold">Keterangan</th>
+                      <th className="text-left py-1.5 px-3 font-bold">Referensi</th>
+                      <th className="text-right py-1.5 px-3 font-bold">Debit</th>
+                      <th className="text-right py-1.5 px-3 font-bold">Kredit</th>
+                      <th className="text-right py-1.5 px-3 font-bold">Saldo</th>
                     </tr>
                   </thead>
                   <tbody>
                     {/* Saldo Awal */}
-                    <tr className="border-b border-slate-200 bg-emerald-50/30">
-                      <td className="py-1 pr-2 text-slate-600">{fmtDateShort(startDate)}</td>
-                      <td className="py-1 pr-2 text-slate-600" colSpan={3}>
+                    <tr className="border-t border-gray-800 border-b border-slate-200 bg-emerald-50/30">
+                      <td className="py-1.5 px-3 text-slate-600">{fmtDateShort(startDate)}</td>
+                      <td className="py-1.5 px-3 text-slate-600" colSpan={3}>
                         <em>Saldo Awal</em>
                       </td>
-                      <td className="py-1 pr-2 text-right">—</td>
-                      <td className="py-1 pr-2 text-right">—</td>
-                      <td className="py-1 text-right font-semibold tabular-nums">
-                        {rupiah(row.saldoAwal)}
+                      <td className="py-1.5 px-3 text-right tabular-nums">—</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">—</td>
+                      <td className="py-1.5 px-3 text-right font-semibold tabular-nums">
+                        {rupiahPrint(row.saldoAwal)}
                       </td>
                     </tr>
                     {row.transactions.map((t, i) => (
                       <tr key={i} className="border-b border-slate-200">
-                        <td className="py-1 pr-2 text-slate-600">{fmtDateShort(t.tanggal)}</td>
-                        <td className="py-1 pr-2 font-mono text-slate-600">{t.noJurnal}</td>
-                        <td className="py-1 pr-2 text-slate-800">{t.keterangan || '-'}</td>
-                        <td className="py-1 pr-2 text-slate-600">{t.referensi || '-'}</td>
-                        <td className="py-1 pr-2 text-right tabular-nums">
-                          {t.debit > 0 ? rupiah(t.debit) : '—'}
+                        <td className="py-1.5 px-3 text-slate-600">{fmtDateShort(t.tanggal)}</td>
+                        <td className="py-1.5 px-3 font-mono text-slate-600">{t.noJurnal}</td>
+                        <td className="py-1.5 px-3 text-slate-800">{t.keterangan || '-'}</td>
+                        <td className="py-1.5 px-3 text-slate-600">{t.referensi || '-'}</td>
+                        <td className={'py-1.5 px-3 text-right tabular-nums' + (t.debit < 0 ? ' text-red-600 print:text-red-600' : '')}>
+                          {t.debit !== 0 ? rupiahPrint(t.debit) : '—'}
                         </td>
-                        <td className="py-1 pr-2 text-right tabular-nums">
-                          {t.kredit > 0 ? rupiah(t.kredit) : '—'}
+                        <td className={'py-1.5 px-3 text-right tabular-nums' + (t.kredit < 0 ? ' text-red-600 print:text-red-600' : '')}>
+                          {t.kredit !== 0 ? rupiahPrint(t.kredit) : '—'}
                         </td>
-                        <td className="py-1 text-right tabular-nums">{rupiah(t.saldo)}</td>
+                        <td className={'py-1.5 px-3 text-right tabular-nums' + (t.saldo < 0 ? ' text-red-600 print:text-red-600' : '')}>{rupiahPrint(t.saldo)}</td>
                       </tr>
                     ))}
                     {/* Saldo Akhir */}
-                    <tr className="border-t-2 border-slate-800 font-bold">
-                      <td colSpan={4} className="py-1.5 pr-2 text-right uppercase">Saldo Akhir</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums">
-                        {rupiah(row.transactions.reduce((s, t) => s + t.debit, 0))}
+                    <tr className="bg-gray-100 print:bg-gray-100 font-extrabold border-b-4 border-double border-gray-900">
+                      <td colSpan={4} className="py-1.5 px-3 text-right uppercase">Saldo Akhir</td>
+                      <td className={'py-1.5 px-3 text-right tabular-nums' + (row.transactions.reduce((s, t) => s + t.debit, 0) < 0 ? ' text-red-600 print:text-red-600' : '')}>
+                        {rupiahPrint(row.transactions.reduce((s, t) => s + t.debit, 0))}
                       </td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums">
-                        {rupiah(row.transactions.reduce((s, t) => s + t.kredit, 0))}
+                      <td className={'py-1.5 px-3 text-right tabular-nums' + (row.transactions.reduce((s, t) => s + t.kredit, 0) < 0 ? ' text-red-600 print:text-red-600' : '')}>
+                        {rupiahPrint(row.transactions.reduce((s, t) => s + t.kredit, 0))}
                       </td>
-                      <td className="py-1.5 text-right font-bold tabular-nums">
-                        {rupiah(row.saldoAkhir)}
+                      <td className={'py-1.5 px-3 text-right tabular-nums' + (row.saldoAkhir < 0 ? ' text-red-600 print:text-red-600' : '')}>
+                        {rupiahPrint(row.saldoAkhir)}
                       </td>
                     </tr>
                   </tbody>

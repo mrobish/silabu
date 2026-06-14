@@ -22,6 +22,11 @@ interface BukuBesarData {
 const token = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
 const rupiah = (n: number) => 'Rp ' + n.toLocaleString('id-ID');
 const rupiahPrint = (n: number) => n.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const rupiahPrintNeg = (n: number) => {
+  const abs = Math.abs(n);
+  const formatted = abs.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n < 0 ? { text: `(${formatted})`, neg: true } : { text: formatted, neg: false };
+};
 const fmtDate = (d: string) => { try { return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return d; } };
 const fmtDateShort = (d: string) => { try { return new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }); } catch { return d; } };
 const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -318,43 +323,49 @@ export default function BukuBesarPage() {
               {/* Saldo Awal row */}
               {data.saldoAwal !== 0 && (
                 <tr className="bg-slate-50">
-                  <td className="border border-slate-300 px-2 py-1 font-semibold">{fmtDateShort(startDate)}</td>
-                  <td className="border border-slate-300 px-2 py-1 font-semibold">Saldo Awal</td>
-                  <td className="border border-slate-300 px-2 py-1 italic">Saldo awal periode</td>
-                  <td className="border border-slate-300 px-2 py-1 text-right">—</td>
-                  <td className="border border-slate-300 px-2 py-1 text-right">—</td>
-                  <td className="border border-slate-300 px-2 py-1 text-right font-bold">{rupiahPrint(data.saldoAwal)}</td>
+                  <td className="border border-slate-300 px-3 py-1.5 font-semibold">{fmtDateShort(startDate)}</td>
+                  <td className="border border-slate-300 px-3 py-1.5 font-semibold">Saldo Awal</td>
+                  <td className="border border-slate-300 px-3 py-1.5 italic">Saldo awal periode</td>
+                  <td className="border border-slate-300 px-3 py-1.5 text-right tabular-nums">—</td>
+                  <td className="border border-slate-300 px-3 py-1.5 text-right tabular-nums">—</td>
+                  <td className="border border-slate-300 px-3 py-1.5 text-right font-bold tabular-nums">{rupiahPrint(data.saldoAwal)}</td>
                 </tr>
               )}
 
               {/* Mutasi rows */}
               {data.mutasi.map((m, i) => (
                 <tr key={i}>
-                  <td className="border border-slate-300 px-2 py-1">{fmtDateShort(m.tanggal)}</td>
-                  <td className="border border-slate-300 px-2 py-1 font-mono text-[9px]">{m.noJurnal}</td>
-                  <td className="border border-slate-300 px-2 py-1">{m.keterangan || '-'}</td>
-                  <td className="border border-slate-300 px-2 py-1 text-right">{m.debit > 0 ? rupiahPrint(m.debit) : ''}</td>
-                  <td className="border border-slate-300 px-2 py-1 text-right">{m.kredit > 0 ? rupiahPrint(m.kredit) : ''}</td>
-                  <td className="border border-slate-300 px-2 py-1 text-right font-semibold">{rupiahPrint(m.saldoBerjalan)}</td>
+                  <td className="border border-slate-300 px-3 py-1.5">{fmtDateShort(m.tanggal)}</td>
+                  <td className="border border-slate-300 px-3 py-1.5 font-mono text-[9px]">{m.noJurnal}</td>
+                  <td className="border border-slate-300 px-3 py-1.5">{m.keterangan || '-'}</td>
+                  {(() => { const d = rupiahPrintNeg(m.debit); return (
+                    <td className={`border border-slate-300 px-3 py-1.5 text-right tabular-nums font-medium ${d.neg ? 'text-red-600 print:text-red-600' : ''}`}>{m.debit !== 0 ? d.text : ''}</td>
+                  ); })()}
+                  {(() => { const k = rupiahPrintNeg(m.kredit); return (
+                    <td className={`border border-slate-300 px-3 py-1.5 text-right tabular-nums font-medium ${k.neg ? 'text-red-600 print:text-red-600' : ''}`}>{m.kredit !== 0 ? k.text : ''}</td>
+                  ); })()}
+                  {(() => { const s = rupiahPrintNeg(m.saldoBerjalan); return (
+                    <td className={`border border-slate-300 px-3 py-1.5 text-right font-semibold tabular-nums ${s.neg ? 'text-red-600 print:text-red-600' : ''}`}>{s.text}</td>
+                  ); })()}
                 </tr>
               ))}
 
               {/* Total row */}
               {data.mutasi.length > 0 && (
-                <tr className="bg-slate-100 font-bold">
-                  <td colSpan={3} className="border border-slate-400 px-2 py-1.5 text-right uppercase text-[9px] tracking-wide">Total Mutasi</td>
-                  <td className="border border-slate-400 px-2 py-1.5 text-right">{rupiahPrint(data.totalDebit)}</td>
-                  <td className="border border-slate-400 px-2 py-1.5 text-right">{rupiahPrint(data.totalKredit)}</td>
-                  <td className="border border-slate-400 px-2 py-1.5 text-right">{rupiahPrint(data.saldoAkhir)}</td>
+                <tr className="bg-gray-100 print:bg-gray-100 font-extrabold">
+                  <td colSpan={3} className="border border-slate-400 border-b-4 border-double border-gray-900 px-3 py-1.5 text-right uppercase text-[9px] tracking-wide">Total Mutasi</td>
+                  <td className="border border-slate-400 border-b-4 border-double border-gray-900 px-3 py-1.5 text-right tabular-nums">{rupiahPrint(data.totalDebit)}</td>
+                  <td className="border border-slate-400 border-b-4 border-double border-gray-900 px-3 py-1.5 text-right tabular-nums">{rupiahPrint(data.totalKredit)}</td>
+                  <td className="border border-slate-400 border-b-4 border-double border-gray-900 px-3 py-1.5 text-right tabular-nums">{rupiahPrint(data.saldoAkhir)}</td>
                 </tr>
               )}
 
               {/* Saldo Akhir highlight */}
               <tr className="bg-emerald-50">
-                <td colSpan={5} className="border border-slate-400 px-2 py-1.5 text-right font-bold uppercase text-[9px] tracking-wide text-emerald-800">
+                <td colSpan={5} className="border border-slate-400 px-3 py-1.5 text-right font-bold uppercase text-[9px] tracking-wide text-emerald-800">
                   Saldo Akhir Periode
                 </td>
-                <td className="border border-slate-400 px-2 py-1.5 text-right font-bold text-emerald-800 text-[11px]">
+                <td className="border border-slate-400 px-3 py-1.5 text-right font-bold text-emerald-800 text-[11px] tabular-nums">
                   {rupiahPrint(data.saldoAkhir)}
                 </td>
               </tr>

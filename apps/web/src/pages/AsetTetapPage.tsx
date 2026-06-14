@@ -14,6 +14,7 @@ type Aset = {
 };
 
 const rupiah = (n: number) => 'Rp ' + Number(n).toLocaleString('id-ID');
+const rupiahNeg = (n: number) => '(' + rupiah(Math.abs(n)).replace('Rp ', 'Rp ') + ')';
 const inputCls = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition';
 const br = 'rounded-2xl border border-white/70 bg-white/80 backdrop-blur-xl shadow-sm';
 
@@ -298,37 +299,37 @@ export default function AsetTetapPage() {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b border-slate-800">
-                  <th className="text-left py-1 pr-2 font-bold">No</th>
-                  <th className="text-left py-1 pr-2 font-bold">Kode Aset</th>
-                  <th className="text-left py-1 pr-2 font-bold">Nama Aset</th>
-                  <th className="text-left py-1 pr-2 font-bold">Kategori</th>
-                  <th className="text-right py-1 pr-2 font-bold">Harga Perolehan</th>
-                  <th className="text-right py-1 pr-2 font-bold">Akumulasi</th>
-                  <th className="text-right py-1 pr-2 font-bold">Nilai Buku</th>
-                  <th className="text-center py-1 font-bold">Kondisi</th>
+                  <th className="text-left py-1.5 px-3 font-bold">No</th>
+                  <th className="text-left py-1.5 px-3 font-bold">Kode Aset</th>
+                  <th className="text-left py-1.5 px-3 font-bold">Nama Aset</th>
+                  <th className="text-left py-1.5 px-3 font-bold">Kategori</th>
+                  <th className="text-right py-1.5 px-3 font-bold">Harga Perolehan</th>
+                  <th className="text-right py-1.5 px-3 font-bold">Akumulasi</th>
+                  <th className="text-right py-1.5 px-3 font-bold">Nilai Buku</th>
+                  <th className="text-center py-1.5 px-3 font-bold">Kondisi</th>
                 </tr>
               </thead>
               <tbody>
                 {asets.map((a, i) => (
                   <tr key={a.id} className="border-b border-slate-200">
-                    <td className="py-1 pr-2 text-slate-600">{i + 1}</td>
-                    <td className="py-1 pr-2 text-slate-600">{a.id.slice(0, 8)}</td>
-                    <td className="py-1 pr-2 text-slate-800">{a.nama}</td>
-                    <td className="py-1 pr-2 text-slate-600">{a.kategori}</td>
-                    <td className="py-1 pr-2 text-right tabular-nums">{rupiah(a.hargaPerolehan)}</td>
-                    <td className="py-1 pr-2 text-right tabular-nums text-red-600">{rupiah(a.akumulasiPenyusutan)}</td>
-                    <td className="py-1 pr-2 text-right tabular-nums font-semibold">{rupiah(a.nilaiBuku)}</td>
-                    <td className="py-1 text-center">{a.habis ? 'Habis' : 'Aktif'}</td>
+                    <td className="py-1.5 px-3 text-slate-600">{i + 1}</td>
+                    <td className="py-1.5 px-3 text-slate-600">{a.id.slice(0, 8)}</td>
+                    <td className="py-1.5 px-3 text-slate-800">{a.nama}</td>
+                    <td className="py-1.5 px-3 text-slate-600">{a.kategori}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{rupiah(a.hargaPerolehan)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums text-red-600 print:text-red-600">({rupiah(a.akumulasiPenyusutan)})</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums font-semibold">{rupiah(a.nilaiBuku)}</td>
+                    <td className="py-1.5 px-3 text-center">{a.habis ? 'Habis' : 'Aktif'}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-slate-800 font-bold">
-                  <td colSpan={4} className="py-1.5 pr-2 text-right">TOTAL</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums">{rupiah(asets.reduce((s, a) => s + a.hargaPerolehan, 0))}</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums text-red-600">{rupiah(asets.reduce((s, a) => s + a.akumulasiPenyusutan, 0))}</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums font-bold">{rupiah(asets.reduce((s, a) => s + a.nilaiBuku, 0))}</td>
-                  <td />
+                <tr className="border-b-4 border-double border-gray-900 bg-gray-100 print:bg-gray-100 font-extrabold">
+                  <td colSpan={4} className="py-1.5 px-3 text-right">TOTAL</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums">{rupiah(asets.reduce((s, a) => s + a.hargaPerolehan, 0))}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums text-red-600 print:text-red-600">({rupiah(asets.reduce((s, a) => s + a.akumulasiPenyusutan, 0))})</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums font-extrabold">{rupiah(asets.reduce((s, a) => s + a.nilaiBuku, 0))}</td>
+                  <td className="py-1.5 px-3" />
                 </tr>
               </tfoot>
             </table>

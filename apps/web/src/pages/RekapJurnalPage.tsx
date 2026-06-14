@@ -248,12 +248,12 @@ export default function RekapJurnalPage() {
           <table className="w-full border-collapse text-[9px]" style={{ tableLayout: 'fixed' }}>
             <thead>
               <tr className="bg-slate-100">
-                <th className="border border-slate-400 px-1.5 py-1.5 text-left font-bold" style={{ width: '10%' }}>Tanggal</th>
-                <th className="border border-slate-400 px-1.5 py-1.5 text-left font-bold" style={{ width: '10%' }}>No. Ref/Bukti</th>
-                <th className="border border-slate-400 px-1.5 py-1.5 text-left font-bold" style={{ width: '22%' }}>Uraian Transaksi</th>
-                <th className="border border-slate-400 px-1.5 py-1.5 text-left font-bold" style={{ width: '24%' }}>Kode &amp; Nama Akun</th>
-                <th className="border border-slate-400 px-1.5 py-1.5 text-right font-bold" style={{ width: '17%' }}>Debit (Rp)</th>
-                <th className="border border-slate-400 px-1.5 py-1.5 text-right font-bold" style={{ width: '17%' }}>Kredit (Rp)</th>
+                <th className="border border-slate-400 py-1.5 px-3 text-left font-bold" style={{ width: '10%' }}>Tanggal</th>
+                <th className="border border-slate-400 py-1.5 px-3 text-left font-bold" style={{ width: '10%' }}>No. Ref/Bukti</th>
+                <th className="border border-slate-400 py-1.5 px-3 text-left font-bold" style={{ width: '22%' }}>Uraian Transaksi</th>
+                <th className="border border-slate-400 py-1.5 px-3 text-left font-bold" style={{ width: '24%' }}>Kode &amp; Nama Akun</th>
+                <th className="border border-slate-400 py-1.5 px-3 text-right font-bold" style={{ width: '17%' }}>Debit (Rp)</th>
+                <th className="border border-slate-400 py-1.5 px-3 text-right font-bold" style={{ width: '17%' }}>Kredit (Rp)</th>
               </tr>
             </thead>
             <tbody>
@@ -264,32 +264,32 @@ export default function RekapJurnalPage() {
                   const isFirst = li === 0;
                   return (
                     <tr key={'p-' + entry.id + '-' + li}>
-                      <td className="border border-slate-300 px-1.5 py-1">{isFirst ? fmtDateShort(entry.tanggal) : ''}</td>
-                      <td className="border border-slate-300 px-1.5 py-1 font-mono text-[8px]">{isFirst ? (entry.referensi || entry.noJurnal) : ''}</td>
-                      <td className="border border-slate-300 px-1.5 py-1">{isFirst ? (entry.keterangan || '-') : ''}</td>
-                      <td className="border border-slate-300 px-1.5 py-1">
+                      <td className="border border-slate-300 py-1.5 px-3">{isFirst ? fmtDateShort(entry.tanggal) : ''}</td>
+                      <td className="border border-slate-300 py-1.5 px-3 font-mono text-[8px]">{isFirst ? (entry.referensi || entry.noJurnal) : ''}</td>
+                      <td className="border border-slate-300 py-1.5 px-3">{isFirst ? (entry.keterangan || '-') : ''}</td>
+                      <td className="border border-slate-300 py-1.5 px-3">
                         <span className="font-mono">{akun?.kode || line.akunId}</span>{' '}
                         <span>{akun?.nama || ''}</span>
                       </td>
-                      <td className="border border-slate-300 px-1.5 py-1 text-right">{Number(line.debit) > 0 ? rupiahPrint(Number(line.debit)) : ''}</td>
-                      <td className="border border-slate-300 px-1.5 py-1 text-right">{Number(line.kredit) > 0 ? rupiahPrint(Number(line.kredit)) : ''}</td>
+                      <td className="border border-slate-300 py-1.5 px-3 text-right tabular-nums">{Number(line.debit) > 0 ? rupiahPrint(Number(line.debit)) : ''}</td>
+                      <td className="border border-slate-300 py-1.5 px-3 text-right tabular-nums">{Number(line.kredit) > 0 ? rupiahPrint(Number(line.kredit)) : ''}</td>
                     </tr>
                   );
                 });
               })}
 
               {/* Grand Total */}
-              <tr className="bg-slate-100 font-bold">
-                <td colSpan={4} className="border border-slate-400 px-1.5 py-1.5 text-right uppercase text-[9px] tracking-wide">
+              <tr className="bg-gray-100 print:bg-gray-100 font-extrabold border-b-4 border-double border-gray-900">
+                <td colSpan={4} className="border border-slate-400 py-1.5 px-3 text-right uppercase text-[9px] tracking-wide">
                   Grand Total ({entries.length} Jurnal)
                 </td>
-                <td className="border border-slate-400 px-1.5 py-1.5 text-right">{rupiahPrint(grandDebit)}</td>
-                <td className="border border-slate-400 px-1.5 py-1.5 text-right">{rupiahPrint(grandKredit)}</td>
+                <td className="border border-slate-400 py-1.5 px-3 text-right tabular-nums">{rupiahPrint(grandDebit)}</td>
+                <td className="border border-slate-400 py-1.5 px-3 text-right tabular-nums">{rupiahPrint(grandKredit)}</td>
               </tr>
 
               {/* Balance check */}
-              <tr className={isBalanced ? 'bg-emerald-50' : 'bg-red-50'}>
-                <td colSpan={6} className={'border border-slate-400 px-1.5 py-1.5 text-center font-bold text-[10px] ' + (isBalanced ? 'text-emerald-800' : 'text-red-800')}>
+              <tr className={(isBalanced ? 'bg-emerald-50' : 'bg-red-50') + ' border-t border-gray-800'}>
+                <td colSpan={6} className={'border border-slate-400 py-1.5 px-3 text-center font-bold text-[10px] ' + (isBalanced ? 'text-emerald-800' : 'text-red-800')}>
                   {isBalanced ? '✓ JURNAL BALANCE — Total Debit = Total Kredit' : '✗ JURNAL TIDAK BALANCE — Periksa kembali!'}
                 </td>
               </tr>

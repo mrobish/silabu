@@ -201,10 +201,22 @@ export default function PerubahanModalPage() {
             </thead>
             <tbody>
               <tr className="border-b border-slate-200"><td className="py-1.5 font-semibold">Modal Awal per {fmtIdDate(startDate)}</td><td className="text-right py-1.5 tabular-nums">{formatRupiah(data.modalAwal)}</td></tr>
-              <tr className="border-b border-slate-100"><td className="py-1.5 pl-4">(+) Tambahan Modal</td><td className="text-right py-1.5 tabular-nums">{formatRupiah(data.tambahanModal)}</td></tr>
-              <tr className="border-b border-slate-100"><td className="py-1.5 pl-4">(+) Laba Bersih Periode</td><td className="text-right py-1.5 tabular-nums">{formatRupiah(data.labaBersih)}</td></tr>
-              <tr className="border-b border-slate-100"><td className="py-1.5 pl-4">(−) Prive / Penarikan Modal</td><td className="text-right py-1.5 tabular-nums text-red-600">({formatRupiah(data.prive)})</td></tr>
-              <tr className="border-t-2 border-slate-300 bg-emerald-50/50"><td className="py-2 font-bold">Modal Akhir per {fmtIdDate(endDate)}</td><td className="text-right py-2 font-bold tabular-nums">{formatRupiah(data.modalAkhir)}</td></tr>
+              <tr className="border-b border-slate-100"><td className="py-1.5 pl-4 font-semibold">(+) Tambahan Modal</td><td className="text-right py-1.5 tabular-nums">{formatRupiah(data.tambahanModal)}</td></tr>
+              {data.tambahanDetail.length > 0 && data.tambahanDetail.map((d, i) => (
+                <tr key={'pt' + i} className="border-b border-slate-100">
+                  <td className="py-1 pl-6 text-slate-600">{d.kode} — {d.nama}</td>
+                  <td className="text-right py-1 tabular-nums">{formatRupiah(d.kredit - d.debit)}</td>
+                </tr>
+              ))}
+              <tr className="border-b border-slate-100 border-t border-gray-800"><td className="py-1.5 pl-4 font-semibold">(+) Laba Bersih Periode</td><td className="text-right py-1.5 tabular-nums">{formatRupiah(data.labaBersih)}</td></tr>
+              <tr className="border-b border-slate-100"><td className="py-1.5 pl-4 font-semibold">(−) Prive / Penarikan Modal</td><td className="text-right py-1.5 tabular-nums text-red-600 print:text-red-600">({formatRupiah(data.prive)})</td></tr>
+              {data.priveDetail.length > 0 && data.priveDetail.map((d, i) => (
+                <tr key={'pp' + i} className="border-b border-slate-100">
+                  <td className="py-1 pl-6 text-slate-600">{d.kode} — {d.nama}</td>
+                  <td className="text-right py-1 tabular-nums text-red-600 print:text-red-600">({formatRupiah(d.debit)})</td>
+                </tr>
+              ))}
+              <tr className="bg-gray-100 print:bg-gray-100 border-t border-gray-800 border-b-4 border-double border-gray-900"><td className="py-2 font-extrabold">Modal Akhir per {fmtIdDate(endDate)}</td><td className="text-right py-2 font-extrabold tabular-nums">{formatRupiah(data.modalAkhir)}</td></tr>
             </tbody>
           </table>
         </ReportPrintLayout>

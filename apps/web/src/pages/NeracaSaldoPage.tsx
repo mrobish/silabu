@@ -20,6 +20,13 @@ const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli
 function rupiah(n: number) {
   return 'Rp ' + n.toLocaleString('id-ID');
 }
+function rupiahPrint(n: number) {
+  if (n < 0) {
+    return { text: `(Rp ${Math.abs(n).toLocaleString('id-ID')})`, negative: true };
+  }
+  return { text: 'Rp ' + n.toLocaleString('id-ID'), negative: false };
+}
+
 
 export default function NeracaSaldoPage() {
   const now = new Date();
@@ -184,23 +191,27 @@ export default function NeracaSaldoPage() {
             <tbody>
               {glCodes.map(g => hasAny(g) && (
                 <Fragment key={g}>
-                  <tr className="border-b border-slate-200">
+                  <tr className="border-t border-gray-800">
                     <td colSpan={4} className="py-1.5 font-bold text-slate-700 text-[10px] uppercase tracking-wider">{GL_LABEL[g]}</td>
                   </tr>
                   {grouped[g].map(a => (
                     <tr key={a.kode} className="border-b border-slate-100">
-                      <td className="py-1 font-mono text-slate-500">{a.kode}</td>
-                      <td className="py-1 text-slate-700">{a.nama}</td>
-                      <td className="py-1 text-right tabular-nums">{a.debit > 0 ? rupiah(a.debit) : ''}</td>
-                      <td className="py-1 text-right tabular-nums">{a.kredit > 0 ? rupiah(a.kredit) : ''}</td>
+                      <td className="py-1 pl-6 font-mono text-slate-500">{a.kode}</td>
+                      <td className="py-1 pl-6 text-slate-700">{a.nama}</td>
+                      <td className={"py-1 text-right tabular-nums" + (a.debit < 0 ? ' text-red-600 print:text-red-600' : '')}>{a.debit !== 0 ? rupiahPrint(a.debit).text : ''}</td>
+                      <td className={"py-1 text-right tabular-nums" + (a.kredit < 0 ? ' text-red-600 print:text-red-600' : '')}>{a.kredit !== 0 ? rupiahPrint(a.kredit).text : ''}</td>
                     </tr>
                   ))}
                 </Fragment>
               ))}
-              <tr className="border-t-2 border-slate-300 font-bold">
+              <tr className="bg-gray-100 print:bg-gray-100 font-extrabold border-b-4 border-double border-gray-900">
                 <td colSpan={2} className="py-2">TOTAL</td>
-                <td className="py-2 text-right tabular-nums text-emerald-700">{rupiah(data.totalDebit)}</td>
-                <td className="py-2 text-right tabular-nums text-emerald-700">{rupiah(data.totalKredit)}</td>
+                {(() => { const td = rupiahPrint(data.totalDebit); const tk = rupiahPrint(data.totalKredit); return (
+                  <>
+                    <td className={"py-2 text-right tabular-nums" + (td.negative ? ' text-red-600 print:text-red-600' : ' text-emerald-700')}>{td.text}</td>
+                    <td className={"py-2 text-right tabular-nums" + (tk.negative ? ' text-red-600 print:text-red-600' : ' text-emerald-700')}>{tk.text}</td>
+                  </>
+                ); })()}
               </tr>
             </tbody>
           </table>

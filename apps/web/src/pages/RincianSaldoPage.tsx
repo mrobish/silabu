@@ -769,36 +769,36 @@ export default function RincianSaldoPage() {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b-2 border-slate-800">
-                  <th className="text-left py-1 pr-2 font-bold">No</th>
-                  <th className="text-left py-1 pr-2 font-bold">Kode</th>
-                  <th className="text-left py-1 pr-2 font-bold">Nama Akun</th>
-                  <th className="text-left py-1 pr-2 font-bold">Tipe</th>
-                  <th className="text-right py-1 pr-2 font-bold">Buku Besar</th>
-                  <th className="text-right py-1 pr-2 font-bold">Rincian</th>
-                  <th className="text-right py-1 pr-2 font-bold">Selisih</th>
-                  <th className="text-center py-1 font-bold">Status</th>
+                  <th className="text-left py-1.5 px-3 font-bold">No</th>
+                  <th className="text-left py-1.5 px-3 font-bold">Kode</th>
+                  <th className="text-left py-1.5 px-3 font-bold">Nama Akun</th>
+                  <th className="text-left py-1.5 px-3 font-bold">Tipe</th>
+                  <th className="text-right py-1.5 px-3 font-bold">Buku Besar</th>
+                  <th className="text-right py-1.5 px-3 font-bold">Rincian</th>
+                  <th className="text-right py-1.5 px-3 font-bold">Selisih</th>
+                  <th className="text-center py-1.5 px-3 font-bold">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {reconRows.map((r, i) => (
                   <tr key={r.akunId} className="border-b border-slate-200">
-                    <td className="py-1 pr-2 text-slate-600">{i + 1}</td>
-                    <td className="py-1 pr-2 text-slate-600 tabular-nums">{r.kode}</td>
-                    <td className="py-1 pr-2 text-slate-800">{r.namaAkun}</td>
-                    <td className="py-1 pr-2 text-slate-600">{r.subledgerType}</td>
-                    <td className="py-1 pr-2 text-right tabular-nums">{fmt(r.globalValue)}</td>
-                    <td className="py-1 pr-2 text-right tabular-nums">{fmt(r.rincianValue)}</td>
-                    <td className={`py-1 pr-2 text-right tabular-nums ${Math.abs(r.selisih) < 1 ? '' : 'text-red-600 font-bold'}`}>{fmt(r.selisih)}</td>
-                    <td className="py-1 text-center">
+                    <td className="py-1.5 px-3 text-slate-600">{i + 1}</td>
+                    <td className="py-1.5 px-3 text-slate-600 tabular-nums">{r.kode}</td>
+                    <td className="py-1.5 px-3 text-slate-800">{r.namaAkun}</td>
+                    <td className="py-1.5 px-3 text-slate-600">{r.subledgerType}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmt(r.globalValue)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmt(r.rincianValue)}</td>
+                    <td className={`py-1.5 px-3 text-right tabular-nums ${Math.abs(r.selisih) < 1 ? '' : 'text-red-600 print:text-red-600 font-bold'}`}>{r.selisih < 0 ? `(${fmt(Math.abs(r.selisih))})` : fmt(r.selisih)}</td>
+                    <td className="py-1.5 px-3 text-center">
                       <span className={r.status === 'MATCHED' ? 'text-emerald-600' : 'text-red-600 font-bold'}>{r.status === 'MATCHED' ? '✓' : '✗'}</span>
                     </td>
                   </tr>
                 ))}
-                <tr className="border-t-2 border-slate-800 font-bold">
-                  <td colSpan={4} className="py-1 pr-2 text-right">Total</td>
-                  <td className="py-1 pr-2 text-right tabular-nums">{fmt(reconRows.reduce((s, r) => s + r.globalValue, 0))}</td>
-                  <td className="py-1 pr-2 text-right tabular-nums">{fmt(reconRows.reduce((s, r) => s + r.rincianValue, 0))}</td>
-                  <td className="py-1 pr-2 text-right tabular-nums">{fmt(reconRows.reduce((s, r) => s + r.selisih, 0))}</td>
+                <tr className="bg-gray-100 print:bg-gray-100 font-extrabold border-b-4 border-double border-gray-900">
+                  <td colSpan={4} className="py-1.5 px-3 text-right">Total</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums">{fmt(reconRows.reduce((s, r) => s + r.globalValue, 0))}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums">{fmt(reconRows.reduce((s, r) => s + r.rincianValue, 0))}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums">{(() => { const t = reconRows.reduce((s, r) => s + r.selisih, 0); return t < 0 ? `(${fmt(Math.abs(t))})` : fmt(t); })()}</td>
                   <td />
                 </tr>
               </tbody>
