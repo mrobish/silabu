@@ -20,14 +20,28 @@ async function checkPeriodLock(tenantId: string, tahun: number): Promise<void> {
 /**
  * Cek apakah tanggal transaksi >= tanggal cutoff (OPENING_BALANCE).
  * Mencegah input transaksi di periode yang sudah punya Saldo Awal.
+ *
+ * Validasi:
+ *  1. Gunakan MAX(tanggal) → jika ada multiple OPENING_BALANCE (2025 & 2026), ambil terbaru
+ *  2. Jika NULL (belum ada saldo awal) → loloskan semua transaksi
+ *  3. Bypass untuk OPENING_BALANCE → Saldo Awal boleh diedit kapan saja
  */
-async function checkCutoffDate(tenantId: string, tanggal: string): Promise<void> {
+async function checkCutoffDate(
+  tenantId: string,
+  tanggal: string,
+  opts?: { tipetransaksi?: string },
+): Promise<void> {
+  // Celah 3: Bypass untuk OPENING_BALANCE — Saldo Awal boleh diedit kapan saja
+  if (opts?.tipetransaksi === 'OPENING_BALANCE') return;
+
+  // Celah 1: Gunakan MAX(tanggal) untuk handle multiple OPENING_BALANCE
   const r = await pool.query(
-    `SELECT tanggal FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE' LIMIT 1`,
+    `SELECT MAX(tanggal) AS cutoff FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE'`,
     [tenantId]
   );
-  if (r.rows.length === 0) return; // belum ada saldo awal, boleh input kapan saja
-  const cutoff = (r.rows[0] as any).tanggal as string; // YYYY-MM-DD
+  const cutoff = (r.rows[0] as any).cutoff as string | null;
+  // Celah 2: NULL = belum ada saldo awal → loloskan semua
+  if (!cutoff) return;
   if (tanggal < cutoff) {
     throw Object.assign(
       new Error(`Transaksi ditolak. Anda tidak bisa memasukkan transaksi pada periode yang sudah ditutup (sebelum ${cutoff}).`),
@@ -751,7 +765,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     if (isNaN(tahun) || isNaN(bulan) || tahun < 2000 || tahun > 2100 || bulan < 1 || bulan > 12) {
       return reply.status(400).send({ error: 'Format tanggal tidak valid (YYYY-MM-DD)' });
     }
-    await checkCutoffDate(a.tenantId!, tanggal as string);
+    await checkCutoffDate(a.tenantId!, tanggal as string, { tipetransaksi: entry.tipeTransaksi });
 
     // 5. Validasi per baris — XOR (hanya satu sisi), non-negatif, angka
     const akunIds = lines.map((l: any) => l.akun_id);
