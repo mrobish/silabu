@@ -2692,6 +2692,9 @@ export async function accountingRoutes(app: FastifyInstance) {
     }
 
     // Hitung saldo akhir Gol 4-7 per 31 Des (P&L)
+    // FIX #11 (M2): Range periode penuh (Jan 1 – Dec 31) + exclude OPENING_BALANCE & CLOSING
+    // agar tidak menarik saldo P&L tahun sebelumnya atau jurnal sistem.
+    const startDate = `${year}-01-01`;
     const endDate = `${year}-12-31`;
     const pnL = await pool.query(
       `SELECT ca.id, ca.kode, ca.nama, ca.saldonormal,
@@ -2702,7 +2705,8 @@ export async function accountingRoutes(app: FastifyInstance) {
        FROM journal_lines jl
        JOIN journal_entries je ON je.id=jl.entry_id
        JOIN chart_of_accounts ca ON ca.id=jl.akun_id AND ca.tenant_id=$1
-       WHERE je.tenant_id=$1 AND je.tanggal <= $2
+       WHERE je.tenant_id=$1 AND je.tanggal >= $2 AND je.tanggal <= $3
+         AND je.tipetransaksi NOT IN ('OPENING_BALANCE', 'CLOSING')
          AND LEFT(ca.kode,1) IN ('4','5','6','7')
        GROUP BY ca.id, ca.kode, ca.nama, ca.saldonormal
        HAVING COALESCE(SUM(
@@ -2710,10 +2714,11 @@ export async function accountingRoutes(app: FastifyInstance) {
               ELSE jl.kredit - jl.debit END
        ), 0) != 0
        ORDER BY ca.kode`,
-      [tid, endDate]
+      [tid, startDate, endDate]
     );
 
     // Hitung saldo Prive (Gol 3.2.x — Pengambilan oleh Pemilik) per 31 Des
+    // FIX #11 (M2): Same range + exclude filter as P&L query
     const priveQuery = await pool.query(
       `SELECT ca.id, ca.kode, ca.nama, ca.saldonormal,
               COALESCE(SUM(
@@ -2723,7 +2728,8 @@ export async function accountingRoutes(app: FastifyInstance) {
        FROM journal_lines jl
        JOIN journal_entries je ON je.id=jl.entry_id
        JOIN chart_of_accounts ca ON ca.id=jl.akun_id AND ca.tenant_id=$1
-       WHERE je.tenant_id=$1 AND je.tanggal <= $2
+       WHERE je.tenant_id=$1 AND je.tanggal >= $2 AND je.tanggal <= $3
+         AND je.tipetransaksi NOT IN ('OPENING_BALANCE', 'CLOSING')
          AND ca.kode LIKE '3.2%'
        GROUP BY ca.id, ca.kode, ca.nama, ca.saldonormal
        HAVING COALESCE(SUM(
@@ -2731,7 +2737,7 @@ export async function accountingRoutes(app: FastifyInstance) {
               ELSE jl.kredit - jl.debit END
        ), 0) != 0
        ORDER BY ca.kode`,
-      [tid, endDate]
+      [tid, startDate, endDate]
     );
 
     if (!pnL.rows.length && !priveQuery.rows.length) {
@@ -2832,10 +2838,11 @@ export async function accountingRoutes(app: FastifyInstance) {
         totalDebit += Math.abs(netToSaldoLaba);
       }
 
-      // Balance check
-      if (Math.abs(totalDebit - totalKredit) > 1) {
+      // Balance check — FIX #11: integer cents via validateJournalBalance()
+      const balanceResult = validateJournalBalance(lines as any);
+      if (!balanceResult.valid) {
         await client.query('ROLLBACK');
-        return reply.code(500).send({ error: `Jurnal penutup tidak balance: D=${totalDebit} ≠ K=${totalKredit}` });
+        return reply.code(500).send({ error: `Jurnal penutup tidak balance: ${balanceResult.error}` });
       }
 
       // INSERT lines
