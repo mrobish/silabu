@@ -30,6 +30,29 @@ await app.register(cors, { origin: CORS_ORIGIN, credentials: true });
 await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
 await app.register(multipart, { limits: { fileSize: 2 * 1024 * 1024 } });
 await app.register(fastifyStatic, { root: path.join('/www/wwwroot/silabudigi/uploads'), prefix: '/uploads/', decorateReply: false });
+
+// Security headers for uploaded files — prevent browser from interpreting as HTML/SVG
+app.addHook('onSend', async (request, reply, payload) => {
+  if (request.url.startsWith('/uploads/')) {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    // Force correct Content-Type based on file extension
+    const ext = path.extname(request.url).toLowerCase();
+    const contentTypes: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.webp': 'image/webp',
+    };
+    if (contentTypes[ext]) {
+      reply.header('Content-Type', contentTypes[ext]);
+    } else {
+      // For unknown extensions (including .svg), force download
+      reply.header('Content-Type', 'application/octet-stream');
+      reply.header('Content-Disposition', 'attachment');
+    }
+  }
+  return payload;
+});
 await app.register(registerRoutes, { prefix: '/api/auth' });
 await app.register(authRoutes, { prefix: '/api/auth' });
 await app.register(settingsRoutes, { prefix: '/api/admin' });

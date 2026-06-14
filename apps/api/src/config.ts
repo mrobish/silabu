@@ -3,6 +3,10 @@
  * Throws at import time if required env vars are missing (fail-fast).
  */
 
+// Load .env file BEFORE reading process.env
+// This ensures env vars are available even when PM2 doesn't pass them
+import 'dotenv/config';
+
 const _jwtSecret = process.env.JWT_SECRET;
 if (!_jwtSecret) {
   throw new Error(

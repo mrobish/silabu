@@ -271,13 +271,13 @@ function ProfilPage({ setPage }: { setPage: (p: Page) => void }) {
 
   function validateAndSetLogo(file: File) {
     setLogoError('');
-    const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+    const allowed = ['image/png', 'image/jpeg', 'image/webp'];
     if (!allowed.includes(file.type)) {
-      setLogoError('Format file harus PNG, JPG, WEBP, atau SVG');
+      setLogoError('Format file harus PNG, JPG/JPEG, atau WEBP. SVG tidak diizinkan.');
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      setLogoError('Ukuran file maksimal 2MB');
+      setLogoError(`Ukuran file terlalu besar (${(file.size / 1024 / 1024).toFixed(1)}MB). Maksimal 2MB.`);
       return;
     }
     setLogoFile(file);
@@ -404,8 +404,8 @@ function ProfilPage({ setPage }: { setPage: (p: Page) => void }) {
               >
                 <Icon d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" className="w-8 h-8 text-slate-400" />
                 <p className="text-sm font-medium text-slate-500">Seret logo ke sini atau klik untuk upload</p>
-                <p className="text-[11px] text-slate-400">PNG, JPG, WEBP, SVG — maks 2MB</p>
-                <input id="logo-input" type="file" accept=".png,.jpg,.jpeg,.webp,.svg" className="hidden" onChange={handleLogoSelect} />
+                <p className="text-[11px] text-slate-400">PNG, JPG, WEBP — maks 2MB</p>
+                <input id="logo-input" type="file" accept=".png,.jpg,.jpeg,.webp" className="hidden" onChange={handleLogoSelect} />
               </div>
               {logoFile && (
                 <button type="button" onClick={handleUploadLogo} disabled={uploading}

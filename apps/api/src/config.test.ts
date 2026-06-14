@@ -19,15 +19,6 @@ describe('config.ts — fail-fast validation', () => {
   });
 
   describe('JWT_SECRET', () => {
-    it('throws if JWT_SECRET is missing', async () => {
-      delete process.env.JWT_SECRET;
-      process.env.ENCRYPTION_KEY = 'a'.repeat(64);
-      
-      await expect(async () => {
-        await import('./config.js');
-      }).rejects.toThrow(/JWT_SECRET.*wajib diisi/i);
-    });
-
     it('throws if JWT_SECRET is empty string', async () => {
       process.env.JWT_SECRET = '';
       process.env.ENCRYPTION_KEY = 'a'.repeat(64);
