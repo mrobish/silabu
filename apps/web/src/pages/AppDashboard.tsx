@@ -1255,7 +1255,15 @@ function SaldoAwalPage({ setPage }: { setPage: (p: Page) => void }) {
         headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal membuka kunci saldo awal');
+      if (!res.ok) {
+        // Fix #20: Enhanced error for 409 (transactions exist)
+        if (res.status === 409 && data.code === 'OPENING_BALANCE_HAS_TRANSACTIONS' && data.firstTransaction) {
+          const tgl = data.firstTransaction.tanggal || '';
+          const noJ = data.firstTransaction.noJurnal || '';
+          throw new Error(`${data.error} (${data.transactionCount} transaksi, pertama: ${tgl}${noJ ? ' — ' + noJ : ''})`);
+        }
+        throw new Error(data.error || 'Gagal membuka kunci saldo awal');
+      }
       setLockStatus({ status: 'DRAFT', posted_at: null, posted_by_name: null });
       setShowSuccess('Kunci saldo awal berhasil dibuka! Kembali ke mode Draft.');
     } catch (e: any) {

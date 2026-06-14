@@ -1244,6 +1244,7 @@ export async function accountingRoutes(app: FastifyInstance) {
   });
 
   // DELETE /accounting/saldo-awal — reset opening balance (super_admin only)
+  // Fix #20: Protection against delete when posted transactions exist
   app.delete('/saldo-awal', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
 
@@ -1257,13 +1258,51 @@ export async function accountingRoutes(app: FastifyInstance) {
     }
 
     const entries = await pool.query(
-      `SELECT id FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE'`,
+      `SELECT id, tanggal FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE'`,
       [a.tenantId]
     );
     if (!entries.rowCount) {
       return reply.status(400).send({ error: 'Belum ada saldo awal untuk direset' });
     }
     const ids = entries.rows.map((r: any) => r.id);
+
+    // Fix #20: Check for posted transactions on or after opening balance date
+    const obTanggal = entries.rows[0].tanggal instanceof Date
+      ? entries.rows[0].tanggal.toISOString().slice(0, 10)
+      : String(entries.rows[0].tanggal);
+
+    const txCheck = await pool.query(
+      `SELECT COUNT(*) AS cnt,
+              MIN(je.tanggal) AS first_date,
+              (SELECT je2.no_jurnal FROM journal_entries je2
+               WHERE je2.tenant_id=$1
+                 AND je2.tipetransaksi <> 'OPENING_BALANCE'
+                 AND je2.isposted = true
+                 AND je2.tanggal >= $2
+               ORDER BY je2.tanggal, je2.created_at
+               LIMIT 1) AS first_no_jurnal
+       FROM journal_entries je
+       WHERE je.tenant_id=$1
+         AND je.tipetransaksi <> 'OPENING_BALANCE'
+         AND je.isposted = true
+         AND je.tanggal >= $2`,
+      [a.tenantId, obTanggal]
+    );
+    const tx = txCheck.rows[0] as any;
+    if (Number(tx.cnt) > 0) {
+      const firstDate = tx.first_date instanceof Date
+        ? tx.first_date.toISOString().slice(0, 10)
+        : String(tx.first_date);
+      return reply.status(409).send({
+        error: 'Saldo awal tidak dapat dihapus karena sudah ada transaksi yang diposting pada atau setelah tanggal saldo awal.',
+        code: 'OPENING_BALANCE_HAS_TRANSACTIONS',
+        transactionCount: Number(tx.cnt),
+        firstTransaction: {
+          tanggal: firstDate,
+          noJurnal: tx.first_no_jurnal || null,
+        },
+      });
+    }
 
     const client = await pool.connect();
     try {
@@ -1438,30 +1477,96 @@ export async function accountingRoutes(app: FastifyInstance) {
   });
 
   // POST /accounting/saldo-awal/unpost — unpost saldo awal (set status back to DRAFT, allow editing)
+  // Fix #20: Atomic with advisory lock + protection against unpost when posted transactions exist
   app.post('/saldo-awal/unpost', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
-    
-    // Check if actually posted
-    const check = await pool.query(
-      `SELECT status_saldo_awal FROM tenants WHERE id = $1`,
-      [a.tenantId]
-    );
-    if (check.rows[0]?.status_saldo_awal !== 'POSTED') {
-      return reply.status(400).send({ error: 'Saldo awal tidak dalam keadaan diposting' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Advisory lock per tenant (serialize concurrent requests)
+      await client.query(
+        `SELECT pg_advisory_xact_lock(hashtext('opening-balance-unpost'), hashtext($1))`,
+        [a.tenantId]
+      );
+
+      // Check if actually posted
+      const check = await client.query(
+        `SELECT status_saldo_awal FROM tenants WHERE id = $1`,
+        [a.tenantId]
+      );
+      if (check.rows[0]?.status_saldo_awal !== 'POSTED') {
+        await client.query('ROLLBACK');
+        return reply.status(400).send({ error: 'Saldo awal tidak dalam keadaan diposting' });
+      }
+
+      // Fix #20: Get opening balance tanggal
+      const obRes = await client.query(
+        `SELECT tanggal FROM journal_entries
+         WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE'
+         ORDER BY created_at LIMIT 1`,
+        [a.tenantId]
+      );
+      const obTanggal = obRes.rows[0]?.tanggal instanceof Date
+        ? obRes.rows[0].tanggal.toISOString().slice(0, 10)
+        : String(obRes.rows[0]?.tanggal || '');
+
+      if (obTanggal) {
+        // Fix #20: Check for posted transactions on or after opening balance date
+        const txCheck = await client.query(
+          `SELECT COUNT(*) AS cnt,
+                  MIN(je.tanggal) AS first_date,
+                  (SELECT je2.no_jurnal FROM journal_entries je2
+                   WHERE je2.tenant_id=$1
+                     AND je2.tipetransaksi <> 'OPENING_BALANCE'
+                     AND je2.isposted = true
+                     AND je2.tanggal >= $2
+                   ORDER BY je2.tanggal, je2.created_at
+                   LIMIT 1) AS first_no_jurnal
+           FROM journal_entries je
+           WHERE je.tenant_id=$1
+             AND je.tipetransaksi <> 'OPENING_BALANCE'
+             AND je.isposted = true
+             AND je.tanggal >= $2`,
+          [a.tenantId, obTanggal]
+        );
+        const tx = txCheck.rows[0] as any;
+        if (Number(tx.cnt) > 0) {
+          await client.query('ROLLBACK');
+          const firstDate = tx.first_date instanceof Date
+            ? tx.first_date.toISOString().slice(0, 10)
+            : String(tx.first_date);
+          return reply.status(409).send({
+            error: 'Saldo awal tidak dapat dibuka ulang karena sudah ada transaksi yang diposting pada atau setelah tanggal saldo awal.',
+            code: 'OPENING_BALANCE_HAS_TRANSACTIONS',
+            transactionCount: Number(tx.cnt),
+            firstTransaction: {
+              tanggal: firstDate,
+              noJurnal: tx.first_no_jurnal || null,
+            },
+          });
+        }
+      }
+
+      // Unpost it (set status to DRAFT, keep backward compat boolean in sync)
+      await client.query(
+        `UPDATE tenants
+         SET status_saldo_awal = 'DRAFT',
+             saldo_awal_locked = false,
+             saldo_awal_locked_at = NULL,
+             saldo_awal_locked_by = NULL
+         WHERE id = $1`,
+        [a.tenantId]
+      );
+
+      await client.query('COMMIT');
+      return { message: 'Saldo awal berhasil diunpost', status: 'DRAFT' };
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return reply.status(500).send({ error: 'Gagal unpost saldo awal: ' + e.message });
+    } finally {
+      client.release();
     }
-    
-    // Unpost it (set status to DRAFT, keep backward compat boolean in sync)
-    await pool.query(
-      `UPDATE tenants 
-       SET status_saldo_awal = 'DRAFT',
-           saldo_awal_locked = false, 
-           saldo_awal_locked_at = NULL, 
-           saldo_awal_locked_by = NULL
-       WHERE id = $1`,
-      [a.tenantId]
-    );
-    
-    return { message: 'Saldo awal berhasil diunpost', status: 'DRAFT' };
   });
 
   // GET /accounting/buku-besar — General Ledger dengan running balance
