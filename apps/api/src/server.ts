@@ -16,7 +16,10 @@ import { accountingRoutes } from './accounting-routes.js';
 import { subledgerRoutes } from './subledger-routes.js';
 import { otpRoutes } from './otp-routes.js';
 
-const app = Fastify({ logger: true });
+const app = Fastify({
+  logger: true,
+  bodyLimit: 2 * 1024 * 1024, // 2 MB — Layer 1 DoS protection (rejects oversized JSON before parsing)
+});
 const PORT = Number(process.env.PORT || 3010);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'https://silabu.ondesa.id';
 

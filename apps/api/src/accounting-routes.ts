@@ -356,6 +356,9 @@ export async function accountingRoutes(app: FastifyInstance) {
     if (!lines || !Array.isArray(lines) || lines.length < 2) {
       return reply.status(400).send({ error: 'Minimal 2 baris jurnal' });
     }
+    if (lines.length > 100) {
+      return reply.status(400).send({ error: 'Maksimal 100 baris per jurnal' });
+    }
 
     const [tahunStr, bulanStr, _day] = (tanggal as string).split('-');
     const tahun = parseInt(tahunStr, 10);
@@ -472,6 +475,9 @@ export async function accountingRoutes(app: FastifyInstance) {
     const { rows, idempotency_key } = body;
     if (!rows || !Array.isArray(rows) || rows.length < 2) {
       return reply.status(400).send({ error: 'Minimal 2 baris jurnal' });
+    }
+    if (rows.length > 100) {
+      return reply.status(400).send({ error: 'Maksimal 100 baris per batch' });
     }
 
     // Sanitize: remove ghost rows
@@ -1009,6 +1015,9 @@ export async function accountingRoutes(app: FastifyInstance) {
     if (!tanggal) return reply.status(400).send({ error: 'Tanggal cutoff wajib diisi' });
     if (!lines || !Array.isArray(lines) || lines.length === 0) {
       return reply.status(400).send({ error: 'Tidak ada baris saldo awal' });
+    }
+    if (lines.length > 500) {
+      return reply.status(400).send({ error: 'Maksimal 500 baris saldo awal' });
     }
 
     const [tahunStr, bulanStr] = (tanggal as string).split('-');
@@ -3127,6 +3136,9 @@ export async function accountingRoutes(app: FastifyInstance) {
 
     if (!b.items || !Array.isArray(b.items) || b.items.length === 0) {
       return reply.code(400).send({ error: 'items wajib diisi dan tidak boleh kosong' });
+    }
+    if (b.items.length > 50) {
+      return reply.code(400).send({ error: 'Maksimal 50 item per transaksi' });
     }
     if (!b.kas_akun_id) {
       return reply.code(400).send({ error: 'kas_akun_id wajib dipilih' });
