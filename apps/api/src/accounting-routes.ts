@@ -315,8 +315,8 @@ export async function accountingRoutes(app: FastifyInstance) {
   });
 
   // Generate next no_jurnal like JU-2026-06-0001
-  async function nextJurnalNo(tenantId: string, tahun: number, bulan: number): Promise<string> {
-    const prefix = `JU-${tahun}-${String(bulan).padStart(2, '0')}-`;
+  async function nextJurnalNo(tenantId: string, tahun: number, bulan: number, customPrefix?: string): Promise<string> {
+    const prefix = customPrefix || `JU-${tahun}-${String(bulan).padStart(2, '0')}-`;
     const r = await pool.query(
       `SELECT no_jurnal FROM journal_entries
        WHERE tenant_id=$1 AND no_jurnal LIKE $2
@@ -2320,8 +2320,15 @@ export async function accountingRoutes(app: FastifyInstance) {
   });
 
   // POST /aset-tetap/depreciate — jalankan penyusutan bulanan
-  app.post('/aset-tetap/depreciate', mutationGuard, async (req: FastifyRequest) => {
+  // Fix #3: sequential no_jurnal, duplicate protection, proper errors, DB transaction
+  app.post('/aset-tetap/depreciate', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
+    const now = new Date();
+    const tanggal = now.toISOString().slice(0, 10);
+    const tahun = now.getFullYear();
+    const bulan = now.getMonth() + 1;
+    const susutPrefix = `SUSUT-${tahun}-${String(bulan).padStart(2, '0')}-`;
+
     // Cari aset aktif (belum habis menyusut)
     const assets = await pool.query(
       `SELECT fa.id, fa.nama, fa.kategori, fa.akun_id, fa.harga_perolehan, fa.umur_manfaat_bulan, fa.akumulasi_penyusutan
@@ -2331,33 +2338,67 @@ export async function accountingRoutes(app: FastifyInstance) {
       [a.tenantId]
     );
 
-    const results: { nama: string; susut: number; ok: boolean }[] = [];
-    const now = new Date();
+    if (!assets.rowCount) {
+      return reply.status(400).send({ error: 'Tidak ada aset yang perlu disusutkan' });
+    }
+
+    type DepResult = { nama: string; noJurnal?: string; susut: number; ok: boolean; error?: string };
+    const results: DepResult[] = [];
 
     for (const as of assets.rows) {
       const cat = KATEGORI_COA[as.kategori];
-      if (!cat || !cat.akumKode || !cat.bebanKode) continue;
+      if (!cat || !cat.akumKode || !cat.bebanKode) {
+        results.push({ nama: as.nama, susut: 0, ok: false, error: `Kategori '${as.kategori}' tidak punya akun akumulasi/beban` });
+        continue;
+      }
 
       const akumAcc = await pool.query(
-        `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode=$2 LIMIT 1`,
+        `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode=$2 AND ispostable=true LIMIT 1`,
         [a.tenantId, cat.akumKode]
       );
       const bebanAcc = await pool.query(
-        `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode=$2 LIMIT 1`,
+        `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode=$2 AND ispostable=true LIMIT 1`,
         [a.tenantId, cat.bebanKode]
       );
-      if (!akumAcc.rows.length || !bebanAcc.rows.length) continue;
+      if (!akumAcc.rows.length) {
+        results.push({ nama: as.nama, susut: 0, ok: false, error: `Akun akumulasi penyusutan ${cat.akumKode} tidak ditemukan` });
+        continue;
+      }
+      if (!bebanAcc.rows.length) {
+        results.push({ nama: as.nama, susut: 0, ok: false, error: `Akun beban penyusutan ${cat.bebanKode} tidak ditemukan` });
+        continue;
+      }
 
       const susut = Math.round(Number(as.harga_perolehan) / Number(as.umur_manfaat_bulan));
-      if (susut <= 0) continue;
+      if (susut <= 0) {
+        results.push({ nama: as.nama, susut: 0, ok: false, error: 'Nilai penyusutan tidak valid (0 atau negatif)' });
+        continue;
+      }
 
       const nilaiTersisa = Number(as.harga_perolehan) - Number(as.akumulasi_penyusutan || 0);
       const aktualSusut = Math.min(susut, Math.max(0, nilaiTersisa));
-      if (aktualSusut <= 0) continue;
+      if (aktualSusut <= 0) {
+        results.push({ nama: as.nama, susut: 0, ok: false, error: 'Aset sudah habis disusutkan' });
+        continue;
+      }
 
+      // Proteksi: cek apakah sudah didepresiasi bulan ini
       const bulanKe = Math.floor((Number(as.akumulasi_penyusutan || 0) / susut)) + 1;
       const keterangan = `Penyusutan ${as.nama} - Bulan ke-${bulanKe}`;
-      const noJurnal = `SUSUT-${as.kategori.slice(0, 3).toUpperCase()}-${now.toISOString().slice(2, 10).replace(/-/g, '')}`;
+      const lastDayOfMonth = new Date(tahun, bulan, 0).getDate();
+      const existingJe = await pool.query(
+        `SELECT id FROM journal_entries
+         WHERE tenant_id=$1 AND tanggal >= $2 AND tanggal <= $3
+           AND keterangan LIKE $4 AND tipetransaksi IS DISTINCT FROM 'CLOSING'`,
+        [a.tenantId, `${tahun}-${String(bulan).padStart(2, '0')}-01`, `${tahun}-${String(bulan).padStart(2, '0')}-${lastDayOfMonth}`, `Penyusutan ${as.nama}%`]
+      );
+      if (existingJe.rowCount && existingJe.rowCount > 0) {
+        results.push({ nama: as.nama, susut: 0, ok: false, error: `Sudah didepresiasi bulan ${bulan}/${tahun}` });
+        continue;
+      }
+
+      // Generate sequential no_jurnal
+      const noJurnal = await nextJurnalNo(a.tenantId!, tahun, bulan, susutPrefix);
 
       const client = await pool.connect();
       try {
@@ -2365,29 +2406,34 @@ export async function accountingRoutes(app: FastifyInstance) {
         const je = await client.query(
           `INSERT INTO journal_entries (tenant_id, tanggal, bulan, tahun, no_jurnal, keterangan, isposted, created_at)
            VALUES ($1,$2,$3,$4,$5,$6,true,$7) RETURNING id`,
-          [a.tenantId, now.toISOString().slice(0, 10), now.getMonth()+1, now.getFullYear(), noJurnal, keterangan, now]
+          [a.tenantId, tanggal, bulan, tahun, noJurnal, keterangan, now]
         );
         await client.query(
           `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit)
            VALUES ($1,$2,$3,0), ($1,$4,0,$3)`,
           [je.rows[0].id, bebanAcc.rows[0].id, aktualSusut, akumAcc.rows[0].id]
         );
-        // Update akumulasi_penyusutan
         await client.query(
           `UPDATE fixed_assets SET akumulasi_penyusutan = COALESCE(akumulasi_penyusutan, 0) + $1, updated_at = $2 WHERE id = $3 AND tenant_id = $4`,
           [aktualSusut, now, as.id, a.tenantId]
         );
         await client.query('COMMIT');
-        results.push({ nama: as.nama, susut, ok: true });
-      } catch (e) {
+        results.push({ nama: as.nama, noJurnal, susut: aktualSusut, ok: true });
+      } catch (e: any) {
         await client.query('ROLLBACK');
-        results.push({ nama: as.nama, susut, ok: false });
+        const msg = e.code === '23505' ? 'Duplikat no_jurnal — coba lagi' : e.message || 'Error database';
+        results.push({ nama: as.nama, susut: aktualSusut, ok: false, error: msg });
       } finally {
         client.release();
       }
     }
 
-    return { results, total: results.length, success: results.filter(r => r.ok).length };
+    const success = results.filter(r => r.ok).length;
+    const failed = results.filter(r => !r.ok).length;
+    if (failed > 0) {
+      return reply.status(207).send({ results, total: results.length, success, failed });
+    }
+    return { results, total: results.length, success, failed: 0 };
   });
 
   // ── CRON: Depresiasi bulanan (internal — localhost only) ──
@@ -2396,10 +2442,12 @@ export async function accountingRoutes(app: FastifyInstance) {
     if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
       return reply.code(403).send({ error: 'Forbidden — localhost only' });
     }
-    // Dapatkan semua tenant
     const tenants = await pool.query('SELECT id FROM tenants WHERE is_active=true');
     const allResults: any[] = [];
     const now = new Date();
+    const tanggal = now.toISOString().slice(0, 10);
+    const tahun = now.getFullYear();
+    const bulan = now.getMonth() + 1;
 
     for (const t of tenants.rows) {
       const assets = await pool.query(
@@ -2421,26 +2469,47 @@ export async function accountingRoutes(app: FastifyInstance) {
         Lainnya: { akumKode: '1.3.07.02', bebanKode: '6.1.07.03' },
       };
 
+      const susutPrefix = `SUSUT-${tahun}-${String(bulan).padStart(2, '0')}-`;
+
       for (const as of assets.rows) {
         const cat = KATEGORI_COA_LOCAL[as.kategori];
-        if (!cat?.akumKode || !cat?.bebanKode) continue;
+        if (!cat?.akumKode || !cat?.bebanKode) {
+          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, error: `Kategori '${as.kategori}' tidak punya akun` });
+          continue;
+        }
 
         const akumAcc = await pool.query(
-          `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode=$2 LIMIT 1`, [t.id, cat.akumKode]
+          `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode=$2 AND ispostable=true LIMIT 1`, [t.id, cat.akumKode]
         );
         const bebanAcc = await pool.query(
-          `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode=$2 LIMIT 1`, [t.id, cat.bebanKode]
+          `SELECT id FROM chart_of_accounts WHERE tenant_id=$1 AND kode=$2 AND ispostable=true LIMIT 1`, [t.id, cat.bebanKode]
         );
-        if (!akumAcc.rows.length || !bebanAcc.rows.length) continue;
+        if (!akumAcc.rows.length || !bebanAcc.rows.length) {
+          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, error: `Akun ${cat.akumKode}/${cat.bebanKode} tidak ditemukan` });
+          continue;
+        }
 
         const susut = Math.round(Number(as.harga_perolehan) / Number(as.umur_manfaat_bulan));
         const nilaiTersisa = Number(as.harga_perolehan) - Number(as.akumulasi_penyusutan);
         const aktualSusut = Math.min(susut, Math.max(0, nilaiTersisa));
         if (aktualSusut <= 0) continue;
 
+        // Proteksi: cek apakah sudah didepresiasi bulan ini
+        const lastDayOfMonth = new Date(tahun, bulan, 0).getDate();
+        const existingJe = await pool.query(
+          `SELECT id FROM journal_entries
+           WHERE tenant_id=$1 AND tanggal >= $2 AND tanggal <= $3
+             AND keterangan LIKE $4 AND tipetransaksi IS DISTINCT FROM 'CLOSING'`,
+          [t.id, `${tahun}-${String(bulan).padStart(2, '0')}-01`, `${tahun}-${String(bulan).padStart(2, '0')}-${lastDayOfMonth}`, `Penyusutan ${as.nama}%`]
+        );
+        if (existingJe.rowCount && existingJe.rowCount > 0) {
+          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, skip: 'sudah didepresiasi' });
+          continue;
+        }
+
         const bulanKe = Math.floor((Number(as.akumulasi_penyusutan) / susut)) + 1;
         const keterangan = `Penyusutan ${as.nama} - Bulan ke-${bulanKe}`;
-        const noJurnal = `SUSUT-${as.kategori.slice(0, 3).toUpperCase()}-${now.toISOString().slice(2, 10).replace(/-/g, '')}`;
+        const noJurnal = await nextJurnalNo(t.id, tahun, bulan, susutPrefix);
 
         const client = await pool.connect();
         try {
@@ -2448,7 +2517,7 @@ export async function accountingRoutes(app: FastifyInstance) {
           const je = await client.query(
             `INSERT INTO journal_entries (tenant_id, tanggal, bulan, tahun, no_jurnal, keterangan, isposted, created_at)
              VALUES ($1,$2,$3,$4,$5,$6,true,$7) RETURNING id`,
-            [t.id, now.toISOString().slice(0, 10), now.getMonth()+1, now.getFullYear(), noJurnal, keterangan, now]
+            [t.id, tanggal, bulan, tahun, noJurnal, keterangan, now]
           );
           await client.query(
             `INSERT INTO journal_lines (entry_id, akun_id, debit, kredit)
@@ -2456,15 +2525,15 @@ export async function accountingRoutes(app: FastifyInstance) {
             [je.rows[0].id, bebanAcc.rows[0].id, aktualSusut, akumAcc.rows[0].id]
           );
           await client.query(
-            `UPDATE fixed_assets SET akumulasi_penyusutan = akumulasi_penyusutan + $1, updated_at = $2 WHERE id = $3 AND tenant_id = $4`,
+            `UPDATE fixed_assets SET akumulasi_penyusutan = COALESCE(akumulasi_penyusutan, 0) + $1, updated_at = $2 WHERE id = $3 AND tenant_id = $4`,
             [aktualSusut, now, as.id, t.id]
           );
           await client.query('COMMIT');
-          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, susut: aktualSusut });
+          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, noJurnal, susut: aktualSusut });
         } catch (e: any) {
           await client.query('ROLLBACK');
-          const msg = e.code === '23505' ? 'SKIP — sudah ada' : e.message;
-          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, susut: aktualSusut, error: msg });
+          const msg = e.code === '23505' ? 'Duplikat no_jurnal' : e.message;
+          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, error: msg });
         } finally {
           client.release();
         }
