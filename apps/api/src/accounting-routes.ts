@@ -2382,17 +2382,18 @@ export async function accountingRoutes(app: FastifyInstance) {
         continue;
       }
 
-      // Proteksi: cek apakah sudah didepresiasi bulan ini (by asset_id, bukan nama)
+      // Proteksi LAYER 1: SELECT check untuk error message yang jelas
       const bulanKe = Math.floor((Number(as.akumulasi_penyusutan || 0) / susut)) + 1;
       const keterangan = `Penyusutan ${as.nama} - Bulan ke-${bulanKe}`;
       const deprRef = `ASSET_DEPR:${as.id}`;
-      const existingJe = await pool.query(
-        `SELECT id, no_jurnal FROM journal_entries
-         WHERE tenant_id=$1 AND tahun=$2 AND bulan=$3 AND referensi=$4`,
-        [a.tenantId, tahun, bulan, deprRef]
+      const existingDepr = await pool.query(
+        `SELECT ad.id, je.no_jurnal FROM asset_depreciations ad
+         JOIN journal_entries je ON je.id = ad.journal_entry_id
+         WHERE ad.tenant_id=$1 AND ad.asset_id=$2 AND ad.tahun=$3 AND ad.bulan=$4`,
+        [a.tenantId, as.id, tahun, bulan]
       );
-      if (existingJe.rowCount && existingJe.rowCount > 0) {
-        results.push({ nama: as.nama, susut: 0, ok: false, error: `Sudah didepresiasi bulan ${bulan}/${tahun} (${existingJe.rows[0].no_jurnal})` });
+      if (existingDepr.rowCount && existingDepr.rowCount > 0) {
+        results.push({ nama: as.nama, susut: 0, ok: false, error: `Sudah didepresiasi bulan ${bulan}/${tahun} (${existingDepr.rows[0].no_jurnal})` });
         continue;
       }
 
@@ -2418,13 +2419,26 @@ export async function accountingRoutes(app: FastifyInstance) {
             `UPDATE fixed_assets SET akumulasi_penyusutan = COALESCE(akumulasi_penyusutan, 0) + $1, updated_at = $2 WHERE id = $3 AND tenant_id = $4`,
             [aktualSusut, now, as.id, a.tenantId]
           );
+          // Proteksi LAYER 2: DB UNIQUE constraint — blocks race condition
+          await client.query(
+            `INSERT INTO asset_depreciations (tenant_id, asset_id, tahun, bulan, journal_entry_id, amount)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [a.tenantId, as.id, tahun, bulan, je.rows[0].id, aktualSusut]
+          );
           await client.query('COMMIT');
           results.push({ nama: as.nama, noJurnal, susut: aktualSusut, ok: true });
           success = true;
         } catch (e: any) {
           await client.query('ROLLBACK');
+          // asset_depreciations UNIQUE violation → already depreciated (race condition caught!)
+          if (e.code === '23505' && e.constraint === 'asset_depreciations_tenant_id_asset_id_tahun_bulan_key') {
+            results.push({ nama: as.nama, susut: 0, ok: false, error: `Sudah didepresiasi bulan ${bulan}/${tahun} (race condition blocked)` });
+            success = true; // stop retrying
+            continue;
+          }
+          // no_jurnal collision → retry with new number
           if (e.code === '23505' && attempt < MAX_RETRIES - 1) {
-            continue; // no_jurnal collision, retry with new number
+            continue;
           }
           const msg = e.code === '23505' ? 'Duplikat no_jurnal — gagal setelah 3 percobaan' : e.message || 'Error database';
           results.push({ nama: as.nama, susut: aktualSusut, ok: false, error: msg });
@@ -2500,15 +2514,16 @@ export async function accountingRoutes(app: FastifyInstance) {
         const aktualSusut = Math.min(susut, Math.max(0, nilaiTersisa));
         if (aktualSusut <= 0) continue;
 
-        // Proteksi: cek apakah sudah didepresiasi bulan ini (by asset_id)
+        // Proteksi LAYER 1: SELECT check
         const deprRef = `ASSET_DEPR:${as.id}`;
-        const existingJe = await pool.query(
-          `SELECT id, no_jurnal FROM journal_entries
-           WHERE tenant_id=$1 AND tahun=$2 AND bulan=$3 AND referensi=$4`,
-          [t.id, tahun, bulan, deprRef]
+        const existingDepr = await pool.query(
+          `SELECT ad.id, je.no_jurnal FROM asset_depreciations ad
+           JOIN journal_entries je ON je.id = ad.journal_entry_id
+           WHERE ad.tenant_id=$1 AND ad.asset_id=$2 AND ad.tahun=$3 AND ad.bulan=$4`,
+          [t.id, as.id, tahun, bulan]
         );
-        if (existingJe.rowCount && existingJe.rowCount > 0) {
-          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, skip: `sudah didepresiasi (${existingJe.rows[0].no_jurnal})` });
+        if (existingDepr.rowCount && existingDepr.rowCount > 0) {
+          allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, skip: `sudah didepresiasi (${existingDepr.rows[0].no_jurnal})` });
           continue;
         }
 
@@ -2537,11 +2552,21 @@ export async function accountingRoutes(app: FastifyInstance) {
               `UPDATE fixed_assets SET akumulasi_penyusutan = COALESCE(akumulasi_penyusutan, 0) + $1, updated_at = $2 WHERE id = $3 AND tenant_id = $4`,
               [aktualSusut, now, as.id, t.id]
             );
+            // Proteksi LAYER 2: DB UNIQUE constraint
+            await client.query(
+              `INSERT INTO asset_depreciations (tenant_id, asset_id, tahun, bulan, journal_entry_id, amount)
+               VALUES ($1,$2,$3,$4,$5,$6)`,
+              [t.id, as.id, tahun, bulan, je.rows[0].id, aktualSusut]
+            );
             await client.query('COMMIT');
             allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, noJurnal, susut: aktualSusut });
             ok = true;
           } catch (e: any) {
             await client.query('ROLLBACK');
+            if (e.code === '23505' && e.constraint === 'asset_depreciations_tenant_id_asset_id_tahun_bulan_key') {
+              allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, skip: 'race condition blocked' });
+              ok = true; continue;
+            }
             if (e.code === '23505' && attempt < MAX_RETRIES - 1) continue;
             const msg = e.code === '23505' ? 'Duplikat no_jurnal — gagal setelah retry' : e.message;
             allResults.push({ tenant: t.id.slice(0,8), aset: as.nama, error: msg });
