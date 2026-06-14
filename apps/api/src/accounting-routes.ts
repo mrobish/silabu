@@ -3512,6 +3512,7 @@ export async function accountingRoutes(app: FastifyInstance) {
   });
 
   // POST /accounting/penjualan — Mini POS sales transaction
+  // Fix #18 (R1): Idempotency via shared helper — advisory lock + payload hash + 24h window
   app.post('/penjualan', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
     const b = req.body as any;
@@ -3527,6 +3528,15 @@ export async function accountingRoutes(app: FastifyInstance) {
     }
     if (!b.tanggal) {
       return reply.code(400).send({ error: 'tanggal wajib diisi' });
+    }
+
+    // Fix #18: Validate idempotency_key format BEFORE transaction
+    const idempotency_key = b.idempotency_key || null;
+    if (idempotency_key) {
+      const keyCheck = validateIdempotencyKey(idempotency_key);
+      if (!keyCheck.valid) {
+        return reply.code(400).send({ error: keyCheck.error });
+      }
     }
 
     const tanggal = b.tanggal as string;
@@ -3587,9 +3597,49 @@ export async function accountingRoutes(app: FastifyInstance) {
     await ensurePeriod(a.tenantId!, tahun);
 
     // FIX #12+Concurrency: ALL stock checks + journal creation in ONE atomic transaction
+    // Fix #18: Build payload for idempotency hash
+    const idemPayload = { tanggal, kas_akun_id: kasAkunId, keterangan, items: sortedItems.map((i: any) => ({ inventory_item_id: i.inventory_item_id, qty: i.qty, harga_jual: i.harga_jual })) };
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+
+      // Fix #18: Idempotency check INSIDE transaction (after advisory lock)
+      let derivedKey: string | null = null;
+      if (idempotency_key) {
+        const idemResult = await processJournalIdempotency(client, {
+          tenantId: a.tenantId!,
+          endpoint: 'penjualan',
+          baseKey: idempotency_key,
+          payload: idemPayload,
+        });
+        derivedKey = idemResult.derivedKey;
+
+        if (idemResult.check.status === 'idempotent') {
+          await client.query('COMMIT');
+          return reply.code(200).send({
+            success: true,
+            idempotent: true,
+            message: 'Penjualan sudah pernah dibuat.',
+            entry: {
+              id: idemResult.check.entryId,
+              noJurnal: idemResult.check.noJurnal,
+              tanggal: idemResult.check.tanggal,
+              tipetransaksi: idemResult.check.tipetransaksi,
+              lines: idemResult.check.lines,
+            },
+          });
+        }
+
+        if (idemResult.check.status === 'conflict') {
+          await client.query('ROLLBACK');
+          return reply.code(409).send({
+            success: false,
+            error: 'IDEMPOTENCY_KEY_CONFLICT',
+            message: idemResult.check.message,
+          });
+        }
+      }
 
       const no_jurnal = await nextJurnalNo(a.tenantId!, tahun, bulan);
 
@@ -3687,13 +3737,13 @@ export async function accountingRoutes(app: FastifyInstance) {
       const totalHpp = totalHppCents / 100;
       const labaKotor = totalPenjualan - totalHpp;
 
-      // Create journal entry
+      // Create journal entry (Fix #18: store derived key)
       const entryRes = await client.query(
         `INSERT INTO journal_entries
-           (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, tipeTransaksi, isPosted, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,'SALES',true,$7)
+           (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, tipeTransaksi, isPosted, created_by, idempotency_key)
+         VALUES ($1,$2,$3,$4,$5,$6,'SALES',true,$7,$8)
          RETURNING id, no_jurnal AS "noJurnal"`,
-        [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan, a.userId]
+        [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan, a.userId, derivedKey]
       );
       const entryId = entryRes.rows[0].id;
 
@@ -3741,7 +3791,7 @@ export async function accountingRoutes(app: FastifyInstance) {
           id: entryId,
           noJurnal: entryRes.rows[0].noJurnal,
           tanggal,
-          keterangan,
+          tipetransaksi: 'SALES',
         },
         items: itemDetails.map(d => ({
           nama: d.nama,

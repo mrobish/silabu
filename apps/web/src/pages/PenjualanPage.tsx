@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../utils/apiFetch';
+import { generateIdempotencyKey } from '../utils/idempotency';
 import { useCutoffDate } from "../hooks/useCutoffDate";
 import { ShoppingCart, Plus, Trash2, X, CheckCircle, AlertTriangle, Package, Search } from 'lucide-react';
 
@@ -295,6 +296,7 @@ export default function PenjualanPage({ setPage }: { setPage: (p: any) => void }
   const processSubmit = async () => {
     setSaving(true);
     try {
+      const idemKey = generateIdempotencyKey();
       const body = {
         items: cart.map(c => ({
           inventory_item_id: c.inventory_item_id,
@@ -304,6 +306,7 @@ export default function PenjualanPage({ setPage }: { setPage: (p: any) => void }
         kas_akun_id: kasAkunId,
         tanggal,
         keterangan: keterangan || undefined,
+        idempotency_key: idemKey,
       };
 
       const d: SaleResult = await apiFetch('/api/accounting/penjualan', {
@@ -315,7 +318,14 @@ export default function PenjualanPage({ setPage }: { setPage: (p: any) => void }
         body: JSON.stringify(body),
       });
 
+      // Fix #18: Handle 409 conflict
+      if ((d as any).error === 'IDEMPOTENCY_KEY_CONFLICT') {
+        setToast({ message: 'Request yang sama digunakan untuk data berbeda. Silakan ulangi submit.', type: 'error' });
+        return;
+      }
+
       if (d.success) {
+        // Fix #18: Handle both normal and idempotent success
         setSuccessResult(d);
         setCart([]);
         setKeterangan('');
@@ -323,7 +333,12 @@ export default function PenjualanPage({ setPage }: { setPage: (p: any) => void }
         setToast({ message: (d as any).error || 'Gagal menyimpan transaksi', type: 'error' });
       }
     } catch (e: any) {
-      setToast({ message: e.message || 'Terjadi kesalahan jaringan', type: 'error' });
+      // Fix #18: Handle 409 from apiFetch error
+      if (e.message?.includes('409') || e.message?.includes('IDEMPOTENCY_KEY_CONFLICT')) {
+        setToast({ message: 'Request yang sama digunakan untuk data berbeda. Silakan ulangi submit.', type: 'error' });
+      } else {
+        setToast({ message: e.message || 'Terjadi kesalahan jaringan', type: 'error' });
+      }
     } finally {
       setSaving(false);
       setShowWarning(false);
