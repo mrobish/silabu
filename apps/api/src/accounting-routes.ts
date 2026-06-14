@@ -964,6 +964,9 @@ export async function accountingRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Format tanggal tidak valid (YYYY-MM-DD)' });
     }
 
+    // OPENING_BALANCE tanggal = 1 Januari tahun pembukuan (bukan tanggal input user)
+    const obTanggal = `${tahun}-01-01`;
+
     // Block duplicate — opening balance only once per tenant
     const existing = await pool.query(
       `SELECT id FROM journal_entries WHERE tenant_id=$1 AND tipetransaksi='OPENING_BALANCE' LIMIT 1`,
@@ -1024,7 +1027,7 @@ export async function accountingRoutes(app: FastifyInstance) {
         `INSERT INTO journal_entries (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, tipetransaksi, isposted, islocked, created_by)
          VALUES ($1,'OB-001',$2,$3,$4,$5,'OPENING_BALANCE',true,true,$6)
          RETURNING id, no_jurnal AS "noJurnal", tanggal`,
-        [a.tenantId, tanggal, bulan, tahun, 'Setup Saldo Awal', a.userId]
+        [a.tenantId, obTanggal, 1, tahun, 'Setup Saldo Awal', a.userId]
       );
       const entryId = (entryRes.rows[0] as any).id;
       for (const l of cleanLines) {
@@ -1904,10 +1907,10 @@ export async function accountingRoutes(app: FastifyInstance) {
       return Number(r.rows[0]?.saldo || 0);
     })();
 
-    // ── Analisis akun lawan per jurnal ──
-    // Cari semua entry di rentang waktu yang punya baris Kas/Bank.
-    // Untuk setiap garis Kas (D=penerimaan, K=pengeluaran), lihat baris akun lawan dalam entry yg sama.
-    // Kelompokkan berdasarkan golongan akun lawan.
+    // ── Analisis akun lawan per jurnal (FIXED: net per entry + primary contra) ──
+    // Bug fix: jurnal 4 baris (Kas/Pendapatan/HPP/Persediaan) sebelumnya double-count
+    // Persediaan K sebagai "masuk". Sekarang: hitung net kas per entry, atribusikan
+    // ke primary contra (contra dengan jumlah terbesar yang sesuai arah kas).
     const flowQuery = await pool.query(
       `WITH kas_entries AS (
         SELECT DISTINCT je.id AS entry_id, je.tanggal
@@ -1915,30 +1918,40 @@ export async function accountingRoutes(app: FastifyInstance) {
         JOIN chart_of_accounts c ON c.id=jl.akun_id AND (c.kode LIKE '1.1.01%' OR c.kode LIKE '1.1.02%')
         JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal>=$2 AND je.tanggal<=$3 AND je.tipetransaksi NOT IN ('OPENING_BALANCE','CLOSING')
       ),
-      kas_lines AS (
+      kas_net AS (
         SELECT ke.entry_id, ke.tanggal,
                COALESCE(SUM(jl.debit),0) AS kas_debit,
-               COALESCE(SUM(jl.kredit),0) AS kas_kredit
+               COALESCE(SUM(jl.kredit),0) AS kas_kredit,
+               COALESCE(SUM(jl.debit),0) - COALESCE(SUM(jl.kredit),0) AS net
         FROM kas_entries ke
         JOIN journal_lines jl ON jl.entry_id=ke.entry_id
         JOIN chart_of_accounts c ON c.id=jl.akun_id AND (c.kode LIKE '1.1.01%' OR c.kode LIKE '1.1.02%')
         GROUP BY ke.entry_id, ke.tanggal
       ),
       contra AS (
-        SELECT ke.entry_id, ke.tanggal,
-               contra.kode, contra.nama, contra.saldonormal,
+        SELECT ke.entry_id,
+               contra.kode, contra.nama,
                COALESCE(contra_line.debit,0) AS d, COALESCE(contra_line.kredit,0) AS k
         FROM kas_entries ke
         JOIN journal_lines contra_line ON contra_line.entry_id=ke.entry_id
         JOIN chart_of_accounts contra ON contra.id=contra_line.akun_id AND NOT (contra.kode LIKE '1.1.01%' OR contra.kode LIKE '1.1.02%')
+      ),
+      primary_contra AS (
+        SELECT DISTINCT ON (c.entry_id)
+          c.entry_id, c.kode, c.nama
+        FROM contra c
+        JOIN kas_net kn ON kn.entry_id=c.entry_id
+        WHERE (kn.net > 0 AND c.k > 0) OR (kn.net < 0 AND c.d > 0)
+        ORDER BY c.entry_id, GREATEST(c.d, c.k) DESC
       )
-      SELECT c.kode, c.nama,
-             SUM(CASE WHEN kl.kas_debit>0 THEN c.k ELSE 0 END) AS masuk,
-             SUM(CASE WHEN kl.kas_kredit>0 THEN c.d ELSE 0 END) AS keluar
-      FROM contra c
-      JOIN kas_lines kl ON kl.entry_id=c.entry_id
-      GROUP BY c.kode, c.nama
-      ORDER BY c.kode`,
+      SELECT pc.kode, pc.nama,
+             SUM(CASE WHEN kn.net > 0 THEN kn.net ELSE 0 END) AS masuk,
+             SUM(CASE WHEN kn.net < 0 THEN -kn.net ELSE 0 END) AS keluar
+      FROM primary_contra pc
+      JOIN kas_net kn ON kn.entry_id=pc.entry_id
+      WHERE kn.net != 0
+      GROUP BY pc.kode, pc.nama
+      ORDER BY pc.kode`,
       [tid, startDate || '1970-01-01', endDate]
     );
 
@@ -1978,13 +1991,15 @@ export async function accountingRoutes(app: FastifyInstance) {
     const kasBerjalan = kasTahunLalu + totalNetFlow;
 
     // ── Validasi dengan Neraca (Kas/Bank) ──
+    // Include OPENING_BALANCE regardless of tanggal (may be dated before first transaction)
     const neracaKas = await pool.query(
       `SELECT COALESCE(SUM(CASE WHEN c.saldonormal='D' THEN m.debit-m.kredit ELSE m.kredit-m.debit END),0) AS saldo
        FROM chart_of_accounts c
        LEFT JOIN (
          SELECT jl.akun_id, SUM(jl.debit) AS debit, SUM(jl.kredit) AS kredit
          FROM journal_lines jl
-         JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1 AND je.tanggal<= $2 AND je.tipetransaksi <> 'CLOSING'
+         JOIN journal_entries je ON je.id=jl.entry_id AND je.tenant_id=$1
+           AND ((je.tanggal<= $2 AND je.tipetransaksi <> 'CLOSING') OR je.tipetransaksi = 'OPENING_BALANCE')
          GROUP BY jl.akun_id
        ) m ON m.akun_id=c.id
        WHERE c.tenant_id=$1 AND c.ispostable=true AND (c.kode LIKE '1.1.01%' OR c.kode LIKE '1.1.02%')`,
