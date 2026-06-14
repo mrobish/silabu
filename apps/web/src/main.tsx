@@ -17,6 +17,7 @@ import SuperAdmin from './pages/SuperAdmin';
 import ChangePassword from './pages/ChangePassword';
 import InvoicePage from './pages/InvoicePage';
 import FAQ from './pages/FAQ';
+import VerifyOtpPage from './pages/VerifyOtpPage';
 
 const router = createBrowserRouter([
   { path: '/', element: <Home /> },
@@ -30,6 +31,7 @@ const router = createBrowserRouter([
   { path: '/login', element: <LoginChoice /> },
   { path: '/login/email', element: <LoginEmail /> },
   { path: '/login/callback', element: <LoginCallback /> },
+  { path: '/verify-otp', element: <VerifyOtpPage /> },
   // Password recovery
   { path: '/forgot-password', element: <ForgotPassword /> },
   { path: '/reset-password', element: <ResetPassword /> },

@@ -39,6 +39,11 @@ export default function LoginEmail() {
         setCaptchaKey(k => k + 1); // force re-render Turnstile widget
         return;
       }
+      // OTP required — redirect to verify page
+      if (data.requires_otp) {
+        navigate(`/verify-otp?token=${data.tempToken}`);
+        return;
+      }
       const store = rememberMe ? localStorage : sessionStorage;
       store.setItem('accessToken', data.accessToken);
       store.setItem('user', JSON.stringify(data.user));

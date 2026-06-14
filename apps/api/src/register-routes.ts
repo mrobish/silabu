@@ -218,10 +218,23 @@ export async function registerRoutes(app: FastifyInstance) {
       `UPDATE users SET last_login_at=now(), failed_login_count=0, locked_until=NULL WHERE id=$1`,
       [user.id]
     );
-    return {
-      accessToken: sign(user),
-      user: { id: user.id, email: user.email, nama_lengkap: user.nama_lengkap, role: user.role, tenantId: user.tenant_id },
-    };
+
+    // ── OTP: Generate + send, don't give JWT yet ──
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const hashed = crypto.createHash('sha256').update(otp).digest('hex');
+    await pool.query('DELETE FROM verification_tokens WHERE user_id=$1 AND purpose=\'login_otp\' AND consumed_at IS NULL', [user.id]);
+    await pool.query(
+      `INSERT INTO verification_tokens (user_id, email, purpose, token_hash, expires_at) VALUES ($1, $2, 'login_otp', $3, now() + interval '5 minutes')`,
+      [user.id, emailLower, hashed]
+    );
+    // Temp token for OTP verification
+    const tempToken = jwt.sign({ userId: user.id, email: user.email, purpose: 'otp_login' }, JWT_SECRET, { expiresIn: '5m' });
+    // Send OTP (fire-and-forget)
+    const { sendOTPChannels } = await import('./otp-routes.js').catch(() => ({ sendOTPChannels: null }));
+    if (sendOTPChannels) {
+      sendOTPChannels(user, otp, pool).catch(() => {});
+    }
+    return { requires_otp: true, tempToken, message: 'OTP dikirim' };
   });
 
   // ========== ME ==========
@@ -316,10 +329,20 @@ export async function registerRoutes(app: FastifyInstance) {
           user = userRes.rows[0];
         }
         await client.query('COMMIT');
-        // CASE 1: Existing fully registered user (has tenant + verified) → log in directly
+        // CASE 1: Existing fully registered user (has tenant + verified) → OTP verification
         if (user.tenant_id && user.email_verified_at) {
-          const accessToken = sign(user);
-          return reply.redirect(`${APP_URL}/login/callback?token=${accessToken}&role=${user.role}`);
+          const otp = crypto.randomInt(100000, 999999).toString();
+          const hashed = crypto.createHash('sha256').update(otp).digest('hex');
+          await client.query('DELETE FROM verification_tokens WHERE user_id=$1 AND purpose=\'login_otp\' AND consumed_at IS NULL', [user.id]);
+          await client.query(
+            `INSERT INTO verification_tokens (user_id, email, purpose, token_hash, expires_at) VALUES ($1, $2, 'login_otp', $3, now() + interval '5 minutes')`,
+            [user.id, email, hashed]
+          );
+          const tempToken = jwt.sign({ userId: user.id, email: user.email, purpose: 'otp_login' }, JWT_SECRET, { expiresIn: '5m' });
+          // Send OTP (fire-and-forget)
+          const { sendOTPChannels: sendOTP } = await import('./otp-routes.js').catch(() => ({ sendOTPChannels: null }));
+          if (sendOTP) sendOTP(user, otp, pool).catch(() => {});
+          return reply.redirect(`${APP_URL}/verify-otp?token=${tempToken}&flow=google`);
         }
         // CASE 2: New or incomplete user → send OTP, go through verification
         const otp = await storeOTP(user.id, email);
