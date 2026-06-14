@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: resolve(__dirname, '../../../.env'), override: true });
+dotenv.config({ path: resolve(__dirname, '../../../.env'), override: !!process.env.VITEST });
 import pg from 'pg';
 const { Pool } = pg;
 
