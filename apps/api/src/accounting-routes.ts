@@ -1626,7 +1626,8 @@ export async function accountingRoutes(app: FastifyInstance) {
 
     // 2. Modal Awal: saldo Gol 3 dari SEMUA entries SEBELUM periode berjalan
     //    Termasuk OPENING_BALANCE (apapun tanggalnya) + jurnal umum dari tahun sebelumnya
-    //    EXCLUDE CLOSING — closing hanya jurnal penutup, bukan transaksi riil
+    //    INCLUDE CLOSING historis — closing tahun lalu MENGUBAH saldo awal ekuitas
+    //    (misal: closing 2025 transfer laba→saldo laba, ini harus masuk modal awal 2026)
     const modalAwalRes = await pool.query(
       `SELECT COALESCE(SUM(
          CASE WHEN c.saldonormal = 'D'
@@ -1640,7 +1641,6 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_lines jl
          JOIN journal_entries je ON je.id = jl.entry_id
               AND je.tenant_id = $1
-              AND je.tipetransaksi <> 'CLOSING'
               AND (
                 je.tipetransaksi = 'OPENING_BALANCE'
                 OR je.tanggal < $2
@@ -1678,25 +1678,31 @@ export async function accountingRoutes(app: FastifyInstance) {
       debit: Number(r.total_debit), kredit: Number(r.total_kredit),
     }));
 
-    // Pisahkan: Tambahan Modal (kredit > 0, net positive) vs Prive (debit > 0, net negative)
-    // Prive dihitung NET: SUM(debit) - SUM(kredit), bukan raw debit
+    // Pisahkan: Tambahan Modal vs Prive berdasarkan KODE AKUN (bukan sign net)
+    // 3.1.xx = Modal/setoran → tambahan modal (NET = kredit - debit)
+    // 3.2.xx = Prive → prive (NET = debit - kredit, BISA NEGATIF = reversal)
+    // 3.3.xx = Saldo Laba → excluded dari keduanya
     let tambahanModal = 0;
-    let prive = 0;
+    let prive = 0; // NET: SUM(debit) - SUM(kredit), bisa negatif (reversal)
     const tambahanDetail: MutasiItem[] = [];
     const priveDetail: MutasiItem[] = [];
 
     for (const m of mutasiDetail) {
-      const net = m.kredit - m.debit;
-      if (net > 0) {
-        tambahanModal += net;
+      if (m.kode.startsWith('3.2')) {
+        // Akun Prive → NET = debit - kredit
+        // Positif = penarikan (pengurang modal), Negatif = reversal (penambah modal)
+        prive += (m.debit - m.kredit);
+        priveDetail.push(m);
+      } else if (m.kode.startsWith('3.1')) {
+        // Akun Modal/setoran → NET = kredit - debit
+        tambahanModal += (m.kredit - m.debit);
         tambahanDetail.push(m);
-      } else if (net < 0) {
-        prive += Math.abs(net);
-        priveDetail.push({ ...m, debit: Math.abs(net), kredit: 0 });
       }
+      // 3.3.xx (Saldo Laba) → excluded dari keduanya
     }
 
     // 4. Modal Akhir
+    //    Prive positif → pengurang. Prive negatif → penambah (reversal).
     const modalAkhir = modalAwal + tambahanModal + labaBersih - prive;
 
     // 5. VALIDASI EMAS: Cross-check dengan Neraca
@@ -1754,10 +1760,16 @@ export async function accountingRoutes(app: FastifyInstance) {
   });
 
   // ── Trail Balance (Neraca Saldo) ──
+  // mode=before (default): exclude CLOSING → neraca saldo SEBELUM penutupan
+  // mode=after: include CLOSING → neraca saldo SETELAH penutupan (P&L = 0)
   app.get('/neraca-saldo', tenantGuard, async (req: FastifyRequest) => {
     const a = (req as any).auth as AuthPayload;
     const q = req.query as any;
     const endDate = q.end_date || new Date().toISOString().slice(0, 10);
+    const mode = q.mode || 'before'; // 'before' | 'after'
+    const closingFilter = mode === 'after'
+      ? '' // include CLOSING (post-closing: P&L accounts = 0)
+      : "AND je.tipetransaksi <> 'CLOSING'"; // exclude CLOSING (pre-closing view)
     const rows = await pool.query(
       `SELECT c.kode, c.nama, c.saldonormal AS "saldoNormal",
               COALESCE(SUM(
@@ -1772,7 +1784,7 @@ export async function accountingRoutes(app: FastifyInstance) {
          FROM journal_lines jl
          JOIN journal_entries je ON je.id = jl.entry_id
               AND je.tenant_id = $1
-              AND je.tipetransaksi <> 'CLOSING'
+              ${closingFilter}
               AND je.tanggal <= $2
        ) m ON m.akun_id = c.id
        WHERE c.tenant_id = $1 AND c.ispostable = true
@@ -1797,7 +1809,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const totalKredit = tb.reduce((s, a) => s + a.kredit, 0);
     const selisih = totalDebit - totalKredit;
     const isBalanced = Math.abs(selisih) < 0.005;
-    return { asOf: endDate, akun: tb, totalDebit, totalKredit, isBalanced, selisih };
+    return { asOf: endDate, mode, akun: tb, totalDebit, totalKredit, isBalanced, selisih };
   });
 
   // ── Neraca Lajur — Export Excel (8 kolom standar kertas kerja) ──

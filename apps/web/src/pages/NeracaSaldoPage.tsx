@@ -33,6 +33,7 @@ export default function NeracaSaldoPage() {
   const years = useAccountingYears();
   const [bulan, setBulan] = useState(now.getMonth() + 1);
   const [tahun, setTahun] = useState(now.getFullYear());
+  const [mode, setMode] = useState<'before' | 'after'>('before');
   const lastDay = new Date(tahun, bulan, 0).getDate();
   const endDate = `${tahun}-${String(bulan).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
   const [data, setData] = useState<TBData | null>(null);
@@ -46,7 +47,7 @@ export default function NeracaSaldoPage() {
     setLoading(true);
     try {
       const token = localStorage.getItem('accessToken');
-      const res = await fetch(`/api/accounting/neraca-saldo?end_date=${endDate}`, {
+      const res = await fetch(`/api/accounting/neraca-saldo?end_date=${endDate}&mode=${mode}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
@@ -113,6 +114,31 @@ export default function NeracaSaldoPage() {
               </select>
             </div>
           </div>
+          <div className="min-w-[200px]">
+            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+              Mode Tampilan
+            </label>
+            <div className="flex rounded-xl border border-slate-200 overflow-hidden">
+              <button
+                onClick={() => setMode('before')}
+                className={`flex-1 px-3 py-2 text-xs font-semibold transition-all ${
+                  mode === 'before'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-50'
+                }`}>
+                Sebelum Penutupan
+              </button>
+              <button
+                onClick={() => setMode('after')}
+                className={`flex-1 px-3 py-2 text-xs font-semibold transition-all ${
+                  mode === 'after'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-50'
+                }`}>
+                Setelah Penutupan
+              </button>
+            </div>
+          </div>
           <button onClick={fetchData} disabled={loading}
             className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-cyan-600 text-white text-sm font-semibold rounded-xl hover:shadow-md hover:shadow-emerald-200 transition-all disabled:opacity-50">
             {loading ? 'Memuat...' : 'Tampilkan'}
@@ -135,6 +161,7 @@ export default function NeracaSaldoPage() {
             <p className="text-xs text-slate-500 mt-1">
               Debit {rupiah(data.totalDebit)} = Kredit {rupiah(data.totalKredit)}
               {!data.isBalanced && <span className="text-red-500 font-semibold"> — Selisih {rupiah(Math.abs(data.selisih))}</span>}
+              <span className="ml-2 text-slate-400">({mode === 'after' ? 'Setelah Penutupan' : 'Sebelum Penutupan'})</span>
             </p>
           </div>
 
