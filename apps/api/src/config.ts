@@ -34,6 +34,12 @@ if (_encryptionKey.length < 32) {
   );
 }
 if (_encryptionKey === _jwtSecret) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[CONFIG] ENCRYPTION_KEY tidak boleh sama dengan JWT_SECRET di production! ' +
+      'Gunakan secret yang BERBEDA karena punya purpose dan rotation policy berbeda.'
+    );
+  }
   console.warn('[CONFIG] ⚠️ ENCRYPTION_KEY sama dengan JWT_SECRET! Gunakan secret yang BERBEDA untuk keamanan.');
 }
 
