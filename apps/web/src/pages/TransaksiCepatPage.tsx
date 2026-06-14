@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useCutoffDate } from "../hooks/useCutoffDate";
+import { generateIdempotencyKey } from '../utils/idempotency';
 import {
   ArrowLeft, ArrowDownToLine, ArrowUpFromLine, CheckCircle, X,
   Search, Wallet, Landmark,
@@ -253,6 +254,7 @@ function TransactionForm({
     if (!validate()) return;
     setSaving(true);
     try {
+      const idemKey = generateIdempotencyKey();
       const body: Record<string, any> = {
         tipe,
         tanggal,
@@ -260,6 +262,7 @@ function TransactionForm({
         sumber_akun_id: kasId,
         target_akun_id: targetId,
         keterangan: keterangan || undefined,
+        idempotency_key: idemKey,
       };
       const r = await fetch('/api/accounting/transaksi/quick', {
         method: 'POST',
@@ -267,8 +270,15 @@ function TransactionForm({
         body: JSON.stringify(body),
       });
       const d: EntryResp = await r.json();
-      if (r.ok && d.success && d.entry) {
-        onSuccess(d.entry);
+      if (r.status === 409) {
+        // Fix #18: Idempotency conflict — same key, different payload
+        setErrors({ submit: 'Request yang sama digunakan untuk data berbeda. Silakan ulangi submit.' });
+        return;
+      }
+      if (r.ok && d.success && (d.entry || d.idempotent)) {
+        // Fix #18: Handle both normal and idempotent success
+        const entry = d.entry || d.jurnal;
+        onSuccess(entry);
       } else {
         setErrors({ submit: d.error || d.message || 'Gagal menyimpan transaksi' });
       }

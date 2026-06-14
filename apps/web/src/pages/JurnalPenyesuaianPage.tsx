@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../utils/apiFetch';
+import { generateIdempotencyKey } from '../utils/idempotency';
 import ReportPrintLayout from './ReportPrintLayout';
 
 // ─── Types ───────────────────────────────────────────────────
@@ -255,6 +256,7 @@ export default function JurnalPenyesuaianPage() {
     setError('');
     setShowSuccess('');
     try {
+      const idemKey = generateIdempotencyKey();
       const payload = {
         tanggal,
         keterangan,
@@ -266,21 +268,29 @@ export default function JurnalPenyesuaianPage() {
           keterangan: l.keterangan,
         })),
         tipeTransaksi: 'ADJUSTMENT',
+        idempotency_key: idemKey,
       };
       const data = await apiFetch('/api/accounting/jurnal-umum', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token() },
         body: JSON.stringify(payload),
       });
-      const no = data.no_jurnal || data.entry?.no_jurnal || data.jurnal?.no_jurnal || '';
-      setShowSuccess('Jurnal penyesuaian berhasil disimpan' + (no ? ': ' + no : ''));
+      // Fix #18: Handle idempotent response
+      const no = data.jurnal?.noJurnal || data.jurnal?.no_jurnal || data.no_jurnal || data.entry?.no_jurnal || '';
+      const msg = data.idempotent ? 'Jurnal penyesuaian sudah pernah dibuat' : 'Jurnal penyesuaian berhasil disimpan';
+      setShowSuccess(msg + (no ? ': ' + no : ''));
       setLines([emptyLine(), emptyLine()]);
       setKeterangan('');
       setReferensi('');
       setTanggal(new Date().toISOString().slice(0, 10));
       setSelectedTemplate(null);
     } catch (e: any) {
-      setError(e.message);
+      // Fix #18: Handle 409 conflict
+      if (e.message?.includes('409') || e.message?.includes('IDEMPOTENCY_KEY_CONFLICT')) {
+        setError('Request yang sama digunakan untuk data berbeda. Silakan ulangi submit.');
+      } else {
+        setError(e.message);
+      }
     } finally {
       setSubmitting(false);
     }

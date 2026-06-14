@@ -17,6 +17,7 @@ import {
   IDEMPOTENCY_WINDOW,
 } from './utils/batch-idempotency.js';
 import { postOpeningJournalAtomic } from './utils/opening-balance-posting.js';
+import { validateIdempotencyKey, processJournalIdempotency } from './utils/journal-idempotency.js';
 import ExcelJS from 'exceljs';
 
 const tenantGuard = { onRequest: [requireTenant] };
@@ -365,6 +366,7 @@ export async function accountingRoutes(app: FastifyInstance) {
   }
 
   // POST /accounting/jurnal-umum — create journal entry
+  // Fix #18 (R1): Idempotency via shared helper — advisory lock + payload hash + 24h window
   app.post('/jurnal-umum', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
     const body = req.body as any;
@@ -382,6 +384,14 @@ export async function accountingRoutes(app: FastifyInstance) {
     }
     if (lines.length > 100) {
       return reply.status(400).send({ error: 'Maksimal 100 baris per jurnal' });
+    }
+
+    // Fix #18: Validate idempotency_key format BEFORE transaction
+    if (idempotency_key) {
+      const keyCheck = validateIdempotencyKey(idempotency_key);
+      if (!keyCheck.valid) {
+        return reply.status(400).send({ error: keyCheck.error });
+      }
     }
 
     const [tahunStr, bulanStr, _day] = (tanggal as string).split('-');
@@ -416,38 +426,62 @@ export async function accountingRoutes(app: FastifyInstance) {
       if (!(row as any).isPostable) return reply.status(400).send({ error: `Akun ${(row as any).kode} tidak dapat diposting` });
     }
 
-    // Idempotency check — prevent double submit
-    if (idempotency_key) {
-      const dup = await pool.query(
-        `SELECT id, no_jurnal AS "noJurnal", tanggal, keterangan FROM journal_entries
-         WHERE tenant_id=$1 AND idempotency_key=$2 AND created_at > NOW() - INTERVAL '10 minutes'
-         LIMIT 1`,
-        [a.tenantId, idempotency_key]
-      );
-      if (dup.rowCount) {
-        const existingLines = await pool.query(
-          `SELECT * FROM journal_lines WHERE entry_id=$1 ORDER BY created_at`, [dup.rows[0].id]
-        );
-        return { idempotent: true, jurnal: { ...dup.rows[0], lines: existingLines.rows } };
-      }
-    }
-
-    // Generate no_jurnal and ensure period
+    // Generate no_jurnal and ensure period (outside tx for serial number)
     const no_jurnal = await nextJurnalNo(a.tenantId!, tahun, bulan);
     await ensurePeriod(a.tenantId!, tahun);
     await checkPeriodLock(a.tenantId!, tahun);
 
-    // Transaction: insert entry + lines
+    // Fix #18: Build payload for idempotency hash
+    const idemPayload = { tanggal, keterangan, referensi, lines, tipeTransaksi: journalType };
+
+    // Transaction: idempotency check + insert entry + lines
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+
+      // Fix #18: Idempotency check INSIDE transaction (after advisory lock)
+      let derivedKey: string | null = null;
+      if (idempotency_key) {
+        const idemResult = await processJournalIdempotency(client, {
+          tenantId: a.tenantId!,
+          endpoint: 'jurnal-umum',
+          baseKey: idempotency_key,
+          payload: idemPayload,
+        });
+        derivedKey = idemResult.derivedKey;
+
+        if (idemResult.check.status === 'idempotent') {
+          await client.query('COMMIT');
+          return {
+            success: true,
+            idempotent: true,
+            message: 'Jurnal sudah pernah dibuat.',
+            jurnal: {
+              id: idemResult.check.entryId,
+              noJurnal: idemResult.check.noJurnal,
+              tanggal: idemResult.check.tanggal,
+              tipetransaksi: idemResult.check.tipetransaksi,
+              lines: idemResult.check.lines,
+            },
+          };
+        }
+
+        if (idemResult.check.status === 'conflict') {
+          await client.query('ROLLBACK');
+          return reply.status(409).send({
+            success: false,
+            error: 'IDEMPOTENCY_KEY_CONFLICT',
+            message: idemResult.check.message,
+          });
+        }
+      }
 
       const entryRes = await client.query(
         `INSERT INTO journal_entries
            (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, referensi, tipeTransaksi, isPosted, created_by, idempotency_key)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$10)
-         RETURNING id`,
-        [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan || null, referensi || null, journalType, a.userId, idempotency_key || null]
+         RETURNING id, no_jurnal AS "noJurnal", tanggal, tipetransaksi`,
+        [a.tenantId, no_jurnal, tanggal, bulan, tahun, keterangan || null, referensi || null, journalType, a.userId, derivedKey || null]
       );
       const entryId = entryRes.rows[0].id as string;
 
@@ -462,14 +496,23 @@ export async function accountingRoutes(app: FastifyInstance) {
       await client.query('COMMIT');
 
       // Return the created entry with lines
-      const entry = await pool.query(
-        `SELECT * FROM journal_entries WHERE id=$1`, [entryId]
-      );
       const entryLines = await pool.query(
-        `SELECT * FROM journal_lines WHERE entry_id=$1 ORDER BY created_at`, [entryId]
+        `SELECT id, entry_id, akun_id, debit, kredit, keterangan, contact_id, inventory_item_id, qty
+         FROM journal_lines WHERE entry_id=$1 ORDER BY created_at`, [entryId]
       );
 
-      return { jurnal: { ...entry.rows[0], lines: entryLines.rows } };
+      return {
+        success: true,
+        jurnal: {
+          id: entryRes.rows[0].id,
+          noJurnal: entryRes.rows[0].noJurnal,
+          tanggal: entryRes.rows[0].tanggal instanceof Date
+            ? entryRes.rows[0].tanggal.toISOString().slice(0, 10)
+            : String(entryRes.rows[0].tanggal).slice(0, 10),
+          tipetransaksi: entryRes.rows[0].tipetransaksi,
+          lines: entryLines.rows,
+        },
+      };
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -3068,6 +3111,7 @@ export async function accountingRoutes(app: FastifyInstance) {
 
   // ─── TRANSAKSI CEPAT (Guided Transactions) ──────────────────
   // POST /accounting/transaksi/quick — Auto-jurnal for guided transactions
+  // Fix #18 (R1): Idempotency via shared helper — advisory lock + payload hash + 24h window
   app.post('/transaksi/quick', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
     const a = (req as any).auth as AuthPayload;
     const b = req.body as any;
@@ -3075,6 +3119,15 @@ export async function accountingRoutes(app: FastifyInstance) {
     // Validate required fields
     if (!b.tipe || !b.tanggal || !b.nominal || !b.sumber_akun_id) {
       return reply.code(400).send({ error: 'tipe, tanggal, nominal, dan sumber_akun_id wajib' });
+    }
+
+    // Fix #18: Validate idempotency_key format BEFORE transaction
+    const idempotency_key = b.idempotency_key || null;
+    if (idempotency_key) {
+      const keyCheck = validateIdempotencyKey(idempotency_key);
+      if (!keyCheck.valid) {
+        return reply.code(400).send({ error: keyCheck.error });
+      }
     }
 
     const tipe = b.tipe as string;
@@ -3174,19 +3227,59 @@ export async function accountingRoutes(app: FastifyInstance) {
     await checkCutoffDate(a.tenantId!, tanggal);
     await ensurePeriod(a.tenantId!, tahun);
 
+    // Fix #18: Build payload for idempotency hash
+    const idemPayload = { tipe, tanggal, nominal, sumber_akun_id: sumberAkunId, keterangan, contact_id: contactId, inventory_item_id: inventoryItemId, qty, target_akun_id: b.target_akun_id };
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
+      // Fix #18: Idempotency check INSIDE transaction (after advisory lock)
+      let derivedKey: string | null = null;
+      if (idempotency_key) {
+        const idemResult = await processJournalIdempotency(client, {
+          tenantId: a.tenantId!,
+          endpoint: 'transaksi-quick',
+          baseKey: idempotency_key,
+          payload: idemPayload,
+        });
+        derivedKey = idemResult.derivedKey;
+
+        if (idemResult.check.status === 'idempotent') {
+          await client.query('COMMIT');
+          return reply.code(200).send({
+            success: true,
+            idempotent: true,
+            message: 'Transaksi sudah pernah dibuat.',
+            entry: {
+              id: idemResult.check.entryId,
+              noJurnal: idemResult.check.noJurnal,
+              tanggal: idemResult.check.tanggal,
+              tipetransaksi: idemResult.check.tipetransaksi,
+              lines: idemResult.check.lines,
+            },
+          });
+        }
+
+        if (idemResult.check.status === 'conflict') {
+          await client.query('ROLLBACK');
+          return reply.code(409).send({
+            success: false,
+            error: 'IDEMPOTENCY_KEY_CONFLICT',
+            message: idemResult.check.message,
+          });
+        }
+      }
+
       const no_jurnal = await nextJurnalNo(a.tenantId!, tahun, bulan);
 
-      // Create journal entry
+      // Create journal entry (Fix #18: store derived key)
       const entryRes = await client.query(
         `INSERT INTO journal_entries
-           (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, tipeTransaksi, isPosted, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,'GENERAL',true,$7)
+           (tenant_id, no_jurnal, tanggal, bulan, tahun, keterangan, tipeTransaksi, isPosted, created_by, idempotency_key)
+         VALUES ($1,$2,$3,$4,$5,$6,'GENERAL',true,$7,$8)
          RETURNING id, no_jurnal AS "noJurnal"`,
-        [a.tenantId, no_jurnal, tanggal, bulan, tahun, desc, a.userId]
+        [a.tenantId, no_jurnal, tanggal, bulan, tahun, desc, a.userId, derivedKey]
       );
       const entryId = entryRes.rows[0].id;
 
@@ -3347,9 +3440,8 @@ export async function accountingRoutes(app: FastifyInstance) {
           id: entryId,
           noJurnal: entryRes.rows[0].noJurnal,
           tanggal,
-          tipe,
-          nominal,
-          keterangan: desc,
+          tipetransaksi: 'GENERAL',
+          lines: [], // lines available via GET /jurnal-umum/:id
         },
       });
     } catch (e: any) {
