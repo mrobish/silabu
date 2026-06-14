@@ -3071,6 +3071,23 @@ export async function accountingRoutes(app: FastifyInstance) {
             // Calculate HPP (moving average) from inventory — FIX #12 (M6): integer cents
             let hppTotalStr = '0';
             if (inventoryItemId) {
+              // FIX #12: Check stock before calculating HPP
+              const stockRes = await pool.query(
+                `SELECT
+                   COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) -
+                   COALESCE(SUM(CASE WHEN jl.kredit > 0 THEN jl.qty ELSE 0 END), 0) AS stok
+                 FROM journal_lines jl
+                 JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = $2
+                 WHERE jl.inventory_item_id = $1`,
+                [inventoryItemId, a.tenantId]
+              );
+              const stokSekarang = Number(stockRes.rows[0].stok) || 0;
+              if ((qty || 1) > stokSekarang) {
+                return reply.code(400).send({
+                  error: `Stok tidak mencukupi. Stok tersedia: ${stokSekarang}, qty diminta: ${qty || 1}.`,
+                });
+              }
+
               const hppRes = await pool.query(
                 `SELECT COALESCE(SUM(jl.debit), 0) AS total_cost,
                         COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) AS total_qty
@@ -3345,6 +3362,13 @@ export async function accountingRoutes(app: FastifyInstance) {
 
       const stokSesudah = stokSekarang - item.qty;
       const isNegative = stokSesudah < 0;
+
+      // FIX #12: Block overselling — reject if qty > available stock
+      if (isNegative) {
+        return reply.code(400).send({
+          error: `Stok tidak mencukupi untuk "${itemRes.rows[0].nama}". Stok tersedia: ${stokSekarang}, qty diminta: ${item.qty}.`,
+        });
+      }
 
       itemDetails.push({
         inventory_item_id: item.inventory_item_id,
