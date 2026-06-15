@@ -54,16 +54,6 @@ export function addPdfSignature(
   doc.setTextColor(100, 116, 139);
   doc.text(`Direktur ${namaBumdes}`, sigLeftX, y);
 
-  // Nama di atas garis
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text(namaDir, sigLeftX, y + 10);
-
-  // Signature line left (di bawah nama)
-  doc.setDrawColor(30, 41, 59);
-  doc.setLineWidth(0.3);
-  doc.line(sigLeftX, y + 13, sigLeftX + colW, y + 13);
-
   // Right column — Titimangsa + Bendahara
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
@@ -72,15 +62,23 @@ export function addPdfSignature(
 
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(71, 85, 105);
-  doc.text(`Bendahara ${namaBumdes}`, sigRightX, y + 10);
+  doc.text(`Bendahara ${namaBumdes}`, sigRightX, y + 5);
 
-  // Nama di atas garis
+  // Nama Direktur — di atas garis (sejajar dengan nama Bendahara)
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text(namaBen, sigRightX, y + 18);
+  doc.text(namaDir, sigLeftX, y + 15);
 
-  // Signature line right (di bawah nama)
-  doc.line(sigRightX, y + 21, sigRightX + colW, y + 21);
+  // Nama Bendahara — di atas garis
+  doc.text(namaBen, sigRightX, y + 15);
 
-  return y + 28;
+  // Signature line left (di bawah nama)
+  doc.setDrawColor(30, 41, 59);
+  doc.setLineWidth(0.3);
+  doc.line(sigLeftX, y + 18, sigLeftX + colW, y + 18);
+
+  // Signature line right (di bawah nama, sejajar)
+  doc.line(sigRightX, y + 18, sigRightX + colW, y + 18);
+
+  return y + 26;
 }

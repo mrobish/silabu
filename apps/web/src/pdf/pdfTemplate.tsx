@@ -204,7 +204,6 @@ export default function PdfTemplate({
         if (tables.length > 0) {
           tables.forEach((table) => {
             const headers: string[][] = [];
-            const rows: string[][] = [];
 
             table.querySelectorAll('thead tr').forEach((tr) => {
               const row: string[] = [];
@@ -214,12 +213,32 @@ export default function PdfTemplate({
               if (row.length > 0) headers.push(row);
             });
 
-            table.querySelectorAll('tbody tr').forEach((tr) => {
-              const row: string[] = [];
-              tr.querySelectorAll('td').forEach((td) =>
-                row.push(td.textContent?.trim() || ''),
-              );
-              if (row.length > 0) rows.push(row);
+            // ── Parse body rows with colSpan support ──
+            const rows: any[] = [];
+            const bodyRows = table.querySelectorAll('tbody tr');
+            // Pre-process: build colSpan-aware data
+            bodyRows.forEach((tr) => {
+              const tds = tr.querySelectorAll('td');
+              const cells: any[] = [];
+              let hasColSpan = false;
+              tds.forEach((td) => {
+                const cs = td.getAttribute('colspan');
+                const text = td.textContent?.trim() || '';
+                if (cs && parseInt(cs) > 1) {
+                  cells.push({ content: text, colSpan: parseInt(cs) });
+                  hasColSpan = true;
+                } else {
+                  cells.push(text);
+                }
+              });
+              if (cells.length > 0) {
+                // Ensure uniform format: if any cell uses colSpan, wrap all cells as objects
+                if (hasColSpan) {
+                  rows.push(cells.map((c: any) => typeof c === 'string' ? { content: c } : c));
+                } else {
+                  rows.push(cells);
+                }
+              }
             });
 
             if (headers.length === 0 && rows.length > 0) {
@@ -259,6 +278,16 @@ export default function PdfTemplate({
               ) || {},
               didParseCell: (data) => {
                 const cellText = data.cell.raw?.toString() || '';
+                // Detect Saldo Akhir row via colSpan in raw data
+                const rowRaw: any = (data as any).row?.raw;
+                const isSaldoAkhirRow = Array.isArray(rowRaw) && rowRaw.some(
+                  (c: any) => c && c.colSpan && String(c.content || '').includes('Saldo Akhir'),
+                );
+                if (isSaldoAkhirRow) {
+                  data.cell.styles.fillColor = [209, 250, 229];
+                  data.cell.styles.textColor = [5, 46, 22];
+                  data.cell.styles.fontStyle = 'bold';
+                }
                 if (
                   cellText.includes('Total') ||
                   cellText.includes('TOTAL') ||
@@ -267,11 +296,6 @@ export default function PdfTemplate({
                   cellText.includes('Subtotal')
                 ) {
                   data.cell.styles.fontStyle = 'bold';
-                }
-                // Green highlight for final balance
-                if (cellText.includes('Saldo Akhir')) {
-                  data.cell.styles.fillColor = [209, 250, 229];
-                  data.cell.styles.textColor = [5, 46, 22];
                 }
                 // Red for negative
                 if (data.section === 'body' && data.column.index >= data.table.columns.length - 3) {
