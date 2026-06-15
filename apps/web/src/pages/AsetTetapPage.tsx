@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Package, Plus, Download, Calendar, Calculator, Laptop, Truck, Armchair, Building, Trees, ArrowUp, CheckCircle, AlertTriangle, X, Search, Printer } from 'lucide-react';
+import { Package, Plus, Download, Calendar, Calculator, Laptop, Truck, Armchair, Building, Trees, ArrowUp, CheckCircle, AlertTriangle, X, Search, Printer, FileText, ClipboardList } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DatePicker from './DatePicker';
 
@@ -13,13 +13,24 @@ type Aset = {
   persenHidup: number; habis: boolean;
 };
 
+type Candidate = {
+  journalLineId: string;
+  journalEntryId: string;
+  noJurnal: string;
+  tanggal: string;
+  jurnalKeterangan: string;
+  debit: number;
+  akunId: string;
+  akunKode: string;
+  akunNama: string;
+};
+
 const rupiah = (n: number) => 'Rp ' + Number(n).toLocaleString('id-ID');
-const rupiahNeg = (n: number) => '(' + rupiah(Math.abs(n)).replace('Rp ', 'Rp ') + ')';
 const inputCls = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition';
 const br = 'rounded-2xl border border-white/70 bg-white/80 backdrop-blur-xl shadow-sm';
 
 const KATEGORI_ICON: Record<string, string> = {
-  Kendaraan: 'Truck', Komputer: 'Laptop', Meubelair: 'Armchair', Bangunan: 'Building', Tanah: 'Trees', Lainnya: 'ArrowUp',
+  Kendaraan: 'Truck', Komputer: 'Laptop', Meubelair: 'Armchair', Bangunan: 'Building', Tanah: 'Trees', Lainnya: 'ArrowUp', 'Peralatan/Mesin': 'Package',
 };
 const KATEGORI_BG: Record<string, string> = {
   Kendaraan: 'from-amber-500/20 to-orange-500/20 text-amber-600',
@@ -28,13 +39,13 @@ const KATEGORI_BG: Record<string, string> = {
   Bangunan: 'from-emerald-500/20 to-teal-500/20 text-emerald-600',
   Tanah: 'from-green-500/20 to-emerald-500/20 text-green-600',
   Lainnya: 'from-slate-500/20 to-gray-500/20 text-slate-600',
+  'Peralatan/Mesin': 'from-cyan-500/20 to-sky-500/20 text-cyan-600',
 };
-const KATEGORI_OPTIONS = ['Kendaraan', 'Komputer', 'Meubelair', 'Bangunan', 'Tanah', 'Lainnya'];
+const KATEGORI_OPTIONS = ['Kendaraan', 'Komputer', 'Meubelair', 'Bangunan', 'Tanah', 'Peralatan/Mesin', 'Lainnya'];
 
-function AssetCard({ aset, onDepreciate }: { aset: Aset; onDepreciate?: () => void }) {
+function AssetCard({ aset }: { aset: Aset }) {
   const bgCls = KATEGORI_BG[aset.kategori] || KATEGORI_BG['Lainnya'];
   const barColor = aset.habis ? 'bg-red-500' : aset.persenHidup < 25 ? 'bg-amber-500' : 'bg-emerald-500';
-  const iconName = KATEGORI_ICON[aset.kategori] || 'Package';
   return (
     <div className={`${br} p-4 sm:p-5 transition hover:shadow-md hover:-translate-y-0.5`}>
       <div className="flex items-start gap-3">
@@ -165,10 +176,260 @@ function AddAssetModal({ open, onClose, onDone }: { open: boolean; onClose: () =
   );
 }
 
+function RegisterFromJournalModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [step, setStep] = useState<'select' | 'form'>('select');
+  const [selected, setSelected] = useState<Candidate | null>(null);
+
+  // Form state
+  const [form, setForm] = useState({
+    nama: '', kategori: 'Peralatan/Mesin', tanggal_perolehan: '',
+    harga_perolehan: '', umur: '48', residu: '0',
+    metode: 'Garis Lurus', lokasi: '', penanggungJawab: '', keterangan: '',
+  });
+
+  const token = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
+
+  const loadCandidates = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const r = await fetch('/api/accounting/aset-tetap/candidates', {
+        headers: { Authorization: 'Bearer ' + token() },
+      });
+      if (r.ok) {
+        const d = await r.json();
+        setCandidates(d.data || []);
+      } else {
+        const e = await r.json();
+        setError(e.error || 'Gagal memuat kandidat');
+      }
+    } catch {
+      setError('Gagal terhubung ke server');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    setStep('select');
+    setSelected(null);
+    setError('');
+    loadCandidates();
+  }, [open, loadCandidates]);
+
+  const selectCandidate = (c: Candidate) => {
+    setSelected(c);
+    setForm({
+      nama: c.jurnalKeterangan?.replace(/^(Pembelian|Belanja)\s+/i, '') || c.akunNama,
+      kategori: 'Peralatan/Mesin',
+      tanggal_perolehan: c.tanggal,
+      harga_perolehan: String(c.debit),
+      umur: '48',
+      residu: '0',
+      metode: 'Garis Lurus',
+      lokasi: '',
+      penanggungJawab: '',
+      keterangan: c.jurnalKeterangan || '',
+    });
+    setStep('form');
+  };
+
+  const submit = async () => {
+    if (!selected || !form.nama || !form.umur) return;
+    setSaving(true);
+    setError('');
+    try {
+      const r = await fetch('/api/accounting/aset-tetap/from-journal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token() },
+        body: JSON.stringify({
+          journal_line_id: selected.journalLineId,
+          nama: form.nama,
+          kategori: form.kategori,
+          tanggal_perolehan: form.tanggal_perolehan,
+          harga_perolehan: Number(form.harga_perolehan),
+          umur_manfaat_bulan: Number(form.umur),
+          nilai_residu: Number(form.residu),
+          lokasi: form.lokasi || undefined,
+          penanggung_jawab: form.penanggungJawab || undefined,
+          keterangan: form.keterangan || undefined,
+        }),
+      });
+      if (r.ok) {
+        onDone();
+        onClose();
+      } else {
+        const e = await r.json();
+        setError(e.error || 'Gagal menyimpan');
+      }
+    } catch {
+      setError('Gagal terhubung ke server');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500/20 to-sky-500/20 text-cyan-600">
+            <ClipboardList size={18} />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Daftarkan Aset dari Jurnal</h3>
+            <p className="text-xs text-slate-500">Daftarkan transaksi aset yang sudah tercatat di jurnal</p>
+          </div>
+          <button onClick={onClose} className="ml-auto text-slate-400 hover:text-slate-600 p-1"><X size={18} /></button>
+        </div>
+
+        {error && (
+          <div className="rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-center gap-2 mb-4">
+            <AlertTriangle size={16} className="shrink-0" /> {error}
+            <button onClick={() => setError('')} className="ml-auto"><X size={14} /></button>
+          </div>
+        )}
+
+        {/* Step 1: Select journal */}
+        {step === 'select' && (
+          <div>
+            {loading ? (
+              <div className="text-center py-8 text-sm text-slate-400">Memuat kandidat...</div>
+            ) : candidates.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText size={36} className="mx-auto text-slate-300 mb-3" />
+                <p className="text-sm text-slate-500">Tidak ada transaksi aset tetap di jurnal yang belum terdaftar.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-slate-500">Pilih transaksi aset tetap yang ingin didaftarkan:</p>
+                {candidates.map((c) => (
+                  <div key={c.journalLineId}
+                    className="flex items-center gap-4 p-4 rounded-2xl border border-slate-100 hover:border-emerald-200 cursor-pointer transition hover:bg-emerald-50/50"
+                    onClick={() => selectCandidate(c)}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold text-slate-800">{c.noJurnal}</span>
+                        <span className="text-[10px] text-slate-400">{c.tanggal}</span>
+                      </div>
+                      <p className="text-sm text-slate-700 truncate">{c.akunKode} — {c.akunNama}</p>
+                      <p className="text-xs text-slate-500 truncate">{c.jurnalKeterangan || '-'}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-emerald-700 tabular-nums">{rupiah(c.debit)}</p>
+                      <button className="text-xs font-semibold text-emerald-600 hover:text-emerald-800 mt-1">Pilih →</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 2: Fill form */}
+        {step === 'form' && selected && (
+          <div className="space-y-4">
+            <div className="bg-cyan-50 rounded-xl px-3.5 py-2.5 text-xs text-cyan-700">
+              <span className="font-semibold">Dari Jurnal:</span> {selected.noJurnal} · {selected.tanggal} · {selected.akunKode} — {selected.akunNama} · {rupiah(selected.debit)}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Nama Aset *</label>
+                <input type="text" value={form.nama} onChange={e => setForm(p => ({ ...p, nama: e.target.value }))}
+                  placeholder="Nama aset" className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Kategori *</label>
+                <select value={form.kategori} onChange={e => setForm(p => ({ ...p, kategori: e.target.value }))} className={inputCls}>
+                  {KATEGORI_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Tanggal Perolehan *</label>
+                <DatePicker value={form.tanggal_perolehan} onChange={v => setForm(p => ({ ...p, tanggal_perolehan: v }))} className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Nilai Perolehan *</label>
+                <input type="number" value={form.harga_perolehan} onChange={e => setForm(p => ({ ...p, harga_perolehan: e.target.value }))}
+                  className={inputCls} readOnly />
+                <p className="text-[10px] text-slate-400 mt-0.5">Default dari debit jurnal</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Akun Aset</label>
+                <input type="text" value={`${selected.akunKode} — ${selected.akunNama}`} className={inputCls} readOnly />
+                <p className="text-[10px] text-slate-400 mt-0.5">Akun dari jurnal (tidak dapat diubah)</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Umur Manfaat (Bulan) *</label>
+                <input type="number" value={form.umur} onChange={e => setForm(p => ({ ...p, umur: e.target.value }))}
+                  placeholder="48" min="1" className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Nilai Residu</label>
+                <input type="number" value={form.residu} onChange={e => setForm(p => ({ ...p, residu: e.target.value }))}
+                  placeholder="0" min="0" className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Metode Penyusutan</label>
+                <select value={form.metode} onChange={e => setForm(p => ({ ...p, metode: e.target.value }))} className={inputCls}>
+                  <option value="Garis Lurus">Garis Lurus</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Lokasi</label>
+                <input type="text" value={form.lokasi} onChange={e => setForm(p => ({ ...p, lokasi: e.target.value }))}
+                  placeholder="Contoh: Kantor Desa" className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Penanggung Jawab</label>
+                <input type="text" value={form.penanggungJawab} onChange={e => setForm(p => ({ ...p, penanggungJawab: e.target.value }))}
+                  placeholder="Nama penanggung jawab" className={inputCls} />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Keterangan</label>
+                <textarea value={form.keterangan} onChange={e => setForm(p => ({ ...p, keterangan: e.target.value }))}
+                  rows={2} placeholder="Keterangan tambahan" className={inputCls + ' resize-none'} />
+              </div>
+            </div>
+
+            <div className="bg-emerald-50 rounded-xl px-3.5 py-2.5 text-xs text-emerald-700 flex items-start gap-2">
+              <CheckCircle size={14} className="mt-0.5 shrink-0" />
+              <span>✅ Jurnal asli (Rp {rupiah(selected.debit)}) tidak akan diubah. Hanya menambahkan catatan aset tetap.</span>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setStep('select')}
+                className="flex-1 rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
+                ← Kembali
+              </button>
+              <button type="button" onClick={submit} disabled={saving || !form.nama || !form.umur}
+                className="flex-[2] rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg disabled:opacity-40 transition hover:shadow-xl">
+                {saving ? 'Menyimpan...' : 'Simpan Aset'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AsetTetapPage() {
   const [asets, setAsets] = useState<Aset[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [fromJournalOpen, setFromJournalOpen] = useState(false);
+  const [candidateCount, setCandidateCount] = useState(0);
   const [depreMsg, setDepreMsg] = useState('');
   const [depreResult, setDepreResult] = useState<{success:number; failed:number; results:any[]} | null>(null);
   const [depreLoading, setDepreLoading] = useState(false);
@@ -184,8 +445,12 @@ export default function AsetTetapPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch('/api/accounting/aset-tetap', { headers: { Authorization: 'Bearer ' + token() } });
-      if (r.ok) { const d = await r.json(); setAsets(d.data || []); }
+      const [asetR, candR] = await Promise.all([
+        fetch('/api/accounting/aset-tetap', { headers: { Authorization: 'Bearer ' + token() } }),
+        fetch('/api/accounting/aset-tetap/candidates', { headers: { Authorization: 'Bearer ' + token() } }),
+      ]);
+      if (asetR.ok) { const d = await asetR.json(); setAsets(d.data || []); }
+      if (candR.ok) { const d = await candR.json(); setCandidateCount(d.count || 0); }
     } finally { setLoading(false); }
   }, []);
 
@@ -248,6 +513,20 @@ export default function AsetTetapPage() {
           </button>
         </div>
       </div>
+
+      {/* Reconciliation Banner */}
+      {candidateCount > 0 && (
+        <div className="rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800 flex items-center gap-3">
+          <AlertTriangle size={16} className="shrink-0 text-amber-500" />
+          <span className="flex-1 font-medium">
+            Ada <strong>{candidateCount}</strong> transaksi aset tetap di jurnal yang belum didaftarkan ke daftar aset.
+          </span>
+          <button onClick={() => setFromJournalOpen(true)}
+            className="rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700 transition whitespace-nowrap shadow-sm">
+            <ClipboardList size={14} className="inline -mt-0.5 mr-1" /> Lihat & Daftarkan
+          </button>
+        </div>
+      )}
 
       {depreMsg && (
         <div className="rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-center gap-2">
@@ -324,8 +603,9 @@ export default function AsetTetapPage() {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Modals */}
       <AddAssetModal open={modalOpen} onClose={() => setModalOpen(false)} onDone={fetchData} />
+      <RegisterFromJournalModal open={fromJournalOpen} onClose={() => setFromJournalOpen(false)} onDone={fetchData} />
 
       <p className="text-[10px] text-slate-400 text-right">Penyusutan metode garis lurus · bulanan auto-jurnal</p>
 

@@ -2588,6 +2588,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     Meubelair: { kode: '1.3.04.01', nama: 'Meubelair', akumKode: '1.3.07.03', bebanKode: '6.1.07.04' },
     Bangunan: { kode: '1.3.05.01', nama: 'Gedung dan Bangunan', akumKode: '1.3.07.04', bebanKode: '6.1.07.05' },
     Tanah: { kode: '1.3.01.01', nama: 'Tanah' },
+    'Peralatan/Mesin': { kode: '1.3.03.01', nama: 'Peralatan dan Mesin', akumKode: '1.3.07.02', bebanKode: '6.1.07.03' },
     Lainnya: { kode: '1.3.99.99', nama: 'Aset Tetap Lainnya', akumKode: '1.3.07.02', bebanKode: '6.1.07.03' },
   };
 
@@ -2686,6 +2687,139 @@ export async function accountingRoutes(app: FastifyInstance) {
 
       await client.query('COMMIT');
       return { success: true, id: asetId, noJurnal };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  });
+
+  // GET /aset-tetap/candidates — daftar jurnal aset tetap yg belum terdaftar
+  app.get('/aset-tetap/candidates', tenantGuard, async (_req: FastifyRequest) => {
+    const a = (_req as any).auth as AuthPayload;
+    // Cari debit journal_line akun 1.3.x.x (aset tetap) yang belum terdaftar
+    const rows = await pool.query(
+      `SELECT jl.id AS journal_line_id, je.id AS journal_entry_id,
+              je.no_jurnal, je.tanggal, je.keterangan AS jurnal_keterangan,
+              jl.debit, c.id AS akun_id, c.kode AS akun_kode, c.nama AS akun_nama
+       FROM journal_lines jl
+       JOIN journal_entries je ON je.id = jl.entry_id
+       JOIN chart_of_accounts c ON c.id = jl.akun_id AND c.tenant_id = je.tenant_id
+       WHERE je.tenant_id = $1
+         AND je.isposted = true
+         AND jl.debit > 0
+         AND c.kode LIKE '1.3.%'
+         AND c.kode NOT LIKE '1.3.00.%'
+         AND c.kode NOT LIKE '1.3.06.%'
+         AND c.kode NOT LIKE '1.3.07.%'
+         AND c.ispostable = true
+         AND COALESCE(je.tipetransaksi, '') NOT IN ('OPENING_BALANCE', 'CLOSING')
+         AND NOT EXISTS (
+           SELECT 1 FROM fixed_assets fa
+           WHERE fa.tenant_id = $1 AND fa.source_journal_line_id = jl.id
+         )
+       ORDER BY je.tanggal DESC, je.no_jurnal`,
+      [a.tenantId]
+    );
+    return {
+      data: rows.rows.map((r: any) => ({
+        journalLineId: r.journal_line_id,
+        journalEntryId: r.journal_entry_id,
+        noJurnal: r.no_jurnal,
+        tanggal: r.tanggal?.toISOString?.()?.slice(0, 10) || r.tanggal,
+        jurnalKeterangan: r.jurnal_keterangan,
+        debit: Number(r.debit),
+        akunId: r.akun_id,
+        akunKode: r.akun_kode,
+        akunNama: r.akun_nama,
+      })),
+      count: rows.rowCount,
+    };
+  });
+
+  // POST /aset-tetap/from-journal — daftarkan aset tetap dari jurnal yang sudah ada
+  app.post('/aset-tetap/from-journal', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = (req as any).auth as AuthPayload;
+    const b = req.body as any;
+
+    // Validasi field wajib
+    if (!b.journal_line_id || !b.nama || !b.kategori || !b.umur_manfaat_bulan) {
+      return reply.code(400).send({ error: 'Field wajib: journal_line_id, nama, kategori, umur_manfaat_bulan' });
+    }
+
+    const cat = KATEGORI_COA[b.kategori];
+    if (b.kategori !== 'Peralatan/Mesin' && !cat) {
+      return reply.code(400).send({ error: 'Kategori tidak valid' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. Validasi journal_line milik tenant, posted, debit aset tetap, belum terdaftar
+      const jl = await client.query(
+        `SELECT jl.id, jl.debit, jl.entry_id, je.tanggal,
+                c.id AS akun_id, c.kode AS akun_kode
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id = jl.entry_id
+         JOIN chart_of_accounts c ON c.id = jl.akun_id AND c.tenant_id = je.tenant_id
+         WHERE jl.id = $1
+           AND je.tenant_id = $2
+           AND je.isposted = true
+           AND jl.debit > 0
+           AND c.kode LIKE '1.3.%'
+           AND c.kode NOT LIKE '1.3.00.%'
+           AND c.kode NOT LIKE '1.3.06.%'
+           AND c.kode NOT LIKE '1.3.07.%'
+           AND c.ispostable = true
+           AND COALESCE(je.tipetransaksi, '') NOT IN ('OPENING_BALANCE', 'CLOSING')`,
+        [b.journal_line_id, a.tenantId]
+      );
+      if (!jl.rows.length) {
+        return reply.code(400).send({ error: 'Journal line tidak valid atau bukan aset tetap' });
+      }
+
+      // 2. Cek duplicate protection
+      const existing = await client.query(
+        `SELECT id FROM fixed_assets WHERE tenant_id=$1 AND source_journal_line_id=$2 LIMIT 1`,
+        [a.tenantId, b.journal_line_id]
+      );
+      if (existing.rows.length) {
+        return reply.code(409).send({ error: 'Journal line ini sudah terdaftar sebagai aset tetap' });
+      }
+
+      // 3. Cari akun aset (gunakan akun dari jurnal)
+      const assetAccId = jl.rows[0].akun_id;
+
+      // 4. Cek period lock berdasarkan tanggal dari jurnal
+      const tglJurnal = jl.rows[0].tanggal;
+      const tahunJurnal = new Date(tglJurnal).getFullYear();
+      await checkPeriodLock(a.tenantId!, tahunJurnal);
+
+      // 5. Insert fixed_assets — Phase 1: harga_perolehan locked ke debit journal_line
+      const now = new Date();
+      const nilaiPerolehan = Number(jl.rows[0].debit);
+      const tanggalPerolehan = b.tanggal_perolehan || jl.rows[0].tanggal.toISOString().slice(0, 10);
+      const fa = await client.query(
+        `INSERT INTO fixed_assets
+          (tenant_id, nama, kategori, akun_id, tanggal_perolehan, harga_perolehan,
+           umur_manfaat_bulan, nilai_buku_awal, source_journal_entry_id, source_journal_line_id,
+           created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$6,$8,$9,$10,$10)
+         RETURNING id`,
+        [
+          a.tenantId, b.nama, b.kategori, assetAccId,
+          tanggalPerolehan, nilaiPerolehan,
+          b.umur_manfaat_bulan,
+          jl.rows[0].entry_id, b.journal_line_id,
+          now,
+        ]
+      );
+      const asetId = fa.rows[0].id;
+
+      await client.query('COMMIT');
+      return { success: true, id: asetId, message: 'Aset tetap berhasil didaftarkan dari jurnal' };
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;

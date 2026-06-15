@@ -304,4 +304,18 @@ export async function initDatabase() {
   await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS telpon varchar(64);`);
 
   await pool.query(`ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS referensi varchar(128);`);
+
+  // Phase 5 — Aset Tetap: source journal references & Peralatan/Mesin category
+  await pool.query(`ALTER TABLE fixed_assets ADD COLUMN IF NOT EXISTS source_journal_entry_id uuid REFERENCES journal_entries(id) ON DELETE SET NULL;`);
+  await pool.query(`ALTER TABLE fixed_assets ADD COLUMN IF NOT EXISTS source_journal_line_id uuid REFERENCES journal_lines(id) ON DELETE SET NULL;`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_fixed_assets_source_line ON fixed_assets(tenant_id, source_journal_line_id) WHERE source_journal_line_id IS NOT NULL;`);
+
+  // Add 'Peralatan/Mesin' to kategori check constraint (idempotent)
+  await pool.query(`
+    DO $$ BEGIN
+      ALTER TABLE fixed_assets DROP CONSTRAINT IF EXISTS fixed_assets_kategori_check;
+      ALTER TABLE fixed_assets ADD CONSTRAINT fixed_assets_kategori_check
+        CHECK (kategori IN ('Kendaraan','Komputer','Meubelair','Bangunan','Tanah','Lainnya','Peralatan/Mesin'));
+    END $$;
+  `);
 }
