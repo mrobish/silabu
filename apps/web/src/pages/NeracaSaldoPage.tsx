@@ -1,7 +1,10 @@
 import { useState, useEffect, Fragment } from 'react';
-import { useAccountingYears } from './useAccountingYears';
-import { ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, ListOrdered, Printer } from 'lucide-react';
+import { ChevronDown, ChevronRight, CheckCircle, AlertTriangle, ListOrdered, Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
+import DateRangePicker from './DateRangePicker';
+import { useDateFilter } from '../hooks/useDateFilter';
+import { useCutoffDate } from '../hooks/useCutoffDate';
+import { useDataRange } from '../hooks/useDataRange';
 
 type Akun = { kode: string; nama: string; saldoNormal: string; debit: number; kredit: number };
 type TBData = {
@@ -17,6 +20,8 @@ const GL_LABEL: Record<string, string> = { '1': 'ASET (1)', '2': 'KEWAJIBAN (2)'
 const GL_COLOR: Record<string, string> = { '1': 'text-emerald-600', '2': 'text-orange-600', '3': 'text-blue-600', '4': 'text-green-600', '5': 'text-red-600', '6': 'text-rose-600', '7': 'text-purple-600' };
 const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
+const token = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
+
 function rupiah(n: number) {
   return 'Rp ' + n.toLocaleString('id-ID');
 }
@@ -27,15 +32,18 @@ function rupiahPrint(n: number) {
   return { text: 'Rp ' + n.toLocaleString('id-ID'), negative: false };
 }
 
+function fmtIdDate(d: string) {
+  const p = d.split('-');
+  return `${parseInt(p[2])} ${MONTHS_ID[parseInt(p[1]) - 1]} ${p[0]}`;
+}
+
 
 export default function NeracaSaldoPage() {
-  const now = new Date();
-  const years = useAccountingYears();
-  const [bulan, setBulan] = useState(now.getMonth() + 1);
-  const [tahun, setTahun] = useState(now.getFullYear());
+  const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
+  const cutoff = useCutoffDate();
+  const { minDate: dataMinDate, maxDate: dataMaxDate } = useDataRange();
+
   const [mode, setMode] = useState<'before' | 'after'>('before');
-  const lastDay = new Date(tahun, bulan, 0).getDate();
-  const endDate = `${tahun}-${String(bulan).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
   const [data, setData] = useState<TBData | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ '1': true, '2': true, '3': true, '4': false, '5': false, '6': false, '7': false });
@@ -43,12 +51,13 @@ export default function NeracaSaldoPage() {
 
   const toggle = (g: string) => setExpanded(p => ({ ...p, [g]: !p[g] }));
 
+  const periodLabel = `Per ${fmtIdDate(endDate)}`;
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('accessToken');
       const res = await fetch(`/api/accounting/neraca-saldo?end_date=${endDate}&mode=${mode}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token()}` },
       });
       const json = await res.json();
       if (json.error || !json.akun) {
@@ -75,7 +84,6 @@ export default function NeracaSaldoPage() {
   }
 
   const hasAny = (g: string) => grouped[g] && grouped[g].length > 0;
-  const periodLabel = `${lastDay} ${MONTHS_ID[bulan - 1]} ${tahun}`;
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -101,18 +109,17 @@ export default function NeracaSaldoPage() {
       {/* Filter row */}
       <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-xl">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[140px]">
-            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-              <Calendar size={13} /> Per Tanggal
-            </label>
-            <div className="flex gap-2">
-              <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-700 bg-white/60 focus:outline-none focus:ring-2 focus:ring-emerald-400">
-                {MONTHS_ID.map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
-              </select>
-              <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className="w-24 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-700 bg-white/60 focus:outline-none focus:ring-2 focus:ring-emerald-400">
-                {years.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
+          <div className="flex-1 min-w-[200px]">
+            <DateRangePicker minDate={cutoff}
+              showAllPresets
+              dataMinDate={dataMinDate}
+              dataMaxDate={dataMaxDate}
+              startDate={startDate}
+              endDate={endDate}
+              onStartChange={setStartDate}
+              onEndChange={setEndDate}
+            />
+            <p className="mt-1.5 text-[11px] text-slate-400">Neraca Saldo menggunakan tanggal akhir (Sampai) sebagai tanggal snapshot.</p>
           </div>
           <div className="min-w-[200px]">
             <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
@@ -205,7 +212,7 @@ export default function NeracaSaldoPage() {
 
       {/* Print Layout */}
       {data && (
-        <ReportPrintLayout title="NERACA SALDO" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={`Per ${periodLabel}`}>
+        <ReportPrintLayout title="NERACA SALDO" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabel}>
           <table className="w-full text-[11px] border-collapse">
             <thead>
               <tr className="border-b-2 border-slate-300">
