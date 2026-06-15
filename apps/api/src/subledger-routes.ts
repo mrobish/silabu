@@ -642,4 +642,246 @@ export async function subledgerRoutes(app: FastifyInstance) {
 
     return { data: results };
   });
+
+  // ─── LOCAL HELPERS ────────────────────────────────────────────
+  async function checkPeriodLockLocal(tenantId: string, tahun: number): Promise<void> {
+    const p = await pool.query(
+      'SELECT id, status FROM financial_periods WHERE tenant_id=$1 AND tahun=$2 LIMIT 1',
+      [tenantId, tahun]
+    );
+    if (p.rows.length && (p.rows[0] as any).status === 'CLOSED') {
+      throw Object.assign(
+        new Error(`Periode ${tahun} sudah ditutup. Tidak dapat mengubah data di periode ini.`),
+        { statusCode: 403 }
+      );
+    }
+  }
+
+  // ─── PERSEDIAAN — Journal Linking ────────────────────────────
+  // GET /persediaan/journal-candidates — find unlinked inventory journal lines
+  app.get('/persediaan/journal-candidates', tenantGuard, async (req: FastifyRequest) => {
+    const a = getToken(req);
+    const r = await pool.query(
+      `SELECT je.id AS "entryId", je.no_jurnal AS "noJurnal", je.tanggal,
+              je.keterangan, je.tipetransaksi AS "tipeTransaksi",
+              jl.id AS "lineId",
+              c.kode AS "akunKode", c.nama AS "akunNama",
+              jl.debit, jl.kredit, jl.qty,
+              CASE WHEN jl.debit > 0 THEN true ELSE false END AS "isMasuk"
+       FROM journal_lines jl
+       JOIN journal_entries je ON je.id = jl.entry_id
+       JOIN chart_of_accounts c ON c.id = jl.akun_id AND c.tenant_id = je.tenant_id
+       WHERE je.tenant_id = $1
+         AND je.isposted = true
+         AND c.kode LIKE '1.1.05.%'
+         AND c.ispostable = true
+         AND (jl.debit > 0 OR jl.kredit > 0)
+         AND jl.inventory_item_id IS NULL
+         AND (jl.qty IS NULL OR jl.qty = 0)
+         AND COALESCE(je.tipetransaksi, '') NOT IN ('OPENING_BALANCE', 'CLOSING')
+       ORDER BY je.tanggal, je.no_jurnal`,
+      [a.tenantId]
+    );
+    return { candidates: r.rows };
+  });
+
+  // POST /persediaan/link-journal-line — link a journal line to inventory
+  // Safety: this ONLY updates inventory_item_id + qty — never touches debit/kredit/akun
+  app.post('/persediaan/link-journal-line', mutationGuard, async (req: FastifyRequest, reply: FastifyReply) => {
+    const a = getToken(req);
+    const b = postBody(req);
+    const journalLineId = b.journal_line_id as string;
+
+    // ── 1. Validate basic fields ──────────────────────────────
+    if (!journalLineId) return reply.status(400).send({ error: 'journal_line_id wajib' });
+
+    const qtyNum = Number(b.qty);
+    if (!qtyNum || qtyNum <= 0 || !Number.isFinite(qtyNum)) {
+      return reply.status(400).send({ error: 'qty harus > 0' });
+    }
+    const qtyStr = String(qtyNum);
+
+    const mode = b.mode as string;
+    if (!['select', 'create'].includes(mode)) {
+      return reply.status(400).send({ error: 'mode harus select atau create' });
+    }
+
+    // ── 2. Determine item_id ──────────────────────────────────
+    let inventoryItemId = b.inventory_item_id as string | null;
+
+    if (mode === 'create') {
+      // Stok masuk only — user can create new item from purchase journal
+    } else {
+      // mode === 'select'
+      if (!inventoryItemId) return reply.status(400).send({ error: 'inventory_item_id wajib untuk mode select' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // ── 3. Lock journal_line FOR UPDATE and validate ────────
+      const lineRes = await client.query(
+        `SELECT jl.id, jl.entry_id, jl.akun_id, jl.debit, jl.kredit,
+                jl.inventory_item_id, jl.qty,
+                je.tenant_id, je.isposted, je.tanggal, je.tahun, je.bulan,
+                je.tipetransaksi,
+                c.kode AS akun_kode, c.ispostable
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id = jl.entry_id
+         JOIN chart_of_accounts c ON c.id = jl.akun_id AND c.tenant_id = je.tenant_id
+         WHERE jl.id = $1
+         FOR UPDATE OF jl`,
+        [journalLineId]
+      );
+      if (!lineRes.rowCount) {
+        await client.query('ROLLBACK');
+        return reply.status(404).send({ error: 'Baris jurnal tidak ditemukan' });
+      }
+      const line = lineRes.rows[0];
+
+      // ── 4. Tenant ownership ──────────────────────────────────
+      if (line.tenant_id !== a.tenantId) {
+        await client.query('ROLLBACK');
+        return reply.status(403).send({ error: 'Akses ditolak' });
+      }
+
+      // ── 5. Must be posted ────────────────────────────────────
+      if (!line.isposted) {
+        await client.query('ROLLBACK');
+        return reply.status(400).send({ error: 'Jurnal belum diposting' });
+      }
+
+      // ── 6. Must be inventory account (1.1.05.x) ──────────────
+      if (!line.akun_kode.startsWith('1.1.05.') || !line.ispostable) {
+        await client.query('ROLLBACK');
+        return reply.status(400).send({ error: 'Baris jurnal bukan akun persediaan yang dapat diposting' });
+      }
+
+      // ── 7. Must not already be linked ─────────────────────────
+      if (line.inventory_item_id) {
+        await client.query('ROLLBACK');
+        return reply.status(409).send({ error: 'Baris jurnal ini sudah terhubung ke stok' });
+      }
+      if (line.qty && Number(line.qty) > 0) {
+        await client.query('ROLLBACK');
+        return reply.status(409).send({ error: 'Baris jurnal ini sudah memiliki qty' });
+      }
+
+      // ── 8. Must have amount (debit > 0 or kredit > 0) ──────
+      const debitAmt = Number(line.debit) || 0;
+      const kreditAmt = Number(line.kredit) || 0;
+      const isMasuk = debitAmt > 0;
+      const nilaiTotal = Math.max(debitAmt, kreditAmt);
+      if (nilaiTotal <= 0) {
+        await client.query('ROLLBACK');
+        return reply.status(400).send({ error: 'Baris jurnal tidak memiliki nominal' });
+      }
+
+      // ── 9. Period lock check ──────────────────────────────────
+      const tahun = Number(line.tahun);
+      if (tahun > 0) {
+        await checkPeriodLockLocal(a.tenantId!, tahun);
+      }
+
+      // ── 10. Mode: select vs create ───────────────────────────
+      // Stok KELUAR (kredit > 0): ONLY select mode — no create allowed
+      if (!isMasuk && mode === 'create') {
+        await client.query('ROLLBACK');
+        return reply.status(400).send({
+          error: 'Stok keluar (kredit) tidak boleh membuat item baru. Pilih item existing atau hubungkan pembelian terlebih dahulu.'
+        });
+      }
+
+      if (mode === 'select') {
+        // Verify item exists and belongs to tenant
+        const itemRes = await client.query(
+          `SELECT id, nama, akun_id FROM inventory_items WHERE id=$1 AND tenant_id=$2`,
+          [inventoryItemId, a.tenantId]
+        );
+        if (!itemRes.rowCount) {
+          await client.query('ROLLBACK');
+          return reply.status(404).send({ error: 'Item persediaan tidak ditemukan' });
+        }
+        const item = itemRes.rows[0];
+
+        // Akun must match between item and journal line
+        if (item.akun_id !== line.akun_id) {
+          await client.query('ROLLBACK');
+          return reply.status(400).send({
+            error: `Akun item "${item.nama}" (${item.akun_id}) tidak cocok dengan akun jurnal. Hanya item dengan akun yang sama dapat dipilih.`
+          });
+        }
+      }
+
+      // ── 11. Stock check for stok KELUAR ──────────────────────
+      if (!isMasuk && mode === 'select') {
+        const stockRes = await client.query(
+          `SELECT COALESCE(SUM(CASE WHEN jl2.debit > 0 THEN jl2.qty ELSE 0 END), 0) -
+                  COALESCE(SUM(CASE WHEN jl2.kredit > 0 THEN jl2.qty ELSE 0 END), 0) AS stok
+           FROM journal_lines jl2
+           JOIN journal_entries je2 ON jl2.entry_id = je2.id AND je2.isposted = true AND je2.tenant_id = $2
+           WHERE jl2.inventory_item_id = $1`,
+          [inventoryItemId, a.tenantId]
+        );
+        const stokTersedia = Number(stockRes.rows[0]?.stok) || 0;
+        if (qtyNum > stokTersedia) {
+          await client.query('ROLLBACK');
+          return reply.status(400).send({
+            error: `Stok tidak mencukupi. Tersedia: ${stokTersedia.toLocaleString('id-ID')}, diminta: ${qtyNum.toLocaleString('id-ID')}. Hubungkan pembelian terlebih dahulu.`
+          });
+        }
+      }
+
+      // ── 12. Mode 'create': insert new inventory item ─────────
+      if (mode === 'create') {
+        const nama = (b.nama as string || '').trim();
+        if (!nama) {
+          await client.query('ROLLBACK');
+          return reply.status(400).send({ error: 'Nama barang wajib diisi untuk membuat item baru' });
+        }
+        const kode = (b.kode as string || '').trim();
+        const satuan = (b.satuan as string || '').trim();
+
+        const hargaSatuanCreate = nilaiTotal / qtyNum;
+        const newItemRes = await client.query(
+          `INSERT INTO inventory_items (tenant_id, nama, kode, satuan, akun_id, qty_awal, harga_satuan, saldo_awal)
+           VALUES ($1, $2, $3, $4, $5, 0, $6, 0)
+           RETURNING id, nama, kode, satuan`,
+          [a.tenantId, nama, kode || null, satuan || null, line.akun_id, String(hargaSatuanCreate)]
+        );
+        inventoryItemId = newItemRes.rows[0].id;
+      }
+
+      // ── 13. Calculate harga_satuan (for response) ────────────
+      const hargaSatuan = nilaiTotal / qtyNum;
+
+      // ── 14. UPDATE journal_lines — ONLY metadata columns ────
+      await client.query(
+        `UPDATE journal_lines SET inventory_item_id = $1, qty = $2 WHERE id = $3`,
+        [inventoryItemId, qtyStr, journalLineId]
+      );
+
+      await client.query('COMMIT');
+
+      return {
+        success: true,
+        lineId: journalLineId,
+        inventoryItemId,
+        qty: qtyNum,
+        hargaSatuan,
+        nilaiTotal,
+        isMasuk,
+        keterangan: isMasuk ? 'Stok masuk dari jurnal pembelian' : 'Stok keluar dari jurnal penjualan',
+      };
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      if (e.statusCode) {
+        return reply.status(e.statusCode).send({ error: e.message });
+      }
+      throw e;
+    } finally {
+      client.release();
+    }
+  });
 }
