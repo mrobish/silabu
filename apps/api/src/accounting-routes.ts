@@ -3795,8 +3795,13 @@ export async function accountingRoutes(app: FastifyInstance) {
         COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.qty ELSE 0 END), 0) -
         COALESCE(SUM(CASE WHEN jl.kredit > 0 THEN jl.qty ELSE 0 END), 0) AS stok
        FROM inventory_items ii
-       LEFT JOIN journal_lines jl ON jl.inventory_item_id = ii.id
-       LEFT JOIN journal_entries je ON jl.entry_id = je.id AND je.isposted = true AND je.tenant_id = ii.tenant_id
+       LEFT JOIN (
+         SELECT jl.inventory_item_id, jl.debit, jl.kredit, jl.qty
+         FROM journal_lines jl
+         JOIN journal_entries je ON je.id = jl.entry_id
+           AND je.isposted = true
+           AND je.tenant_id = $1
+       ) jl ON jl.inventory_item_id = ii.id
        WHERE ii.tenant_id = $1
        GROUP BY ii.id, ii.nama, ii.kode, ii.satuan, ii.harga_satuan
        ORDER BY ii.kode`,
