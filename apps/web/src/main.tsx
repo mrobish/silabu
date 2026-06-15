@@ -14,6 +14,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import AppDashboard from './pages/AppDashboard';
 import SuperAdmin from './pages/SuperAdmin';
+import RequireAdmin from './pages/RequireAdmin';
 import ChangePassword from './pages/ChangePassword';
 import InvoicePage from './pages/InvoicePage';
 import FAQ from './pages/FAQ';
@@ -65,7 +66,7 @@ const router = createBrowserRouter([
   { path: '/reset-password', element: <ResetPassword /> },
   // App
   { path: '/app', element: <AppDashboard /> },
-  { path: '/super-admin', element: <SuperAdmin /> },
+  { path: '/super-admin', element: <RequireAdmin><SuperAdmin /></RequireAdmin> },
   { path: '/change-password', element: <ChangePassword /> },
   { path: '/invoice/:paymentId', element: <InvoicePage /> },
   { path: '/faq', element: <FAQ /> },

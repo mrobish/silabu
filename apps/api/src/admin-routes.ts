@@ -419,7 +419,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const dup = await pool.query('SELECT id FROM users WHERE email=$1', [email]);
     if (dup.rowCount) return reply.code(409).send({ error: 'Email sudah terdaftar' });
 
-    const hash = await bcrypt.hash(password, 6);
+    const hash = await bcrypt.hash(password, 12);
     const result = await pool.query(
       `INSERT INTO users (email, password_hash, nama_lengkap, role, auth_provider, is_active)
        VALUES ($1, $2, $3, 'super_admin', 'email', true)
