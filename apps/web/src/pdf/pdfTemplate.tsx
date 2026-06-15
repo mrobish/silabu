@@ -272,8 +272,11 @@ export default function PdfTemplate({
               },
               columnStyles: headers[0]?.reduce(
                 (acc, _, i) => {
-                  // Right-align last 3 columns (amounts)
-                  if (i >= headers[0].length - 3) {
+                  const numCols = headers[0].length;
+                  // For 2-column reports (Laba Rugi): right-align only last column
+                  // For wider reports (Buku Besar with 6 cols): right-align last 3 columns
+                  const rightFrom = numCols <= 2 ? numCols - 1 : numCols - 3;
+                  if (i >= rightFrom) {
                     acc[i] = { halign: 'right', fontStyle: 'normal' };
                   }
                   return acc;
