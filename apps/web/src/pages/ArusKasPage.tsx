@@ -3,8 +3,7 @@ import { useDateFilter } from '../hooks/useDateFilter';
 import { useCutoffDate } from "../hooks/useCutoffDate";
 import { useDataRange } from "../hooks/useDataRange";
 import { DollarSign, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, ChevronDown, ChevronRight, Printer } from 'lucide-react';
-import PdfTemplate from '../pdf/pdfTemplate';
-import ReportPrintLayout from './ReportPrintLayout';
+import PrintableReportLayout from '../print/PrintableReportLayout';
 import DateRangePicker from './DateRangePicker';
 
 type FlowItem = { kode: string; nama: string; masuk: number; keluar: number; net: number };
@@ -20,7 +19,14 @@ type ArusKasData = {
 };
 
 const rupiah = (n: number) => 'Rp ' + Number(n).toLocaleString('id-ID');
+const rupiahNeg = (n: number) => {
+  if (n < 0) return '(' + rupiah(Math.abs(n)) + ')';
+  return rupiah(n);
+};
 const br = 'rounded-2xl border border-white/70 bg-white/80 backdrop-blur-xl shadow-sm';
+
+const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+const fmtIdDate = (d: string) => { const p = d.split('-'); return `${parseInt(p[2])} ${MONTHS_ID[parseInt(p[1]) - 1]} ${p[0]}`; };
 
 function AktivitasBlock({ title, icon, data, color, open, onToggle }: {
   title: string; icon: React.ReactNode; data: Aktivitas;
@@ -80,6 +86,82 @@ function AktivitasBlock({ title, icon, data, color, open, onToggle }: {
   );
 }
 
+function PrintArusKas({ data }: { data: ArusKasData }) {
+  const { aktivitasOperasi: o, aktivitasInvestasi: i, aktivitasPendanaan: d } = data;
+  const totalNet = o.net + i.net + d.net;
+
+  return (
+    <table className="w-full text-[11px] border-collapse">
+      <tbody>
+        {/* HEADER ROW — clean separator */}
+        <tr className="border-b-2 border-slate-300 no-border-after">
+          <td className="py-1.5 font-bold" style={{ width: '75%' }}>Uraian</td>
+          <td className="py-1.5 text-right font-bold" style={{ width: '25%' }}>Jumlah</td>
+        </tr>
+
+        {/* A. Aktivitas Operasi */}
+        <tr className="border-t border-slate-800">
+          <td colSpan={2} className="pt-3 pb-1 font-bold text-[12px]">A. Arus Kas dari Aktivitas Operasi</td>
+        </tr>
+        {o.detail.filter(item => item.net !== 0).map(item => (
+          <tr key={item.kode}>
+            <td className="pl-6 text-slate-700 leading-snug pb-1">{item.nama}</td>
+            <td className="text-right tabular-nums pb-1">{rupiahNeg(item.net)}</td>
+          </tr>
+        ))}
+        <tr className="font-bold border-t border-slate-800">
+          <td className="py-1">Jumlah Arus Kas dari Aktivitas Operasi</td>
+          <td className={`text-right tabular-nums py-1 ${o.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{rupiahNeg(o.net)}</td>
+        </tr>
+
+        {/* B. Aktivitas Investasi */}
+        <tr>
+          <td colSpan={2} className="pt-3 pb-1 font-bold text-[12px]">B. Arus Kas dari Aktivitas Investasi</td>
+        </tr>
+        {i.detail.filter(item => item.net !== 0).map(item => (
+          <tr key={item.kode}>
+            <td className="pl-6 text-slate-700 leading-snug pb-1">{item.nama}</td>
+            <td className="text-right tabular-nums pb-1">{rupiahNeg(item.net)}</td>
+          </tr>
+        ))}
+        <tr className="font-bold border-t border-slate-800">
+          <td className="py-1">Jumlah Arus Kas dari Aktivitas Investasi</td>
+          <td className={`text-right tabular-nums py-1 ${i.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{rupiahNeg(i.net)}</td>
+        </tr>
+
+        {/* C. Aktivitas Pendanaan */}
+        <tr>
+          <td colSpan={2} className="pt-3 pb-1 font-bold text-[12px]">C. Arus Kas dari Aktivitas Pendanaan</td>
+        </tr>
+        {d.detail.filter(item => item.net !== 0).map(item => (
+          <tr key={item.kode}>
+            <td className="pl-6 text-slate-700 leading-snug pb-1">{item.nama}</td>
+            <td className="text-right tabular-nums pb-1">{rupiahNeg(item.net)}</td>
+          </tr>
+        ))}
+        <tr className="font-bold border-t border-slate-800">
+          <td className="py-1">Jumlah Arus Kas dari Aktivitas Pendanaan</td>
+          <td className={`text-right tabular-nums py-1 ${d.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{rupiahNeg(d.net)}</td>
+        </tr>
+
+        {/* Ringkasan */}
+        <tr className="border-t-2 border-slate-600">
+          <td className="pt-2 pb-1 font-semibold">Kenaikan / (Penurunan) Bersih Kas (A + B + C)</td>
+          <td className={`text-right tabular-nums pt-2 pb-1 font-bold ${totalNet < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{rupiahNeg(totalNet)}</td>
+        </tr>
+        <tr>
+          <td className="py-1">Saldo Awal Kas</td>
+          <td className="text-right tabular-nums py-1">{rupiah(data.kasTahunLalu)}</td>
+        </tr>
+        <tr className="bg-gray-100 print:bg-gray-100 font-extrabold border-b-4 border-double border-gray-900">
+          <td className="py-2 text-[12px]">Saldo Akhir Kas</td>
+          <td className={`text-right tabular-nums py-2 text-[12px] ${data.kasBerjalan < 0 ? 'text-red-600 print:text-red-600' : 'text-emerald-700 print:text-emerald-700'}`}>{rupiah(data.kasBerjalan)}</td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
 export default function ArusKasPage() {
   const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const cutoff = useCutoffDate();
@@ -89,9 +171,9 @@ export default function ArusKasPage() {
   const [exp, setExp] = useState<Record<string, boolean>>({ operasi: true, investasi: true, pendanaan: true });
   const [printOpen, setPrintOpen] = useState(false);
 
-  const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-  const fmtIdDate = (d: string) => { const p = d.split('-'); return `${parseInt(p[2])} ${MONTHS_ID[parseInt(p[1]) - 1]} ${p[0]}`; };
-  const periodLabelArus = `Periode: ${fmtIdDate(startDate)} s/d ${fmtIdDate(endDate)}`;
+  const periodLabelArus = data
+    ? `Periode ${fmtIdDate(data.periode.startDate)} s.d. ${fmtIdDate(data.periode.endDate)}`
+    : '';
 
   const token = () => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
   const fetchD = async () => {
@@ -199,79 +281,12 @@ export default function ArusKasPage() {
         </>
       )}
 
-      {/* Print Modal */}
-      <PdfTemplate title="LAPORAN ARUS KAS" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabelArus}>
-        {data && <table className="w-full text-[11px] border-collapse">
-          <thead>
-            <tr className="border-b border-slate-800">
-              <th className="text-left pb-1 font-bold">Akun Lawan</th>
-              <th className="text-right pb-1 font-bold w-[140px]">Jumlah</th>
-            </tr>
-          </thead>
-          <tbody>
-            {/* A. Operasi */}
-            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">A. Arus Kas dari Aktivitas Operasi</td></tr>
-            {data.aktivitasOperasi.detail.filter(d => d.net !== 0).map(d => (
-              <tr key={d.kode} className="print-row">
-                <td className="text-slate-700 pl-6"><span className="text-slate-400">{d.kode}</span> {d.nama}</td>
-                <td className={`text-right tabular-nums ${d.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</td>
-              </tr>
-            ))}
-            <tr className="font-bold border-t border-gray-800">
-              <td className="py-0.5">Arus Kas Bersih dari Aktivitas Operasi</td>
-              <td className={`text-right tabular-nums ${data.aktivitasOperasi.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{data.aktivitasOperasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasOperasi.net)) + ')' : rupiah(data.aktivitasOperasi.net)}</td>
-            </tr>
-
-            {/* B. Investasi */}
-            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">B. Arus Kas dari Aktivitas Investasi</td></tr>
-            {data.aktivitasInvestasi.detail.filter(d => d.net !== 0).map(d => (
-              <tr key={d.kode} className="print-row">
-                <td className="text-slate-700 pl-6"><span className="text-slate-400">{d.kode}</span> {d.nama}</td>
-                <td className={`text-right tabular-nums ${d.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</td>
-              </tr>
-            ))}
-            <tr className="font-bold border-t border-gray-800">
-              <td className="py-0.5">Arus Kas Bersih dari Aktivitas Investasi</td>
-              <td className={`text-right tabular-nums ${data.aktivitasInvestasi.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{data.aktivitasInvestasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasInvestasi.net)) + ')' : rupiah(data.aktivitasInvestasi.net)}</td>
-            </tr>
-
-            {/* C. Pendanaan */}
-            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">C. Arus Kas dari Aktivitas Pendanaan</td></tr>
-            {data.aktivitasPendanaan.detail.filter(d => d.net !== 0).map(d => (
-              <tr key={d.kode} className="print-row">
-                <td className="text-slate-700 pl-6"><span className="text-slate-400">{d.kode}</span> {d.nama}</td>
-                <td className={`text-right tabular-nums ${d.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{d.net < 0 ? '(' + rupiah(Math.abs(d.net)) + ')' : rupiah(d.net)}</td>
-              </tr>
-            ))}
-            <tr className="font-bold border-t border-gray-800">
-              <td className="py-0.5">Arus Kas Bersih dari Aktivitas Pendanaan</td>
-              <td className={`text-right tabular-nums ${data.aktivitasPendanaan.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{data.aktivitasPendanaan.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasPendanaan.net)) + ')' : rupiah(data.aktivitasPendanaan.net)}</td>
-            </tr>
-
-            {/* Summary */}
-            <tr className="font-bold border-t-2 border-gray-800 mt-2">
-              <td className="py-0.5">Kas Awal Periode</td>
-              <td className="text-right tabular-nums">{rupiah(data.kasTahunLalu)}</td>
-            </tr>
-            <tr>
-              <td className="pl-3 py-0.5">Arus Kas Operasi</td>
-              <td className={`text-right tabular-nums ${data.aktivitasOperasi.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{data.aktivitasOperasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasOperasi.net)) + ')' : '+' + rupiah(data.aktivitasOperasi.net)}</td>
-            </tr>
-            <tr>
-              <td className="pl-3 py-0.5">Arus Kas Investasi</td>
-              <td className={`text-right tabular-nums ${data.aktivitasInvestasi.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{data.aktivitasInvestasi.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasInvestasi.net)) + ')' : '+' + rupiah(data.aktivitasInvestasi.net)}</td>
-            </tr>
-            <tr>
-              <td className="pl-3 py-0.5">Arus Kas Pendanaan</td>
-              <td className={`text-right tabular-nums ${data.aktivitasPendanaan.net < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{data.aktivitasPendanaan.net < 0 ? '(' + rupiah(Math.abs(data.aktivitasPendanaan.net)) + ')' : '+' + rupiah(data.aktivitasPendanaan.net)}</td>
-            </tr>
-            <tr className="font-extrabold border-t border-gray-800 border-b-4 border-double border-gray-900 bg-gray-100 print:bg-gray-100">
-              <td className="py-1 text-[12px]">KAS AKHIR PERIODE</td>
-              <td className={`text-right tabular-nums text-[12px] ${data.kasBerjalan < 0 ? 'text-red-600 print:text-red-600' : ''}`}>{data.kasBerjalan < 0 ? '(' + rupiah(Math.abs(data.kasBerjalan)) + ')' : rupiah(data.kasBerjalan)}</td>
-            </tr>
-          </tbody>
-        </table>}
-      </PdfTemplate>
+      {/* Print Modal — HTML Print-based */}
+      {data && (
+        <PrintableReportLayout title="LAPORAN ARUS KAS" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabelArus}>
+          <PrintArusKas data={data} />
+        </PrintableReportLayout>
+      )}
     </div>
   );
 }
