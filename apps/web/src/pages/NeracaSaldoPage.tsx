@@ -1,7 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { ChevronDown, ChevronRight, CheckCircle, AlertTriangle, ListOrdered, Printer } from 'lucide-react';
-import PdfTemplate from '../pdf/pdfTemplate';
-import ReportPrintLayout from './ReportPrintLayout';
+import PrintableReportLayout from '../print/PrintableReportLayout';
 import DatePicker from './DatePicker';
 import { useCutoffDate } from '../hooks/useCutoffDate';
 import { useDataRange } from '../hooks/useDataRange';
@@ -269,9 +268,9 @@ export default function NeracaSaldoPage() {
         </>
       )}
 
-      {/* Print Layout */}
+      {/* Print Layout — HTML Print-based */}
       {data && (
-        <PdfTemplate title="NERACA SALDO" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabel}>
+        <PrintableReportLayout title="NERACA SALDO" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabel}>
           <table className="w-full text-[11px] border-collapse">
             <thead>
               <tr className="border-b-2 border-slate-300">
@@ -313,7 +312,7 @@ export default function NeracaSaldoPage() {
               ⚠️ TIDAK SEIMBANG — Selisih {rupiah(Math.abs(data.selisih))}
             </p>
           )}
-        </PdfTemplate>
+        </PrintableReportLayout>
       )}
     </div>
   );

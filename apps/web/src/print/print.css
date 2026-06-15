@@ -1,0 +1,122 @@
+/* ─── Printable Report Layout — SILABU DIGI ───────────────────────
+   Global print CSS for all HTML-based printable reports.
+   Used by PrintableReportLayout component.
+   Strategy: HTML Preview → window.print() → Save as PDF
+   No jsPDF, no screenshots. Clean, selectable, lightweight PDF.
+   ───────────────────────────────────────────────────────────────*/
+
+/* Default: Portrait A4 */
+@page {
+  size: A4 portrait;
+  margin: 15mm;
+}
+
+/* Landscape variant — add class .print-landscape to container */
+.print-landscape {
+  /* @page in media print overrides */
+}
+
+@media print {
+  /* Make colors/backgrounds visible */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide non-print elements */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Full width tables with fixed layout */
+  table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+
+  /* Repeat headers on each page */
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  /* Prevent row breaks */
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Signature block stays together */
+  .print-signature {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Manual page break */
+  .print-page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  /* Prevent orphan text */
+  p, h1, h2, h3, h4 {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Reset body for printing */
+  body {
+    margin: 0;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #1e293b;
+  }
+
+  /* Print area should fill the page */
+  .print-area {
+    display: block !important;
+    position: static !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .print-area td,
+  .print-area th {
+    padding: 2px 4px;
+    vertical-align: top;
+  }
+
+  /* Ensure tabular-nums for numbers */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Gradient fallback — use solid background for print */
+  .print-gradient-fallback {
+    background: #0f766e !important; /* emerald-700 solid fallback */
+  }
+}
+
+/* ─── Landscape page ─────────────────────────── */
+@media print and (orientation: landscape) {
+  @page {
+    size: A4 landscape;
+    margin: 15mm;
+  }
+}
+
+/* When .print-landscape class is applied to print area */
+@media print {
+  .print-landscape {
+    @page {
+      size: A4 landscape;
+      margin: 15mm;
+    }
+  }
+}
