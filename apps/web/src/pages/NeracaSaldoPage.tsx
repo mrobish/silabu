@@ -1,8 +1,7 @@
 import { useState, useEffect, Fragment } from 'react';
 import { ChevronDown, ChevronRight, CheckCircle, AlertTriangle, ListOrdered, Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
-import DateRangePicker from './DateRangePicker';
-import { useDateFilter } from '../hooks/useDateFilter';
+import DatePicker from './DatePicker';
 import { useCutoffDate } from '../hooks/useCutoffDate';
 import { useDataRange } from '../hooks/useDataRange';
 
@@ -37,11 +36,34 @@ function fmtIdDate(d: string) {
   return `${parseInt(p[2])} ${MONTHS_ID[parseInt(p[1]) - 1]} ${p[0]}`;
 }
 
+// Snapshot date presets — all derive endDate only
+function today(): string { return new Date().toISOString().slice(0, 10); }
+function endOfMonth(): string {
+  const d = new Date();
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+}
+function endOfYear(): string {
+  return `${new Date().getFullYear()}-12-31`;
+}
+function endOfLastYear(): string {
+  return `${new Date().getFullYear() - 1}-12-31`;
+}
+
+const presetBtn = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap';
+
 
 export default function NeracaSaldoPage() {
-  const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const cutoff = useCutoffDate();
-  const { minDate: dataMinDate, maxDate: dataMaxDate } = useDataRange();
+  const { maxDate: dataMaxDate } = useDataRange();
+
+  // Snapshot: only endDate matters
+  const [endDate, setEndDate] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlEnd = params.get('end');
+    if (urlEnd && /^\d{4}-\d{2}-\d{2}$/.test(urlEnd)) return urlEnd;
+    return today();
+  });
 
   const [mode, setMode] = useState<'before' | 'after'>('before');
   const [data, setData] = useState<TBData | null>(null);
@@ -106,21 +128,55 @@ export default function NeracaSaldoPage() {
         )}
       </div>
 
-      {/* Filter row */}
+      {/* Filter row — snapshot: single date + quick presets */}
       <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-xl">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[200px]">
-            <DateRangePicker minDate={cutoff}
-              showAllPresets
-              dataMinDate={dataMinDate}
-              dataMaxDate={dataMaxDate}
-              startDate={startDate}
-              endDate={endDate}
-              onStartChange={setStartDate}
-              onEndChange={setEndDate}
+        <div className="flex flex-wrap items-end gap-4">
+          {/* Date picker section */}
+          <div className="flex-1 min-w-[240px]">
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Tanggal Sampai</label>
+
+            {/* Quick presets — change endDate only */}
+            <div className="flex flex-wrap gap-2 mb-2">
+              <button type="button" onClick={() => setEndDate(today())}
+                className={`${presetBtn} bg-emerald-50 text-emerald-700 hover:bg-emerald-100`}>
+                Hari Ini
+              </button>
+              <button type="button" onClick={() => setEndDate(endOfMonth())}
+                className={`${presetBtn} bg-cyan-50 text-cyan-700 hover:bg-cyan-100`}>
+                Akhir Bulan
+              </button>
+              <button type="button" onClick={() => setEndDate(endOfYear())}
+                className={`${presetBtn} bg-blue-50 text-blue-700 hover:bg-blue-100`}>
+                Akhir Tahun
+              </button>
+              <button type="button" onClick={() => setEndDate(endOfLastYear())}
+                className={`${presetBtn} bg-violet-50 text-violet-700 hover:bg-violet-100`}>
+                Akhir Tahun Lalu
+              </button>
+              {dataMaxDate && (
+                <button type="button" onClick={() => setEndDate(dataMaxDate)}
+                  className={`${presetBtn} bg-amber-50 text-amber-700 hover:bg-amber-100`}>
+                  Data Terakhir
+                </button>
+              )}
+            </div>
+
+            {/* Single DatePicker */}
+            <DatePicker
+              value={endDate}
+              onChange={setEndDate}
+              minDate={cutoff}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition"
             />
-            <p className="mt-1.5 text-[11px] text-slate-400">Neraca Saldo menggunakan tanggal akhir (Sampai) sebagai tanggal snapshot.</p>
+
+            {/* Helper text */}
+            <p className="mt-1.5 text-[11px] text-slate-400">
+              Neraca Saldo menampilkan saldo akun sampai tanggal ini.
+              {dataMaxDate && <span className="ml-1 text-slate-300">Data terakhir: {dataMaxDate}</span>}
+            </p>
           </div>
+
+          {/* Mode toggle */}
           <div className="min-w-[200px]">
             <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
               Mode Tampilan
@@ -146,8 +202,10 @@ export default function NeracaSaldoPage() {
               </button>
             </div>
           </div>
+
+          {/* Tampilkan button */}
           <button onClick={fetchData} disabled={loading}
-            className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-cyan-600 text-white text-sm font-semibold rounded-xl hover:shadow-md hover:shadow-emerald-200 transition-all disabled:opacity-50">
+            className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-cyan-600 text-white text-sm font-bold rounded-xl hover:shadow-md hover:shadow-emerald-200 transition-all disabled:opacity-50">
             {loading ? 'Memuat...' : 'Tampilkan'}
           </button>
         </div>
