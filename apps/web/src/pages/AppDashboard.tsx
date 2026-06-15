@@ -1524,6 +1524,7 @@ export default function AppDashboard() {
     });
   }
   const [announcements, setAnnouncements] = useState<Array<{ id: string; message: string; type: 'info' | 'warning' | 'success'; active: boolean }>>([]);
+  const [persediaanCandidates, setPersediaanCandidates] = useState<number>(0);
   const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('dismissedAnnouncements') || '[]'); } catch { return []; }
   });
@@ -1572,6 +1573,20 @@ export default function AppDashboard() {
       .then(r => r.json())
       .then(d => { if (!d.error) setDashData(d); })
       .catch(() => {});
+  }, [page, user]);
+
+  // Fetch persediaan candidates count for dashboard alert
+  useEffect(() => {
+    if (page !== 'dashboard' || !user) return;
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    fetch('/api/persediaan/journal-candidates', { headers: { Authorization: 'Bearer ' + token } })
+      .then(r => r.json())
+      .then(d => {
+        if (d && Array.isArray(d.candidates)) {
+          setPersediaanCandidates(d.candidates.length);
+        }
+      })
+      .catch(() => { console.warn('[Dashboard] Gagal memuat kandidat jurnal persediaan'); setPersediaanCandidates(0); });
   }, [page, user]);
 
   // Fetch announcements on mount
@@ -1856,6 +1871,32 @@ export default function AppDashboard() {
                   </span>
                 </p>
               </div>
+
+              {/* ⚠️ Hubungkan Jurnal ke Persediaan — Dashboard Alert */}
+              {persediaanCandidates > 0 && (
+                <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50/70 p-4 sm:p-5 shadow-sm animate-slide-down">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                      <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                        <circle cx="12" cy="12" r="2" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-amber-900">
+                        Ada {persediaanCandidates} jurnal persediaan yang belum terhubung ke stok.
+                      </p>
+                      <p className="mt-1 text-xs text-amber-700">
+                        Hubungkan jurnal tersebut agar stok dan kartu stok persediaan ikut terbaca.
+                      </p>
+                    </div>
+                    <button onClick={() => setPage('persediaan')}
+                      className="shrink-0 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:shadow-md hover:from-amber-700 hover:to-orange-700 transition-all duration-200">
+                      Hubungkan Sekarang
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Stat cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
