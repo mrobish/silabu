@@ -42,10 +42,6 @@ export default function RekapJurnalPage() {
 
   const periodLabel = `Periode: ${fmtIdDate(startDate)} s.d ${fmtIdDate(endDate)}`;
 
-  // Compute tahun/bulan from endDate for API (jurnal-umum uses these params)
-  const tahun = new Date(endDate + 'T00:00:00').getFullYear();
-  const bulan = new Date(endDate + 'T00:00:00').getMonth() + 1;
-
   // Load CoA for kode/nama lookup
   useEffect(() => {
     fetch('/api/accounting/coa', { headers: { Authorization: 'Bearer ' + token() } })
@@ -59,10 +55,14 @@ export default function RekapJurnalPage() {
       .catch(() => {});
   }, []);
 
+  // Send date range to API (not tahun/bulan)
+  const startDateParam = startDate; // YYYY-MM-DD from useDateFilter
+  const endDateParam = endDate;
+
   async function fetchData() {
     setLoading(true); setError(''); setLoaded(false);
     try {
-      const params = new URLSearchParams({ tahun: String(tahun), bulan: String(bulan) });
+      const params = new URLSearchParams({ start_date: startDateParam, end_date: endDateParam });
       if (journalType !== 'ALL') params.set('tipeTransaksi', journalType);
       params.set('limit', '200');
       const res = await fetch('/api/accounting/jurnal-umum?' + params.toString(), { headers: { Authorization: 'Bearer ' + token() } });
@@ -218,6 +218,13 @@ export default function RekapJurnalPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Help text: edukasi total debit/kredit */}
+      {loaded && entries.length > 0 && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-5 py-3 text-xs text-amber-800">
+          <strong className="font-semibold">ℹ️ Catatan:</strong> Total Debit/Kredit Jurnal adalah jumlah sisi debit dan kredit secara terpisah, bukan nilai omzet. Pada transaksi penjualan barang, jurnal dapat mencatat pendapatan sekaligus HPP (Harga Pokok Penjualan) sehingga total debit/kredit lebih besar dari nilai penjualan.
         </div>
       )}
 

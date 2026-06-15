@@ -764,6 +764,8 @@ export async function accountingRoutes(app: FastifyInstance) {
   app.get('/jurnal-umum', tenantGuard, async (req: FastifyRequest) => {
     const a = (req as any).auth as AuthPayload;
     const q = req.query as any;
+    const startDate = q.start_date || null; // YYYY-MM-DD
+    const endDate = q.end_date || null;     // YYYY-MM-DD
     const tahun = q.tahun ? parseInt(q.tahun, 10) : null;
     const bulan = q.bulan ? parseInt(q.bulan, 10) : null;
     const limit = Math.min(parseInt(q.limit, 10) || 50, 200);
@@ -773,13 +775,27 @@ export async function accountingRoutes(app: FastifyInstance) {
     const params: any[] = [a.tenantId];
     let paramIdx = 2;
 
-    if (tahun && !isNaN(tahun)) {
-      conditions.push(`je.tahun=$${paramIdx++}`);
-      params.push(tahun);
-    }
-    if (bulan && !isNaN(bulan)) {
-      conditions.push(`je.bulan=$${paramIdx++}`);
-      params.push(bulan);
+    // Priority: start_date/end_date > tahun/bulan (backward compatible)
+    if (startDate && endDate) {
+      // Date range filter (strict YYYY-MM-DD format)
+      const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRe.test(startDate) || !dateRe.test(endDate)) {
+        return { error: 'Format tanggal tidak valid (YYYY-MM-DD)' };
+      }
+      conditions.push(`je.tanggal >= $${paramIdx++}`);
+      params.push(startDate);
+      conditions.push(`je.tanggal <= $${paramIdx++}`);
+      params.push(endDate);
+    } else {
+      // Legacy: filter by tahun/bulan
+      if (tahun && !isNaN(tahun)) {
+        conditions.push(`je.tahun=$${paramIdx++}`);
+        params.push(tahun);
+      }
+      if (bulan && !isNaN(bulan)) {
+        conditions.push(`je.bulan=$${paramIdx++}`);
+        params.push(bulan);
+      }
     }
     // Filter by journal type (GENERAL, ADJUSTMENT, CLOSING)
     if (q.tipeTransaksi && ['GENERAL', 'ADJUSTMENT', 'CLOSING'].includes(q.tipeTransaksi)) {
