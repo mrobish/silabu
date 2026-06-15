@@ -76,9 +76,12 @@ export default function LabaRugiPage() {
   const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   const fmtIdDate = (d: string) => { const p = d.split('-'); return `${parseInt(p[2])} ${MONTHS_ID[parseInt(p[1]) - 1]} ${p[0]}`; };
   const isFullYear = startDate.endsWith('-01-01') && endDate.endsWith('-12-31');
+  const isSingleMonth = startDate.slice(0, 7) === endDate.slice(0, 7);
   const periodLabel = isFullYear
-    ? `Untuk Tahun yang Berakhir pada ${fmtIdDate(endDate)}`
-    : `Untuk Periode ${fmtIdDate(startDate)} s.d. ${fmtIdDate(endDate)}`;
+    ? `Untuk Tahun yang Berakhir per ${fmtIdDate(endDate)}`
+    : isSingleMonth
+    ? `Periode Bulan ${MONTHS_ID[parseInt(startDate.split('-')[1]) - 1]} ${startDate.split('-')[0]}`
+    : `Periode ${fmtIdDate(startDate)} s.d. ${fmtIdDate(endDate)}`;
 
   const fetchData = async () => {
     if (loading) return;
@@ -265,8 +268,8 @@ export default function LabaRugiPage() {
         {data && <table className="w-full text-[11px] border-collapse">
           <thead>
             <tr className="border-b border-slate-800 font-bold">
-              <td className="text-left pb-1" style={{ width: '72%' }}>Uraian</td>
-              <td className="text-right pb-1" style={{ width: '28%' }}>Jumlah</td>
+              <th className="text-left pb-1" style={{ width: '72%' }}>Keterangan</th>
+              <th className="text-right pb-1" style={{ width: '28%' }}>Jumlah</th>
             </tr>
           </thead>
           <tbody>
@@ -292,7 +295,10 @@ export default function LabaRugiPage() {
             {/* B. HARGA POKOK PENJUALAN */}
             <tr data-row-type="section"><td colSpan={2} className="font-bold bg-slate-100 py-1 text-xs uppercase tracking-wide">B. Harga Pokok Penjualan</td></tr>
             {data.hpp.detail.filter(a => a.saldo !== 0).length === 0 && (
-              <tr data-row-type="empty"><td colSpan={2} className="text-slate-400 italic pl-5">Tidak ada transaksi HPP</td></tr>
+              <tr data-row-type="empty">
+                <td className="text-slate-400 italic pl-5">Tidak ada transaksi HPP</td>
+                <td className="text-right tabular-nums text-slate-400">Rp 0</td>
+              </tr>
             )}
             {data.hpp.detail.filter(a => a.saldo !== 0).map(a => (
               <tr key={a.kode} data-row-type="detail">
@@ -314,7 +320,10 @@ export default function LabaRugiPage() {
             {/* D. BEBAN OPERASIONAL */}
             <tr data-row-type="section"><td colSpan={2} className="font-bold bg-slate-100 py-1 text-xs uppercase tracking-wide">D. Beban Operasional</td></tr>
             {data.bebanOperasional.detail.filter(a => a.saldo !== 0).length === 0 && (
-              <tr data-row-type="empty"><td colSpan={2} className="text-slate-400 italic pl-5">Tidak ada beban operasional</td></tr>
+              <tr data-row-type="empty">
+                <td className="text-slate-400 italic pl-5">Tidak ada beban operasional</td>
+                <td className="text-right tabular-nums text-slate-400">Rp 0</td>
+              </tr>
             )}
             {data.bebanOperasional.detail.filter(a => a.saldo !== 0).map(a => (
               <tr key={a.kode} data-row-type="detail">
@@ -348,7 +357,10 @@ export default function LabaRugiPage() {
               </tr>
             ))}
             {data.nonOperasional.pendapatanLain.detail.filter(a => a.saldo !== 0).length === 0 && data.nonOperasional.bebanLain.detail.filter(a => a.saldo !== 0).length === 0 && (
-              <tr data-row-type="empty"><td colSpan={2} className="text-slate-400 italic pl-5">Tidak ada transaksi non-operasional</td></tr>
+              <tr data-row-type="empty">
+                <td className="text-slate-400 italic pl-5">Tidak ada transaksi non-operasional</td>
+                <td className="text-right tabular-nums text-slate-400">Rp 0</td>
+              </tr>
             )}
             <tr data-row-type="subtotal" className="font-bold border-t border-slate-400">
               <td className="pt-0.5">Jumlah Pendapatan dan Beban Non-Operasional</td>
@@ -364,7 +376,10 @@ export default function LabaRugiPage() {
             {/* H. BEBAN PAJAK */}
             <tr data-row-type="section"><td colSpan={2} className="font-bold bg-slate-100 py-1 text-xs uppercase tracking-wide">H. Beban Pajak</td></tr>
             {data.pajak.detail.filter(a => a.saldo !== 0).length === 0 && (
-              <tr data-row-type="empty"><td colSpan={2} className="text-slate-400 italic pl-5">Tidak ada beban pajak</td></tr>
+              <tr data-row-type="empty">
+                <td className="text-slate-400 italic pl-5">Tidak ada beban pajak</td>
+                <td className="text-right tabular-nums text-slate-400">Rp 0</td>
+              </tr>
             )}
             {data.pajak.detail.filter(a => a.saldo !== 0).map(a => (
               <tr key={a.kode} data-row-type="detail">
