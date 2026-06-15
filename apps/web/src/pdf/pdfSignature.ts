@@ -2,14 +2,13 @@
 //
 // TTD hanya di halaman terakhir laporan.
 //
-// Format:
+// Format (nama di ATAS garis):
 //   Mengetahui,                           [Nama Desa], [Tanggal Cetak]
 //   Direktur [Nama BUM Desa]              Disusun oleh,
 //                                          Bendahara [Nama BUM Desa]
 //
-//   [spasi untuk tanda tangan]
-//
-//   [Nama Direktur]                        [Nama Bendahara BUM Desa]
+//   [Nama Direktur]                        [Nama Bendahara]
+//   ──────────────────────                 ──────────────────────
 //
 // Jika nama kosong → "................................"
 //
@@ -59,18 +58,16 @@ export function addPdfSignature(
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
   doc.text(`Direktur ${namaBumdes}`, sigLeftX, y + 5);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(71, 85, 105);
-  doc.text(namaBumdes, sigLeftX, y + 9);
 
-  // Signature line left
-  doc.setDrawColor(30, 41, 59);
-  doc.setLineWidth(0.3);
-  doc.line(sigLeftX, y + 24, sigLeftX + colW, y + 24);
-
+  // Nama di atas garis
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text(namaDir, sigLeftX, y + 28);
+  doc.text(namaDir, sigLeftX, y + 15);
+
+  // Signature line left (di bawah nama)
+  doc.setDrawColor(30, 41, 59);
+  doc.setLineWidth(0.3);
+  doc.line(sigLeftX, y + 18, sigLeftX + colW, y + 18);
 
   // Right column — Titimangsa + Bendahara
   doc.setFontSize(9);
@@ -85,12 +82,13 @@ export function addPdfSignature(
   doc.setTextColor(71, 85, 105);
   doc.text(`Bendahara ${namaBumdes}`, sigRightX, y + 9);
 
-  // Signature line right
-  doc.line(sigRightX, y + 24, sigRightX + colW, y + 24);
-
+  // Nama di atas garis
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text(namaBen, sigRightX, y + 28);
+  doc.text(namaBen, sigRightX, y + 15);
 
-  return y + 38;
+  // Signature line right (di bawah nama)
+  doc.line(sigRightX, y + 18, sigRightX + colW, y + 18);
+
+  return y + 26;
 }

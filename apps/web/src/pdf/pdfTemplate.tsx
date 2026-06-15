@@ -44,6 +44,7 @@ export default function PdfTemplate({
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
   const printAreaRef = useRef<HTMLDivElement>(null);
+  const logoImgRef = useRef<HTMLImageElement | null>(null);
   const [generating, setGenerating] = useState(false);
 
   // ── Fetch tenant profile ───────────────────────────
@@ -71,26 +72,40 @@ export default function PdfTemplate({
     })();
   }, [isOpen]);
 
-  // ── Pre-load logo to base64 for PDF ────────────────
+  // ── Pre-load logo for PDF ──────────────────────────
   useEffect(() => {
     if (!isOpen || !tenant?.logo_url) {
       setLogoDataUrl(null);
+      logoImgRef.current = null;
       return;
     }
+    const fullUrl = tenant.logo_url.startsWith('http')
+      ? tenant.logo_url
+      : window.location.origin + tenant.logo_url;
     const img = new Image();
-    img.crossOrigin = 'anonymous';
     img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth || 80;
-      canvas.height = img.naturalHeight || 80;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0);
-        setLogoDataUrl(canvas.toDataURL('image/png'));
+      // Try canvas toDataURL for cross-format compatibility in jsPDF
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || 120;
+        canvas.height = img.naturalHeight || 120;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          const dataUrl = canvas.toDataURL('image/png');
+          setLogoDataUrl(dataUrl);
+        }
+      } catch {
+        // Canvas tainted — fallback: keep null, pdf will try Image ref
       }
+      // Store Image ref as fallback for pdf.addImage
+      logoImgRef.current = img;
     };
-    img.onerror = () => setLogoDataUrl(null);
-    img.src = tenant.logo_url;
+    img.onerror = () => {
+      setLogoDataUrl(null);
+      logoImgRef.current = null;
+    };
+    img.src = fullUrl;
   }, [isOpen, tenant?.logo_url]);
 
   // ── Generate PDF ────────────────────────────────────
@@ -135,14 +150,33 @@ export default function PdfTemplate({
       y = headerResult.y;
 
       // If logo was loaded, inject it at the reserved position
-      if (logoDataUrl && tenant?.logo_url) {
+      if ((logoDataUrl || logoImgRef.current) && tenant?.logo_url) {
         const logoSize = 14;
         const logoX = pageW / 2 - logoSize / 2;
-        try {
-          pdf.addImage(logoDataUrl, 'PNG', logoX, margin, logoSize, logoSize);
+        let logoInjected = false;
+        // Try data URL first (PNG), then JPEG
+        if (logoDataUrl) {
+          for (const fmt of ['PNG', 'JPEG'] as const) {
+            if (logoInjected) break;
+            try {
+              pdf.addImage(logoDataUrl, fmt, logoX, margin, logoSize, logoSize);
+              logoInjected = true;
+            } catch {
+              // try next format
+            }
+          }
+        }
+        // Fallback: use Image element directly
+        if (!logoInjected && logoImgRef.current) {
+          try {
+            pdf.addImage(logoImgRef.current, 'JPEG', logoX, margin, logoSize, logoSize);
+            logoInjected = true;
+          } catch {
+            // Image element failed too
+          }
+        }
+        if (logoInjected) {
           y = Math.max(y, margin + logoSize + 2);
-        } catch {
-          // Logo injection failed — skip
         }
       }
 
@@ -161,8 +195,6 @@ export default function PdfTemplate({
         y += 1;
       }
 
-      // ── "(Dalam Rupiah)" ─────────────────────────
-      addTitle('(Dalam Rupiah)', 8, 'normal', [148, 163, 184]);
       y += 5;
 
       // ── Parse table from DOM ────────────────────
@@ -399,7 +431,7 @@ export default function PdfTemplate({
                   {namaBumdes}
                 </h1>
                 {namaDesa && (
-                  <p className="text-base font-bold text-slate-800 mt-0.5">{namaDesa}</p>
+                  <p className="text-base font-bold text-slate-800 mt-0.5">DESA {namaDesa.toUpperCase()}</p>
                 )}
                 <p className="text-[10px] text-slate-600 mt-1">
                   Nomor Sertifikat Badan Hukum: {noSertifikat}
@@ -423,13 +455,10 @@ export default function PdfTemplate({
                 </p>
               )}
               {periodLabel && (
-                <p className="text-center text-[11px] text-slate-700 mb-0.5">
+                <p className="text-center text-[11px] text-slate-700 mb-3">
                   {periodLabel}
                 </p>
               )}
-              <p className="text-center text-[10px] text-slate-400 mb-3">
-                (Dalam Rupiah)
-              </p>
 
               {/* BODY */}
               <div className="print-body text-[11px]">{children}</div>
@@ -469,28 +498,24 @@ export default function PdfTemplate({
                       </td>
                     </tr>
                     <tr>
-                      <td
-                        className="text-center align-bottom"
-                        style={{ paddingTop: '56px' }}
-                      >
+                      <td className="text-center align-bottom" style={{ paddingTop: '36px' }}>
                         <input
                           type="text"
                           className="print-input"
                           value={namaDirektur}
                           onChange={(e) => setNamaDirektur(e.target.value)}
                         />
+                        <div className="border-b border-slate-900 mt-0.5 w-full" />
                       </td>
                       <td></td>
-                      <td
-                        className="text-center align-bottom"
-                        style={{ paddingTop: '56px' }}
-                      >
+                      <td className="text-center align-bottom" style={{ paddingTop: '36px' }}>
                         <input
                           type="text"
                           className="print-input"
                           value={namaBendahara}
                           onChange={(e) => setNamaBendahara(e.target.value)}
                         />
+                        <div className="border-b border-slate-900 mt-0.5 w-full" />
                       </td>
                     </tr>
                   </tbody>

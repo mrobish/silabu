@@ -304,7 +304,8 @@ export default function BukuBesarPage() {
           isOpen={printOpen}
           onClose={() => setPrintOpen(false)}
           periodLabel={periodLabel}
-          accountLabel={`${data.akun.kode} - ${data.akun.nama}`}
+          accountLabel={`Nama Akun: ${data.akun.kode} - ${data.akun.nama}`}
+          landscape={true}
         >
           {/* Print Table */}
           <table className="w-full border-collapse text-[10px]" style={{ tableLayout: 'fixed' }}>
@@ -313,9 +314,9 @@ export default function BukuBesarPage() {
                 <th className="border border-slate-400 px-2 py-1.5 text-left font-bold" style={{ width: '13%' }}>Tanggal</th>
                 <th className="border border-slate-400 px-2 py-1.5 text-left font-bold" style={{ width: '13%' }}>No. Bukti</th>
                 <th className="border border-slate-400 px-2 py-1.5 text-left font-bold" style={{ width: '30%' }}>Keterangan / Uraian</th>
-                <th className="border border-slate-400 px-2 py-1.5 text-right font-bold" style={{ width: '14%' }}>Debit (Rp)</th>
-                <th className="border border-slate-400 px-2 py-1.5 text-right font-bold" style={{ width: '14%' }}>Kredit (Rp)</th>
-                <th className="border border-slate-400 px-2 py-1.5 text-right font-bold" style={{ width: '16%' }}>Saldo (Rp)</th>
+                <th className="border border-slate-400 px-2 py-1.5 text-right font-bold" style={{ width: '14%' }}>Debit</th>
+                <th className="border border-slate-400 px-2 py-1.5 text-right font-bold" style={{ width: '14%' }}>Kredit</th>
+                <th className="border border-slate-400 px-2 py-1.5 text-right font-bold" style={{ width: '16%' }}>Saldo</th>
               </tr>
             </thead>
             <tbody>

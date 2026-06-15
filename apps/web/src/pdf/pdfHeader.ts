@@ -61,10 +61,10 @@ export function addPdfHeader(
   addCenter(tenant?.nama_bumdes?.toUpperCase() || 'BUM DESA', 13, 'bold', [15, 23, 42]);
   y += 1;
 
-  // ── Nama Desa (bold) ──────────────────────────────
+  // ── DESA [Nama Desa] (uppercase bold) ─────────────
   const namaDesa = tenant?.desa || '';
   if (namaDesa) {
-    addCenter(namaDesa, 11, 'bold', [30, 41, 59]);
+    addCenter(`DESA ${namaDesa.toUpperCase()}`, 11, 'bold', [30, 41, 59]);
     y += 1;
   }
 
