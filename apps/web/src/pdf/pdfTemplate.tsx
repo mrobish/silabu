@@ -430,9 +430,6 @@ export default function PdfTemplate({
                 <h1 className="text-lg font-bold text-slate-900 uppercase tracking-wide leading-tight">
                   {namaBumdes}
                 </h1>
-                {namaDesa && (
-                  <p className="text-base font-bold text-slate-800 mt-0.5">DESA {namaDesa.toUpperCase()}</p>
-                )}
                 <p className="text-[10px] text-slate-600 mt-1">
                   Nomor Sertifikat Badan Hukum: {noSertifikat}
                 </p>
@@ -469,13 +466,16 @@ export default function PdfTemplate({
                   <tbody>
                     <tr>
                       <td className="text-center align-top" style={{ width: '42%' }}>
-                        <p className="text-[11px] text-slate-600">Mengetahui,</p>
+                        <p className="text-[11px] font-bold text-slate-600">
+                          Direktur {tenant?.nama_bumdes || 'BUM Desa'}
+                        </p>
                       </td>
                       <td style={{ width: '16%' }}></td>
                       <td className="text-center align-top" style={{ width: '42%' }}>
                         <input
                           type="text"
                           className="print-input-date"
+                          style={{ fontSize: '11px' }}
                           value={tglCetak}
                           onChange={(e) => setTglCetak(e.target.value)}
                         />
@@ -483,22 +483,16 @@ export default function PdfTemplate({
                     </tr>
                     <tr>
                       <td className="text-center align-top">
-                        <p className="text-[11px] font-bold text-slate-800 mt-0.5">
-                          Direktur {tenant?.nama_bumdes || 'BUM Desa'}
-                        </p>
-                      </td>
-                      <td></td>
-                      <td className="text-center align-top">
-                        <p className="text-[11px] font-bold text-slate-800 mt-0.5">
-                          Disusun oleh,
-                        </p>
                         <p className="text-[11px] text-slate-700">
                           Bendahara {tenant?.nama_bumdes || 'BUM Desa'}
                         </p>
                       </td>
+                      <td></td>
+                      <td className="text-center align-top">
+                      </td>
                     </tr>
                     <tr>
-                      <td className="text-center align-bottom" style={{ paddingTop: '36px' }}>
+                      <td className="text-center align-bottom" style={{ paddingTop: '28px' }}>
                         <input
                           type="text"
                           className="print-input"
@@ -508,7 +502,7 @@ export default function PdfTemplate({
                         <div className="border-b border-slate-900 mt-0.5 w-full" />
                       </td>
                       <td></td>
-                      <td className="text-center align-bottom" style={{ paddingTop: '36px' }}>
+                      <td className="text-center align-bottom" style={{ paddingTop: '28px' }}>
                         <input
                           type="text"
                           className="print-input"

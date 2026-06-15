@@ -59,14 +59,7 @@ export function addPdfHeader(
 
   // ── Nama BUM Desa (uppercase bold) ────────────────
   addCenter(tenant?.nama_bumdes?.toUpperCase() || 'BUM DESA', 13, 'bold', [15, 23, 42]);
-  y += 1;
-
-  // ── DESA [Nama Desa] (uppercase bold) ─────────────
-  const namaDesa = tenant?.desa || '';
-  if (namaDesa) {
-    addCenter(`DESA ${namaDesa.toUpperCase()}`, 11, 'bold', [30, 41, 59]);
-    y += 1;
-  }
+  y += 2;
 
   // ── Nomor Sertifikat Badan Hukum ──────────────────
   const noSertifikat = tenant?.nomor_sertifikat || '-';

@@ -3,8 +3,7 @@
 // TTD hanya di halaman terakhir laporan.
 //
 // Format (nama di ATAS garis):
-//   Mengetahui,                           [Nama Desa], [Tanggal Cetak]
-//   Direktur [Nama BUM Desa]              Disusun oleh,
+//   Direktur [Nama BUM Desa]              [Nama Desa], [Tanggal Cetak]
 //                                          Bendahara [Nama BUM Desa]
 //
 //   [Nama Direktur]                        [Nama Bendahara]
@@ -49,25 +48,21 @@ export function addPdfSignature(
   const namaDir = tenant?.nama_direktur || '................................';
   const namaBen = tenant?.nama_bendahara || '................................';
 
-  // Left column — Mengetahui
+  // Left column — Direktur
   doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100, 116, 139);
-  doc.text('Mengetahui,', sigLeftX, y);
-
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text(`Direktur ${namaBumdes}`, sigLeftX, y + 5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Direktur ${namaBumdes}`, sigLeftX, y);
 
   // Nama di atas garis
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text(namaDir, sigLeftX, y + 15);
+  doc.text(namaDir, sigLeftX, y + 10);
 
   // Signature line left (di bawah nama)
   doc.setDrawColor(30, 41, 59);
   doc.setLineWidth(0.3);
-  doc.line(sigLeftX, y + 18, sigLeftX + colW, y + 18);
+  doc.line(sigLeftX, y + 13, sigLeftX + colW, y + 13);
 
   // Right column — Titimangsa + Bendahara
   doc.setFontSize(9);
@@ -75,20 +70,17 @@ export function addPdfSignature(
   doc.setTextColor(100, 116, 139);
   doc.text(tglCetak, sigRightX, y);
 
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text('Disusun oleh,', sigRightX, y + 5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(71, 85, 105);
-  doc.text(`Bendahara ${namaBumdes}`, sigRightX, y + 9);
+  doc.text(`Bendahara ${namaBumdes}`, sigRightX, y + 10);
 
   // Nama di atas garis
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text(namaBen, sigRightX, y + 15);
+  doc.text(namaBen, sigRightX, y + 18);
 
   // Signature line right (di bawah nama)
-  doc.line(sigRightX, y + 18, sigRightX + colW, y + 18);
+  doc.line(sigRightX, y + 21, sigRightX + colW, y + 21);
 
-  return y + 26;
+  return y + 28;
 }
