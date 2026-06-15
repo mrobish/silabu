@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDateFilter } from '../hooks/useDateFilter';
 import { useCutoffDate } from "../hooks/useCutoffDate";
+import { useDataRange } from "../hooks/useDataRange";
 import { DollarSign, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, ChevronDown, ChevronRight, Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
@@ -81,6 +82,7 @@ function AktivitasBlock({ title, icon, data, color, open, onToggle }: {
 export default function ArusKasPage() {
   const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const cutoff = useCutoffDate();
+  const { minDate: dataMinDate, maxDate: dataMaxDate } = useDataRange();
   const [data, setData] = useState<ArusKasData | null>(null);
   const [loading, setLoading] = useState(false);
   const [exp, setExp] = useState<Record<string, boolean>>({ operasi: true, investasi: true, pendanaan: true });
@@ -119,6 +121,9 @@ export default function ArusKasPage() {
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
           <div className="sm:col-span-2" data-help-target="filter-periode">
             <DateRangePicker minDate={cutoff}
+              showAllPresets
+              dataMinDate={dataMinDate}
+              dataMaxDate={dataMaxDate}
               startDate={startDate}
               endDate={endDate}
               onStartChange={setStartDate}

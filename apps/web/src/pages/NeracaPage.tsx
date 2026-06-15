@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDateFilter } from '../hooks/useDateFilter';
 import { useCutoffDate } from "../hooks/useCutoffDate";
+import { useDataRange } from "../hooks/useDataRange";
 import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, FileDown } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
@@ -81,6 +82,7 @@ function BalanceBanner({ isBalanced, totalAset, totalPassiva, selisih }: { isBal
 export default function NeracaPage() {
   const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const cutoff = useCutoffDate();
+  const { minDate: dataMinDate, maxDate: dataMaxDate } = useDataRange();
   const [data, setData] = useState<NeracaData | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ lancar: true, tetap: true, lain: true, kewajiban: true, ekuitas: true });
@@ -132,6 +134,9 @@ export default function NeracaPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
           <div className="sm:col-span-2">
             <DateRangePicker minDate={cutoff}
+              showAllPresets
+              dataMinDate={dataMinDate}
+              dataMaxDate={dataMaxDate}
               startDate={startDate}
               endDate={endDate}
               onStartChange={setStartDate}

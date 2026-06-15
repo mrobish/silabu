@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useDateFilter } from '../hooks/useDateFilter';
 import { useCutoffDate } from "../hooks/useCutoffDate";
+import { useDataRange } from "../hooks/useDataRange";
 import { FileText, Loader2, ChevronDown, ChevronRight, Printer } from 'lucide-react';
 import DateRangePicker from './DateRangePicker';
 
@@ -59,6 +60,7 @@ function Section({ title, n, children }: { title: string; n: number; children: R
 export default function CalkPage() {
   const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const cutoff = useCutoffDate();
+  const { minDate: dataMinDate, maxDate: dataMaxDate } = useDataRange();
   const [narasi, setNarasi] = useState(DEFAULT_NARRATIVE);
   const [data, setData] = useState<CalkData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -122,6 +124,9 @@ export default function CalkPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
           <div className="sm:col-span-1">
             <DateRangePicker minDate={cutoff}
+              showAllPresets
+              dataMinDate={dataMinDate}
+              dataMaxDate={dataMaxDate}
               startDate={startDate}
               endDate={endDate}
               onStartChange={setStartDate}

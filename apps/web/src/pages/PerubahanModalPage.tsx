@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDateFilter } from '../hooks/useDateFilter';
 import { useCutoffDate } from "../hooks/useCutoffDate";
+import { useDataRange } from "../hooks/useDataRange";
 import { Printer } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
@@ -42,6 +43,7 @@ function displayPrive(v: number) {
 export default function PerubahanModalPage() {
   const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const cutoff = useCutoffDate();
+  const { minDate: dataMinDate, maxDate: dataMaxDate } = useDataRange();
   const [data, setData] = useState<PerubahanModalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -89,6 +91,9 @@ export default function PerubahanModalPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
           <div className="sm:col-span-2">
             <DateRangePicker minDate={cutoff}
+              showAllPresets
+              dataMinDate={dataMinDate}
+              dataMaxDate={dataMaxDate}
               startDate={startDate}
               endDate={endDate}
               onStartChange={setStartDate}
