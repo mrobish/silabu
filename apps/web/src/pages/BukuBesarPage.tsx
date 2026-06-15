@@ -5,6 +5,7 @@ import { useDataRange } from "../hooks/useDataRange";
 import { BookOpen, Calendar, Search, X } from 'lucide-react';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
+import PdfTemplate from '../pdf/pdfTemplate';
 
 // ─── Types ───────────────────────────────────────────────────
 interface CoAAccount { id: string; kode: string; nama: string; isPostable?: boolean; is_postable?: boolean; level?: number; }
@@ -298,20 +299,13 @@ export default function BukuBesarPage() {
 
       {/* Print Preview */}
       {printOpen && data && (
-        <ReportPrintLayout
+        <PdfTemplate
           title="BUKU BESAR"
           isOpen={printOpen}
           onClose={() => setPrintOpen(false)}
           periodLabel={periodLabel}
+          accountLabel={`${data.akun.kode} - ${data.akun.nama}`}
         >
-          {/* Account Info */}
-          <p className="text-center text-[12px] font-bold text-slate-800 mb-0.5">
-            Akun: {data.akun.nama.toUpperCase()} ({data.akun.kode})
-          </p>
-          <p className="text-center text-[10px] text-slate-500 mb-3">
-            Saldo Normal: {data.akun.saldoNormal === 'D' ? 'Debit' : 'Kredit'}
-          </p>
-
           {/* Print Table */}
           <table className="w-full border-collapse text-[10px]" style={{ tableLayout: 'fixed' }}>
             <thead>
@@ -376,7 +370,7 @@ export default function BukuBesarPage() {
               </tr>
             </tbody>
           </table>
-        </ReportPrintLayout>
+        </PdfTemplate>
       )}
     </div>
   );
