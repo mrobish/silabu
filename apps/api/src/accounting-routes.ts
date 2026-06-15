@@ -893,9 +893,12 @@ export async function accountingRoutes(app: FastifyInstance) {
     if (!r.rowCount) return { error: 'Jurnal tidak ditemukan' };
     const lines = await pool.query(
       `SELECT l.id, l.akun_id AS "akunId", l.debit, l.kredit, l.keterangan, l.unit_usaha AS "unitUsaha",
-              l.contact_id AS "contactId", l.inventory_item_id AS "inventoryItemId", l.qty
-       FROM journal_lines l WHERE l.entry_id=$1 ORDER BY l.created_at`,
-      [id]
+              l.contact_id AS "contactId", l.inventory_item_id AS "inventoryItemId", l.qty,
+              c.kode AS "akunKode", c.nama AS "akunNama", c.isactive AS "akunIsActive"
+       FROM journal_lines l
+       LEFT JOIN chart_of_accounts c ON c.id = l.akun_id AND c.tenant_id = $2
+       WHERE l.entry_id=$1 ORDER BY l.created_at`,
+      [id, a.tenantId]
     );
     return { jurnal: { ...r.rows[0], lines: lines.rows } };
   });

@@ -566,7 +566,7 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
   // Edit mode
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editHeader, setEditHeader] = useState<HeaderState>(emptyHeader());
-  const [editLines, setEditLines] = useState<{ akun_id: string; debit: string; kredit: string; keterangan: string; searchTerm: string; contact_id: string | null; inventory_item_id: string | null; qty: number | null }[]>([]);
+  const [editLines, setEditLines] = useState<{ akun_id: string; debit: string; kredit: string; keterangan: string; searchTerm: string; contact_id: string | null; inventory_item_id: string | null; qty: number | null; akunIsActive: boolean }[]>([]);
   const [editReferensi, setEditReferensi] = useState('');
 
   // Delete modal
@@ -1083,17 +1083,31 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
         keterangan: j.keterangan || '',
       });
       setEditReferensi(j.referensi || '');
-      const loaded = (j.lines || []).map((l: any) => ({
-        akun_id: l.akunId || l.akun_id || '',
-        debit: Number(l.debit) > 0 ? formatCurrencyDisplay(String(Number(l.debit))) : '',
-        kredit: Number(l.kredit) > 0 ? formatCurrencyDisplay(String(Number(l.kredit))) : '',
-        keterangan: l.keterangan || '',
-        searchTerm: '',
-        contact_id: l.contactId || l.contact_id || null,
-        inventory_item_id: l.inventoryItemId || l.inventory_item_id || null,
-        qty: l.qty || null,
-      }));
-      while (loaded.length < 2) loaded.push({ akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '', contact_id: null, inventory_item_id: null, qty: null });
+      const loaded = (j.lines || []).map((l: any) => {
+        const akun_id = l.akunId || l.akun_id || '';
+        // Backend now provides akunKode/akunNama/akunIsActive per line (LEFT JOIN)
+        // Fall back to coaAccounts lookup if backend fields missing
+        let searchTerm = '';
+        if (l.akunKode && l.akunNama) {
+          searchTerm = l.akunKode + ' — ' + l.akunNama;
+          if (l.akunIsActive === false) searchTerm += ' (nonaktif)';
+        } else if (akun_id) {
+          const akun = coaAccounts.find(a => String(a.id) === String(akun_id));
+          if (akun) searchTerm = akun.kode + ' — ' + akun.nama;
+        }
+        return {
+          akun_id,
+          debit: Number(l.debit) > 0 ? formatCurrencyDisplay(String(Number(l.debit))) : '',
+          kredit: Number(l.kredit) > 0 ? formatCurrencyDisplay(String(Number(l.kredit))) : '',
+          keterangan: l.keterangan || '',
+          searchTerm,
+          contact_id: l.contactId || l.contact_id || null,
+          inventory_item_id: l.inventoryItemId || l.inventory_item_id || null,
+          qty: l.qty || null,
+          akunIsActive: l.akunIsActive !== undefined ? l.akunIsActive : true,
+        };
+      });
+      while (loaded.length < 2) loaded.push({ akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '', contact_id: null, inventory_item_id: null, qty: null, akunIsActive: true });
       setEditLines(loaded);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e: any) {
@@ -1108,6 +1122,20 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
     setEditReferensi('');
     setError('');
   }
+
+  // ── Fallback: fill searchTerm when coaAccounts loads after edit was opened (race condition)
+  useEffect(() => {
+    if (!editingId || editLines.length === 0 || coaAccounts.length === 0) return;
+    const needsUpdate = editLines.some(l => l.akun_id && !l.searchTerm);
+    if (!needsUpdate) return;
+    setEditLines(prev => prev.map(l => {
+      if (!l.akun_id || l.searchTerm) return l;
+      const akun = coaAccounts.find(a => String(a.id) === String(l.akun_id));
+      if (!akun) return l;
+      const label = akun.kode + ' — ' + akun.nama + (l.akunIsActive === false ? ' (nonaktif)' : '');
+      return { ...l, searchTerm: label };
+    }));
+  }, [coaAccounts, editingId, editLines.length]);
 
   function updateEditHeader(field: keyof HeaderState, val: string) {
     setEditHeader(prev => ({ ...prev, [field]: val }));
@@ -1126,13 +1154,13 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
   }
 
   function addEditLine() {
-    setEditLines(prev => [...prev, { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '', contact_id: null, inventory_item_id: null, qty: null }]);
+    setEditLines(prev => [...prev, { akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '', contact_id: null, inventory_item_id: null, qty: null, akunIsActive: true }]);
   }
 
   function removeEditLine(i: number) {
     setEditLines(prev => {
       const next = prev.filter((_, idx) => idx !== i);
-      while (next.length < 2) next.push({ akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '', contact_id: null, inventory_item_id: null, qty: null });
+      while (next.length < 2) next.push({ akun_id: '', debit: '', kredit: '', keterangan: '', searchTerm: '', contact_id: null, inventory_item_id: null, qty: null, akunIsActive: true });
       return next;
     });
   }
