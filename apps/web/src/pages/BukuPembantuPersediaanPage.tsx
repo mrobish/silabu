@@ -312,7 +312,7 @@ function Skeleton() {
 }
 
 // ─── Main Component ─────────────────────────────────────────────────────────
-export default function BukuPembantuPersediaanPage() {
+export default function BukuPembantuPersediaanPage({ setPage }: { setPage?: (page: any) => void }) {
   const now = new Date();
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, '0');
@@ -327,10 +327,11 @@ export default function BukuPembantuPersediaanPage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState('');
   const [printOpen, setPrintOpen] = useState(false);
+  const [candidateCount, setCandidateCount] = useState(0);
 
   const periodLabel = `Periode: ${fmtIdDate(startDate)} s.d ${fmtIdDate(endDate)}`;
 
-  // Fetch inventory items
+  // Fetch inventory items + candidate count
   useEffect(() => {
     fetch('/api/accounting/inventory-items', {
       headers: { Authorization: 'Bearer ' + token() },
@@ -342,6 +343,16 @@ export default function BukuPembantuPersediaanPage() {
       })
       .catch(() => {})
       .finally(() => setInitialLoading(false));
+
+    // Fetch candidate count for info banner
+    fetch('/api/accounting/persediaan/journal-candidates', {
+      headers: { Authorization: 'Bearer ' + token() },
+    })
+      .then(r => r.json())
+      .then(d => {
+        setCandidateCount((d.candidates || []).length);
+      })
+      .catch(() => {});
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -400,12 +411,19 @@ export default function BukuPembantuPersediaanPage() {
           <Boxes size={20} />
         </div>
         <div className="flex-1">
-          <h2 className="text-lg font-bold text-slate-900">Buku Pembantu Persediaan</h2>
+          <h2 className="text-lg font-bold text-slate-900">Kartu Stok Persediaan</h2>
           <p className="text-xs text-slate-500">
-            Subsidiary Ledger — Rincian persediaan per item dengan saldo berjalan
+            Lihat histori masuk-keluar persediaan per barang berdasarkan jurnal yang sudah terhubung.
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setPage?.('persediaan')}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:border-emerald-300 transition whitespace-nowrap"
+          >
+            <Package size={16} className="inline -mt-0.5 mr-1" /> Kelola Data Barang
+          </button>
           <button
             type="button"
             onClick={() => exportCsv(data)}
@@ -424,6 +442,27 @@ export default function BukuPembantuPersediaanPage() {
           </button>
         </div>
       </div>
+
+      {/* Candidate info banner */}
+      {candidateCount > 0 && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/80 backdrop-blur-xl px-4 py-3 flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 text-amber-600 shrink-0">
+            <Package size={16} />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800">
+              Ada {candidateCount} jurnal persediaan yang belum terhubung ke stok.
+            </p>
+            <p className="text-xs text-amber-600">Buka Data Barang Persediaan untuk menghubungkan.</p>
+          </div>
+          <button
+            onClick={() => setPage?.('persediaan')}
+            className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-xs font-bold text-white shadow-lg hover:shadow-xl transition shrink-0"
+          >
+            Buka Data Barang Persediaan
+          </button>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className={`${br} p-4 sm:p-5 relative z-10`}>

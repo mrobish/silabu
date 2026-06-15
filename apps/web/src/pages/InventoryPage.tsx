@@ -729,7 +729,7 @@ function Toast({ message, type, onClose }: { message: string; type: 'success' | 
 }
 
 /* ─── Main Page ─── */
-export default function InventoryPage() {
+export default function InventoryPage({ setPage }: { setPage?: (page: any) => void }) {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [accounts, setAccounts] = useState<CoAAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -830,13 +830,19 @@ export default function InventoryPage() {
           <ShoppingBag size={20} />
         </div>
         <div className="flex-1">
-          <h2 className="text-lg font-bold text-slate-900">Persediaan Barang</h2>
-          <p className="text-xs text-slate-500">Inventory Management — Kelola persediaan barang desa</p>
+          <h2 className="text-lg font-bold text-slate-900">Data Barang Persediaan</h2>
+          <p className="text-xs text-slate-500">Kelola master barang persediaan, stok awal, dan hubungkan jurnal persediaan yang belum masuk kartu stok.</p>
         </div>
-        <button onClick={() => { setEditItem(null); setModalOpen(true); }}
-          className="rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition whitespace-nowrap">
-          <Plus size={16} className="inline -mt-0.5 mr-1" /> Tambah Barang
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setPage?.('buku-pembantu-persediaan')}
+            className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition whitespace-nowrap">
+            Lihat Kartu Stok
+          </button>
+          <button onClick={() => { setEditItem(null); setModalOpen(true); }}
+            className="rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition whitespace-nowrap">
+            <Plus size={16} className="inline -mt-0.5 mr-1" /> Tambah Barang
+          </button>
+        </div>
       </div>
 
       {/* Link Banner — muncul kalau ada kandidat */}
