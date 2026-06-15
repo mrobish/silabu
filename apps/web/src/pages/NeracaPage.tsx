@@ -3,6 +3,7 @@ import { useDateFilter } from '../hooks/useDateFilter';
 import { useCutoffDate } from "../hooks/useCutoffDate";
 import { useDataRange } from "../hooks/useDataRange";
 import { Scale, ChevronDown, ChevronRight, Calendar, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, FileDown } from 'lucide-react';
+import PdfTemplate from '../pdf/pdfTemplate';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
 
@@ -280,7 +281,7 @@ export default function NeracaPage() {
       )}
 
       {/* Print Modal */}
-      <ReportPrintLayout title="LAPORAN NERACA" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabelNeraca}>
+      <PdfTemplate title="LAPORAN NERACA" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabelNeraca}>
         {data && <div className="space-y-0">
           <div className="grid grid-cols-2 gap-4">
             {/* AKTIVA COLUMN */}
@@ -430,7 +431,7 @@ export default function NeracaPage() {
             </div>
           </div>
         </div>}
-      </ReportPrintLayout>
+      </PdfTemplate>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useDateFilter } from '../hooks/useDateFilter';
 import { useCutoffDate } from "../hooks/useCutoffDate";
 import { useDataRange } from "../hooks/useDataRange";
 import { Printer } from 'lucide-react';
+import PdfTemplate from '../pdf/pdfTemplate';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
 
@@ -203,12 +204,12 @@ export default function PerubahanModalPage() {
 
       {/* Print Layout */}
       {data && (
-        <ReportPrintLayout title={`Laporan Perubahan Modal`} isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={`${fmtIdDate(startDate)} s.d ${fmtIdDate(endDate)}`}>
+        <PdfTemplate title={`Laporan Perubahan Modal`} isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={`${fmtIdDate(startDate)} s.d ${fmtIdDate(endDate)}`}>
           <table className="w-full text-[11px] border-collapse">
             <thead>
               <tr className="border-b-2 border-slate-300">
                 <th className="text-left py-1.5 font-bold">Keterangan</th>
-                <th className="text-right py-1.5 font-bold" style={{ width: '30%' }}>Jumlah (Rp)</th>
+                <th className="text-right py-1.5 font-bold" style={{ width: '30%' }}>Jumlah</th>
               </tr>
             </thead>
             <tbody>
@@ -231,7 +232,7 @@ export default function PerubahanModalPage() {
               <tr className="bg-gray-100 print:bg-gray-100 border-t border-gray-800 border-b-4 border-double border-gray-900"><td className="py-2 font-extrabold">Modal Akhir per {fmtIdDate(endDate)}</td><td className="text-right py-2 font-extrabold tabular-nums">{formatRupiah(data.modalAkhir)}</td></tr>
             </tbody>
           </table>
-        </ReportPrintLayout>
+        </PdfTemplate>
       )}
     </div>
   );

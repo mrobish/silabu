@@ -3,6 +3,7 @@ import { useDateFilter } from '../hooks/useDateFilter';
 import { useCutoffDate } from "../hooks/useCutoffDate";
 import { useDataRange } from "../hooks/useDataRange";
 import { TrendingUp, TrendingDown, ChevronDown, ChevronRight, DollarSign, BarChart4, Receipt, Printer } from 'lucide-react';
+import PdfTemplate from '../pdf/pdfTemplate';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
 
@@ -260,12 +261,12 @@ export default function LabaRugiPage() {
       )}
 
       {/* Print Modal */}
-      <ReportPrintLayout title="LAPORAN LABA RUGI" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabel}>
+      <PdfTemplate title="LAPORAN LABA RUGI" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabel}>
         {data && <table className="w-full text-[11px] border-collapse">
           <thead>
             <tr className="border-b border-slate-800 font-bold">
               <td className="text-left pb-1">Akun</td>
-              <td className="text-right pb-1">Jumlah (Rp)</td>
+              <td className="text-right pb-1">Jumlah</td>
             </tr>
           </thead>
           <tbody>
@@ -371,7 +372,7 @@ export default function LabaRugiPage() {
             </tr>
           </tbody>
         </table>}
-      </ReportPrintLayout>
+      </PdfTemplate>
     </div>
   );
 }

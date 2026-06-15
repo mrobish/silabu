@@ -3,6 +3,7 @@ import { useDateFilter } from '../hooks/useDateFilter';
 import { useCutoffDate } from "../hooks/useCutoffDate";
 import { useDataRange } from "../hooks/useDataRange";
 import { DollarSign, CheckCircle, AlertTriangle, TrendingUp, Building2, PiggyBank, ChevronDown, ChevronRight, Printer } from 'lucide-react';
+import PdfTemplate from '../pdf/pdfTemplate';
 import ReportPrintLayout from './ReportPrintLayout';
 import DateRangePicker from './DateRangePicker';
 
@@ -199,12 +200,12 @@ export default function ArusKasPage() {
       )}
 
       {/* Print Modal */}
-      <ReportPrintLayout title="LAPORAN ARUS KAS" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabelArus}>
+      <PdfTemplate title="LAPORAN ARUS KAS" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabelArus}>
         {data && <table className="w-full text-[11px] border-collapse">
           <thead>
             <tr className="border-b border-slate-800">
               <th className="text-left pb-1 font-bold">Akun Lawan</th>
-              <th className="text-right pb-1 font-bold w-[140px]">Jumlah (Rp)</th>
+              <th className="text-right pb-1 font-bold w-[140px]">Jumlah</th>
             </tr>
           </thead>
           <tbody>
@@ -270,7 +271,7 @@ export default function ArusKasPage() {
             </tr>
           </tbody>
         </table>}
-      </ReportPrintLayout>
+      </PdfTemplate>
     </div>
   );
 }

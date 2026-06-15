@@ -4,6 +4,7 @@ import { useCutoffDate } from "../hooks/useCutoffDate";
 import { useDataRange } from "../hooks/useDataRange";
 import { FileText, Loader2, ChevronDown, ChevronRight, Printer } from 'lucide-react';
 import DateRangePicker from './DateRangePicker';
+import PdfTemplate from '../pdf/pdfTemplate';
 
 const rupiah = (n: number) => {
   const neg = n < 0;
@@ -65,6 +66,8 @@ export default function CalkPage() {
   const [data, setData] = useState<CalkData | null>(null);
   const [loading, setLoading] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
+  const printAreaRef = useRef<HTMLDivElement>(null);
+  const [printOpen, setPrintOpen] = useState(false);
 
   const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   const fmtIdDate = (d: string) => { const p = d.split('-'); return `${parseInt(p[2])} ${MONTHS_ID[parseInt(p[1]) - 1]} ${p[0]}`; };
@@ -82,7 +85,7 @@ export default function CalkPage() {
     finally { setLoading(false); }
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => setPrintOpen(true);
 
   const totalKas = data?.kas.reduce((s, i) => s + i.saldo, 0) || 0;
   const totalPersediaan = data?.persediaan.reduce((s, i) => s + i.saldo_awal, 0) || 0;
@@ -384,6 +387,63 @@ export default function CalkPage() {
           </div>
         )}
       </div>
+
+      {/* Print Preview */}
+      {printOpen && (
+        <PdfTemplate
+          title="CATATAN ATAS LAPORAN KEUANGAN"
+          isOpen={printOpen}
+          onClose={() => setPrintOpen(false)}
+          periodLabel={periodLabel}
+        >
+          <div ref={printAreaRef} className="text-[11px] space-y-6">
+            {/* Narasi */}
+            <div>
+              <p className="font-bold text-sm mb-2 whitespace-pre-wrap">{narasi}</p>
+            </div>
+
+            {data && (
+              <>
+                {/* Cat 1: Kas */}
+                <div>
+                  <p className="font-bold border-b border-slate-400 pb-1 mb-2">Cat 1: Kas &amp; Setara Kas</p>
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-300 font-bold">
+                        <td className="py-1 text-left">Akun</td>
+                        <td className="py-1 text-right">Saldo Akhir</td>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {data.kas.filter(k => k.saldo !== 0).map(k => (
+                        <tr key={k.kode}>
+                          <td className="py-1 text-slate-700">{k.nama}</td>
+                          <td className="py-1 text-right tabular-nums">{rupiah(k.saldo)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot><tr className="border-t-2 border-slate-400 font-bold">
+                      <td className="py-1">Total Kas &amp; Setara Kas</td>
+                      <td className="py-1 text-right tabular-nums">{rupiah(totalKas)}</td>
+                    </tr></tfoot>
+                  </table>
+                </div>
+
+                {/* Cat 2-7: simplified table sections */}
+                <div>
+                  <p className="font-bold border-b border-slate-400 pb-1 mb-2">Cat 2-7: Rincian Lainnya</p>
+                  <p className="text-slate-500 italic text-[10px]">Lihat rincian lengkap di halaman CALK interaktif.</p>
+                </div>
+              </>
+            )}
+
+            {/* Footer */}
+            <p className="text-[10px] text-slate-400 text-right">
+              CALK per {data?.asOf || endDate} - SILABU DIGI
+            </p>
+          </div>
+        </PdfTemplate>
+      )}
     </div>
   );
 }

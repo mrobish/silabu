@@ -1,5 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { ChevronDown, ChevronRight, CheckCircle, AlertTriangle, ListOrdered, Printer } from 'lucide-react';
+import PdfTemplate from '../pdf/pdfTemplate';
 import ReportPrintLayout from './ReportPrintLayout';
 import DatePicker from './DatePicker';
 import { useCutoffDate } from '../hooks/useCutoffDate';
@@ -270,14 +271,14 @@ export default function NeracaSaldoPage() {
 
       {/* Print Layout */}
       {data && (
-        <ReportPrintLayout title="NERACA SALDO" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabel}>
+        <PdfTemplate title="NERACA SALDO" isOpen={printOpen} onClose={() => setPrintOpen(false)} periodLabel={periodLabel}>
           <table className="w-full text-[11px] border-collapse">
             <thead>
               <tr className="border-b-2 border-slate-300">
                 <th className="text-left py-1.5 font-bold w-20">Kode</th>
                 <th className="text-left py-1.5 font-bold">Nama Akun</th>
-                <th className="text-right py-1.5 font-bold w-28">Debit (Rp)</th>
-                <th className="text-right py-1.5 font-bold w-28">Kredit (Rp)</th>
+                <th className="text-right py-1.5 font-bold w-28">Debit</th>
+                <th className="text-right py-1.5 font-bold w-28">Kredit</th>
               </tr>
             </thead>
             <tbody>
@@ -312,7 +313,7 @@ export default function NeracaSaldoPage() {
               ⚠️ TIDAK SEIMBANG — Selisih {rupiah(Math.abs(data.selisih))}
             </p>
           )}
-        </ReportPrintLayout>
+        </PdfTemplate>
       )}
     </div>
   );
