@@ -1632,7 +1632,19 @@ export default function JurnalUmumPage({ setPage }: { setPage: (p: any) => void 
                     <th className="px-5 py-3.5 font-semibold">No. Jurnal</th>
                     <th className="px-5 py-3.5 font-semibold">Tanggal</th>
                     <th className="px-5 py-3.5 font-semibold">Keterangan</th>
-                    <th className="px-5 py-3.5 font-semibold text-right">Total</th>
+                    <th className="px-5 py-3.5 font-semibold text-right">
+                      <span className="inline-flex items-center gap-1">
+                        Total Debit/Kredit Jurnal
+                        <span className="relative group cursor-help">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-slate-400">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" />
+                          </svg>
+                          <span className="absolute bottom-full right-0 mb-2 w-72 p-3 text-left text-xs font-normal normal-case tracking-normal text-slate-700 bg-white border border-slate-200 rounded-xl shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-50">
+                            Total ini adalah jumlah sisi debit/kredit jurnal, bukan nilai omzet. Pada penjualan barang, jurnal dapat mencatat pendapatan sekaligus HPP.
+                          </span>
+                        </span>
+                      </span>
+                    </th>
                     <th className="px-5 py-3.5 font-semibold text-center">Aksi</th>
                   </tr>
                 </thead>
