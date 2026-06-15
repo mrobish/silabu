@@ -768,15 +768,20 @@ export async function subledgerRoutes(app: FastifyInstance) {
         return reply.status(409).send({ error: 'Baris jurnal ini sudah memiliki qty' });
       }
 
-      // ── 8. Must have amount (debit > 0 or kredit > 0) ──────
+      // ── 8. Validate line amount (debit XOR kredit, never both) ──
       const debitAmt = Number(line.debit) || 0;
       const kreditAmt = Number(line.kredit) || 0;
-      const isMasuk = debitAmt > 0;
-      const nilaiTotal = Math.max(debitAmt, kreditAmt);
-      if (nilaiTotal <= 0) {
+      // Rule: exactly one side must be > 0 (debit XOR kredit)
+      if (debitAmt > 0 && kreditAmt > 0) {
+        await client.query('ROLLBACK');
+        return reply.status(400).send({ error: 'Baris jurnal tidak boleh memiliki debit dan kredit sekaligus' });
+      }
+      if (debitAmt <= 0 && kreditAmt <= 0) {
         await client.query('ROLLBACK');
         return reply.status(400).send({ error: 'Baris jurnal tidak memiliki nominal' });
       }
+      const isMasuk = debitAmt > 0;
+      const nilaiTotal = isMasuk ? debitAmt : kreditAmt;
 
       // ── 9. Period lock check ──────────────────────────────────
       const tahun = Number(line.tahun);
@@ -814,21 +819,24 @@ export async function subledgerRoutes(app: FastifyInstance) {
         }
       }
 
-      // ── 11. Stock check for stok KELUAR ──────────────────────
+      // ── 11. Stock check for stok KELUAR — up to journal date ──
       if (!isMasuk && mode === 'select') {
+        // Stock is checked UP TO the journal's tanggal, not current date
+        // This prevents linking a sale before the corresponding purchase was made
         const stockRes = await client.query(
           `SELECT COALESCE(SUM(CASE WHEN jl2.debit > 0 THEN jl2.qty ELSE 0 END), 0) -
                   COALESCE(SUM(CASE WHEN jl2.kredit > 0 THEN jl2.qty ELSE 0 END), 0) AS stok
            FROM journal_lines jl2
            JOIN journal_entries je2 ON jl2.entry_id = je2.id AND je2.isposted = true AND je2.tenant_id = $2
-           WHERE jl2.inventory_item_id = $1`,
-          [inventoryItemId, a.tenantId]
+           WHERE jl2.inventory_item_id = $1
+             AND je2.tanggal <= $3`,  // ← stock at journal date, not current
+          [inventoryItemId, a.tenantId, String(line.tanggal)]
         );
         const stokTersedia = Number(stockRes.rows[0]?.stok) || 0;
         if (qtyNum > stokTersedia) {
           await client.query('ROLLBACK');
           return reply.status(400).send({
-            error: `Stok tidak mencukupi. Tersedia: ${stokTersedia.toLocaleString('id-ID')}, diminta: ${qtyNum.toLocaleString('id-ID')}. Hubungkan pembelian terlebih dahulu.`
+            error: `Stok tidak mencukupi pada tanggal ${String(line.tanggal)}. Tersedia: ${stokTersedia.toLocaleString('id-ID')}, diminta: ${qtyNum.toLocaleString('id-ID')}. Hubungkan pembelian yang terjadi sebelum tanggal ini terlebih dahulu.`
           });
         }
       }
