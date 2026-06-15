@@ -35,12 +35,49 @@ export default function RekapJurnalPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [journalType, setJournalType] = useState<'ALL' | 'GENERAL' | 'ADJUSTMENT'>('ALL');
-  const { startDate, endDate, setStartDate, setEndDate } = useDateFilter();
   const cutoff = useCutoffDate();
   const [printOpen, setPrintOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
+  // Smart default: fetch data range first, then default to latest data year
+  const [dataMinDate, setDataMinDate] = useState<string | null>(null);
+  const [dataMaxDate, setDataMaxDate] = useState<string | null>(null);
+  const [dataRangeLoaded, setDataRangeLoaded] = useState(false);
+
+  // useDateFilter with smart defaults — start with current year, override after data-range loads
+  const defaultStart = dataMaxDate
+    ? `${dataMaxDate.slice(0, 4)}-01-01`  // first day of latest data year
+    : `${new Date().getFullYear()}-01-01`;
+  const defaultEnd = dataMaxDate
+    ? `${dataMaxDate.slice(0, 4)}-12-31`  // last day of latest data year
+    : new Date().toISOString().slice(0, 10);
+
+  const { startDate, endDate, setStartDate, setEndDate } = useDateFilter({
+    start: defaultStart,
+    end: defaultEnd,
+  });
+
   const periodLabel = `Periode: ${fmtIdDate(startDate)} s.d ${fmtIdDate(endDate)}`;
+
+  // Fetch data range on mount
+  useEffect(() => {
+    fetch('/api/accounting/data-range', { headers: { Authorization: 'Bearer ' + token() } })
+      .then(r => r.json())
+      .then(d => {
+        if (d.minDate) setDataMinDate(d.minDate);
+        if (d.maxDate) setDataMaxDate(d.maxDate);
+        setDataRangeLoaded(true);
+
+        // Smart default: if data exists and no URL params, auto-set to data year
+        const params = new URLSearchParams(window.location.search);
+        if (!params.has('start') && !params.has('end') && d.maxDate) {
+          const dataYear = d.maxDate.slice(0, 4);
+          setStartDate(`${dataYear}-01-01`);
+          setEndDate(`${dataYear}-12-31`);
+        }
+      })
+      .catch(() => setDataRangeLoaded(true));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load CoA for kode/nama lookup
   useEffect(() => {
@@ -103,12 +140,16 @@ export default function RekapJurnalPage() {
       <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-xl">
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
           {/* Date Range Picker */}
-          <div className="sm:col-span-4">
-            <DateRangePicker minDate={cutoff}
+          <div className="sm:col-span-5">
+            <DateRangePicker
+              minDate={cutoff}
               startDate={startDate}
               endDate={endDate}
               onStartChange={setStartDate}
               onEndChange={setEndDate}
+              dataMinDate={dataMinDate}
+              dataMaxDate={dataMaxDate}
+              showAllPresets
             />
           </div>
 

@@ -36,6 +36,14 @@ function lastOfYear(): string {
   return `${y}-12-31`;
 }
 
+function firstOfLastYear(): string {
+  return `${new Date().getFullYear() - 1}-01-01`;
+}
+
+function lastOfLastYear(): string {
+  return `${new Date().getFullYear() - 1}-12-31`;
+}
+
 // ── component ────────────────────────────────────────────────
 interface DateRangePickerProps {
   startDate: string;
@@ -44,6 +52,9 @@ interface DateRangePickerProps {
   onEndChange: (d: string) => void;
   className?: string;
   minDate?: string | null;    // YYYY-MM-DD — disable dates before this
+  dataMinDate?: string | null; // earliest available data date
+  dataMaxDate?: string | null; // latest available data date
+  showAllPresets?: boolean;    // show "Tahun Lalu" + "Semua Data"
 }
 
 const presetBtn = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap';
@@ -55,6 +66,9 @@ export default function DateRangePicker({
   onEndChange,
   className = '',
   minDate,
+  dataMinDate,
+  dataMaxDate,
+  showAllPresets = false,
 }: DateRangePickerProps) {
   const applyPreset = useCallback((s: string, e: string) => {
     onStartChange(s);
@@ -77,7 +91,30 @@ export default function DateRangePicker({
           className={`${presetBtn} bg-blue-50 text-blue-700 hover:bg-blue-100`}>
           Tahun Ini
         </button>
+        {showAllPresets && (
+          <>
+            <button type="button" onClick={() => applyPreset(firstOfLastYear(), lastOfLastYear())}
+              className={`${presetBtn} bg-violet-50 text-violet-700 hover:bg-violet-100`}>
+              Tahun Lalu
+            </button>
+            <button type="button" onClick={() => {
+              const s = dataMinDate || '2020-01-01';
+              const e = dataMaxDate || new Date().toISOString().slice(0, 10);
+              applyPreset(s, e);
+            }}
+              className={`${presetBtn} bg-amber-50 text-amber-700 hover:bg-amber-100`}>
+              Semua Data
+            </button>
+          </>
+        )}
       </div>
+
+      {/* Data range info */}
+      {showAllPresets && dataMinDate && dataMaxDate && (
+        <div className="mb-3 text-[11px] text-slate-400">
+          📅 Data tersedia: <span className="font-medium text-slate-500">{dataMinDate}</span> — <span className="font-medium text-slate-500">{dataMaxDate}</span>
+        </div>
+      )}
 
       {/* Two date pickers side by side */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const DAYS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -103,6 +104,19 @@ export default function DatePicker({
     return new Date().getMonth();
   });
 
+  // Track input position for portal popup
+  const [popupPos, setPopupPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+  const updatePopupPos = useCallback(() => {
+    if (inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect();
+      setPopupPos({
+        top: rect.bottom + window.scrollY + 8, // 8px gap (mt-2)
+        left: rect.left + window.scrollX,
+      });
+    }
+  }, []);
+
   // Sync external value → input display
   useEffect(() => {
     setInputVal(toDmy(value));
@@ -112,17 +126,35 @@ export default function DatePicker({
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        // Validate on close
-        const parsed = parseDmy(inputVal);
-        if (parsed) onChange(parsed);
-        else setInputVal(toDmy(value)); // revert
-      }
+      const target = e.target as Node;
+      // Don't close if clicking inside the wrapper (input) or the portal popup
+      if (wrapperRef.current && wrapperRef.current.contains(target)) return;
+      // Check if click is inside the portal popup (it's a direct child of body)
+      const popup = document.querySelector('[data-datepicker-popup]');
+      if (popup && popup.contains(target)) return;
+      setOpen(false);
+      // Validate on close
+      const parsed = parseDmy(inputVal);
+      if (parsed) onChange(parsed);
+      else setInputVal(toDmy(value)); // revert
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open, inputVal, value, onChange]);
+
+  // Update popup position when opened
+  useEffect(() => {
+    if (open) {
+      updatePopupPos();
+      const onScroll = () => updatePopupPos();
+      window.addEventListener('scroll', onScroll, true);
+      window.addEventListener('resize', onScroll);
+      return () => {
+        window.removeEventListener('scroll', onScroll, true);
+        window.removeEventListener('resize', onScroll);
+      };
+    }
+  }, [open, updatePopupPos]);
 
   // ── input masking: auto-insert slashes ──
   const handleInputChange = useCallback((raw: string) => {
@@ -209,6 +241,91 @@ export default function DatePicker({
   const grid = useMemo(() => buildGrid(viewYear, viewMonth), [viewYear, viewMonth]);
   const selectedDate = value ? new Date(value + 'T00:00:00') : null;
 
+  // ── calendar popup JSX (used for portal) ──
+  const calendarPopup = open && !disabled ? (
+    <div
+      data-datepicker-popup
+      className="fixed z-[99999] bg-white rounded-2xl shadow-xl border border-slate-200 p-3 w-[280px] animate-fade-in select-none"
+      style={{
+        top: popupPos.top,
+        left: popupPos.left,
+        animationDuration: '150ms',
+      }}
+      onMouseDown={e => e.preventDefault()} // prevent blur on input
+    >
+      {/* Quick actions */}
+      <div className="flex gap-2 mb-3">
+        <button type="button" onClick={setToday}
+          className="flex-1 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition">
+          Hari Ini
+        </button>
+        <button type="button" onClick={setYesterday}
+          className="flex-1 py-1.5 text-xs font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition">
+          Kemarin
+        </button>
+      </div>
+
+      {/* Month navigation */}
+      <div className="flex items-center justify-between mb-2">
+        <button type="button" onClick={prevMonth}
+          className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-500">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+        <span className="text-sm font-bold text-slate-800">
+          {MONTHS_ID[viewMonth]} {viewYear}
+        </span>
+        <button type="button" onClick={nextMonth}
+          className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-500">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Day headers */}
+      <div className="grid grid-cols-7 gap-0.5 mb-1">
+        {DAYS.map(d => (
+          <div key={d} className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-wide py-1">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-0.5">
+        {grid.map((d, i) => {
+          if (!d) return <div key={i} />;
+          const ymd = toYmd(d);
+          const selected = selectedDate && isSameDay(d, selectedDate);
+          const today = isToday(d);
+          const tooEarly = minDate ? ymd < minDate : false;
+          return (
+            <button
+              key={i}
+              type="button"
+              disabled={tooEarly}
+              onClick={() => !tooEarly && selectDate(d)}
+              className={`
+                h-8 w-full rounded-lg text-xs font-medium transition
+                ${selected
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : today
+                    ? 'bg-emerald-50 text-emerald-700 font-bold ring-1 ring-emerald-200'
+                    : tooEarly
+                      ? 'text-slate-300 cursor-not-allowed'
+                      : 'text-slate-700 hover:bg-slate-100'}
+              `}
+            >
+              {d.getDate()}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
+
   // ── render ──
   return (
     <div ref={wrapperRef} className="relative inline-block">
@@ -258,84 +375,8 @@ export default function DatePicker({
         </div>
       </div>
 
-      {/* Calendar popup */}
-      {open && !disabled && (
-        <div className="absolute z-[9999] mt-2 left-0 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 w-[280px] animate-fade-in select-none"
-          style={{ animationDuration: '150ms' }}
-          onMouseDown={e => e.preventDefault()} // prevent blur on input
-        >
-          {/* Quick actions */}
-          <div className="flex gap-2 mb-3">
-            <button type="button" onClick={setToday}
-              className="flex-1 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition">
-              Hari Ini
-            </button>
-            <button type="button" onClick={setYesterday}
-              className="flex-1 py-1.5 text-xs font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition">
-              Kemarin
-            </button>
-          </div>
-
-          {/* Month navigation */}
-          <div className="flex items-center justify-between mb-2">
-            <button type="button" onClick={prevMonth}
-              className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-500">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-              </svg>
-            </button>
-            <span className="text-sm font-bold text-slate-800">
-              {MONTHS_ID[viewMonth]} {viewYear}
-            </span>
-            <button type="button" onClick={nextMonth}
-              className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-500">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Day headers */}
-          <div className="grid grid-cols-7 gap-0.5 mb-1">
-            {DAYS.map(d => (
-              <div key={d} className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-wide py-1">
-                {d}
-              </div>
-            ))}
-          </div>
-
-          {/* Calendar grid */}
-          <div className="grid grid-cols-7 gap-0.5">
-            {grid.map((d, i) => {
-              if (!d) return <div key={i} />;
-              const ymd = toYmd(d);
-              const selected = selectedDate && isSameDay(d, selectedDate);
-              const today = isToday(d);
-              const tooEarly = minDate ? ymd < minDate : false;
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  disabled={tooEarly}
-                  onClick={() => !tooEarly && selectDate(d)}
-                  className={`
-                    h-8 w-full rounded-lg text-xs font-medium transition
-                    ${selected
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : today
-                        ? 'bg-emerald-50 text-emerald-700 font-bold ring-1 ring-emerald-200'
-                        : tooEarly
-                          ? 'text-slate-300 cursor-not-allowed'
-                          : 'text-slate-700 hover:bg-slate-100'}
-                  `}
-                >
-                  {d.getDate()}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Calendar popup — rendered via portal to avoid z-index stacking context issues */}
+      {calendarPopup && createPortal(calendarPopup, document.body)}
     </div>
   );
 }

@@ -178,6 +178,27 @@ export async function accountingRoutes(app: FastifyInstance) {
     return { years };
   });
 
+  // GET /accounting/data-range — min/max tanggal from journal_entries
+  // Used by frontend to smart-default date filters to the latest available data
+  app.get('/data-range', tenantGuard, async (req: FastifyRequest) => {
+    const a = (req as any).auth as AuthPayload;
+    const r = await pool.query(
+      `SELECT
+         MIN(tanggal)::text AS min_date,
+         MAX(tanggal)::text AS max_date,
+         COUNT(*) AS total_entries
+       FROM journal_entries
+       WHERE tenant_id=$1 AND tipetransaksi <> 'OPENING_BALANCE'`,
+      [a.tenantId]
+    );
+    const row = r.rows[0] as any;
+    return {
+      minDate: row.min_date || null,
+      maxDate: row.max_date || null,
+      totalEntries: parseInt(row.total_entries, 10) || 0,
+    };
+  });
+
   // ─── Jurnal Umum ─────────────────────────────────────────────────
 
   // POST /accounting/coa — create sub-akun (Level 4) under a parent (Level 3)
