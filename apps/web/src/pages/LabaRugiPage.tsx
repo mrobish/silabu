@@ -77,8 +77,8 @@ export default function LabaRugiPage() {
   const fmtIdDate = (d: string) => { const p = d.split('-'); return `${parseInt(p[2])} ${MONTHS_ID[parseInt(p[1]) - 1]} ${p[0]}`; };
   const isFullYear = startDate.endsWith('-01-01') && endDate.endsWith('-12-31');
   const periodLabel = isFullYear
-    ? `Untuk Tahun yang Berakhir Pada ${fmtIdDate(endDate)}`
-    : `Periode: ${fmtIdDate(startDate)} s/d ${fmtIdDate(endDate)}`;
+    ? `Untuk Tahun yang Berakhir pada ${fmtIdDate(endDate)}`
+    : `Untuk Periode ${fmtIdDate(startDate)} s.d. ${fmtIdDate(endDate)}`;
 
   const fetchData = async () => {
     if (loading) return;
@@ -265,109 +265,121 @@ export default function LabaRugiPage() {
         {data && <table className="w-full text-[11px] border-collapse">
           <thead>
             <tr className="border-b border-slate-800 font-bold">
-              <td className="text-left pb-1">Akun</td>
-              <td className="text-right pb-1">Jumlah</td>
+              <td className="text-left pb-1" style={{ width: '72%' }}>Uraian</td>
+              <td className="text-right pb-1" style={{ width: '28%' }}>Jumlah</td>
             </tr>
           </thead>
           <tbody>
-            {/* A. PENDAPATAN */}
-            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">A. Pendapatan Operasional</td></tr>
+            {/* A. PENDAPATAN OPERASIONAL */}
+            <tr data-row-type="section"><td colSpan={2} className="font-bold bg-slate-100 py-1 text-xs uppercase tracking-wide">A. Pendapatan Operasional</td></tr>
             {data.pendapatanOperasional.jasa.filter(a => a.saldo !== 0).map(a => (
-              <tr key={a.kode} className="print-row">
-                <td className="text-slate-700 pl-6"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+              <tr key={a.kode} data-row-type="detail">
+                <td className="text-slate-700 pl-5"><span className="text-slate-400">{a.kode}</span>&nbsp;&nbsp;&nbsp;{a.nama}</td>
                 <td className="text-right tabular-nums">{fmtPrint(a.saldo)}</td>
               </tr>
             ))}
             {data.pendapatanOperasional.dagang.filter(a => a.saldo !== 0).map(a => (
-              <tr key={a.kode} className="print-row">
-                <td className="text-slate-700 pl-6"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+              <tr key={a.kode} data-row-type="detail">
+                <td className="text-slate-700 pl-5"><span className="text-slate-400">{a.kode}</span>&nbsp;&nbsp;&nbsp;{a.nama}</td>
                 <td className="text-right tabular-nums">{fmtPrint(a.saldo)}</td>
               </tr>
             ))}
-            <tr className="font-bold border-t border-slate-400">
-              <td className="pt-0.5">Subtotal Pendapatan Operasional</td>
+            <tr data-row-type="subtotal" className="font-bold border-t border-slate-400">
+              <td className="pt-0.5">Jumlah Pendapatan Operasional</td>
               <td className="text-right tabular-nums pt-0.5">{fmtPrint(data.pendapatanOperasional.subtotal)}</td>
             </tr>
 
-            {/* B. HPP */}
-            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">B. Harga Pokok Penjualan</td></tr>
+            {/* B. HARGA POKOK PENJUALAN */}
+            <tr data-row-type="section"><td colSpan={2} className="font-bold bg-slate-100 py-1 text-xs uppercase tracking-wide">B. Harga Pokok Penjualan</td></tr>
+            {data.hpp.detail.filter(a => a.saldo !== 0).length === 0 && (
+              <tr data-row-type="empty"><td colSpan={2} className="text-slate-400 italic pl-5">Tidak ada transaksi HPP</td></tr>
+            )}
             {data.hpp.detail.filter(a => a.saldo !== 0).map(a => (
-              <tr key={a.kode} className="print-row">
-                <td className="text-slate-700 pl-6"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+              <tr key={a.kode} data-row-type="detail">
+                <td className="text-slate-700 pl-5"><span className="text-slate-400">{a.kode}</span>&nbsp;&nbsp;&nbsp;{a.nama}</td>
                 <td className="text-right tabular-nums">{fmtPrint(a.saldo)}</td>
               </tr>
             ))}
-            <tr className="font-bold border-t border-slate-400">
-              <td className="pt-0.5">Subtotal HPP</td>
+            <tr data-row-type="subtotal" className="font-bold border-t border-slate-400">
+              <td className="pt-0.5">Jumlah Harga Pokok Penjualan</td>
               <td className="text-right tabular-nums pt-0.5">{fmtPrint(data.hpp.subtotal)}</td>
             </tr>
 
             {/* C. LABA KOTOR */}
-            <tr className="font-bold border-b-4 border-double border-gray-900">
-              <td className="pt-1">C. Laba Kotor Operasional</td>
+            <tr data-row-type="total" className="font-bold border-t-2 border-slate-700">
+              <td className="pt-1">C. Laba Kotor</td>
               <td className="text-right tabular-nums pt-1">{fmtPrint(data.labaKotor)}</td>
             </tr>
 
             {/* D. BEBAN OPERASIONAL */}
-            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">D. Beban Operasional</td></tr>
+            <tr data-row-type="section"><td colSpan={2} className="font-bold bg-slate-100 py-1 text-xs uppercase tracking-wide">D. Beban Operasional</td></tr>
+            {data.bebanOperasional.detail.filter(a => a.saldo !== 0).length === 0 && (
+              <tr data-row-type="empty"><td colSpan={2} className="text-slate-400 italic pl-5">Tidak ada beban operasional</td></tr>
+            )}
             {data.bebanOperasional.detail.filter(a => a.saldo !== 0).map(a => (
-              <tr key={a.kode} className="print-row">
-                <td className="text-slate-700 pl-6"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+              <tr key={a.kode} data-row-type="detail">
+                <td className="text-slate-700 pl-5"><span className="text-slate-400">{a.kode}</span>&nbsp;&nbsp;&nbsp;{a.nama}</td>
                 <td className="text-right tabular-nums">{fmtPrint(a.saldo)}</td>
               </tr>
             ))}
-            <tr className="font-bold border-t border-slate-400">
-              <td className="pt-0.5">Subtotal Beban Operasional</td>
+            <tr data-row-type="subtotal" className="font-bold border-t border-slate-400">
+              <td className="pt-0.5">Jumlah Beban Operasional</td>
               <td className="text-right tabular-nums pt-0.5">{fmtPrint(data.bebanOperasional.subtotal)}</td>
             </tr>
 
-            {/* E. LABA OPERASIONAL */}
-            <tr className="font-bold border-b-4 border-double border-gray-900">
-              <td className="pt-1">E. Laba Operasional</td>
+            {/* E. LABA/RUGI OPERASIONAL */}
+            <tr data-row-type="total" className="font-bold border-t-2 border-slate-700">
+              <td className="pt-1">E. Laba/Rugi Operasional</td>
               <td className="text-right tabular-nums pt-1">{fmtPrint(data.labaOperasional)}</td>
             </tr>
 
-            {/* F. NON-OPERASIONAL */}
-            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">F. Pendapatan &amp; Beban Non-Operasional</td></tr>
+            {/* F. PENDAPATAN DAN BEBAN NON-OPERASIONAL */}
+            <tr data-row-type="section"><td colSpan={2} className="font-bold bg-slate-100 py-1 text-xs uppercase tracking-wide">F. Pendapatan dan Beban Non-Operasional</td></tr>
             {data.nonOperasional.pendapatanLain.detail.filter(a => a.saldo !== 0).map(a => (
-              <tr key={a.kode} className="print-row">
-                <td className="text-slate-700 pl-6"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+              <tr key={a.kode} data-row-type="detail">
+                <td className="text-slate-700 pl-5"><span className="text-slate-400">{a.kode}</span>&nbsp;&nbsp;&nbsp;{a.nama}</td>
                 <td className="text-right tabular-nums">{fmtPrint(a.saldo)}</td>
               </tr>
             ))}
             {data.nonOperasional.bebanLain.detail.filter(a => a.saldo !== 0).map(a => (
-              <tr key={a.kode} className="print-row">
-                <td className="text-slate-700 pl-6"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+              <tr key={a.kode} data-row-type="detail">
+                <td className="text-slate-700 pl-5"><span className="text-slate-400">{a.kode}</span>&nbsp;&nbsp;&nbsp;{a.nama}</td>
                 <td className="text-right tabular-nums">{fmtPrint(a.saldo)}</td>
               </tr>
             ))}
-            <tr className="font-bold border-t border-slate-400">
-              <td className="pt-0.5">Subtotal Non-Operasional</td>
+            {data.nonOperasional.pendapatanLain.detail.filter(a => a.saldo !== 0).length === 0 && data.nonOperasional.bebanLain.detail.filter(a => a.saldo !== 0).length === 0 && (
+              <tr data-row-type="empty"><td colSpan={2} className="text-slate-400 italic pl-5">Tidak ada transaksi non-operasional</td></tr>
+            )}
+            <tr data-row-type="subtotal" className="font-bold border-t border-slate-400">
+              <td className="pt-0.5">Jumlah Pendapatan dan Beban Non-Operasional</td>
               <td className="text-right tabular-nums pt-0.5">{fmtPrint(data.nonOperasional.pendapatanLain.subtotal - data.nonOperasional.bebanLain.subtotal)}</td>
             </tr>
 
-            {/* G. LABA SEBELUM PAJAK */}
-            <tr className="font-bold border-b-4 border-double border-gray-900">
-              <td className="pt-1">G. Laba / Rugi Sebelum Pajak</td>
+            {/* G. LABA/RUGI SEBELUM PAJAK */}
+            <tr data-row-type="total" className="font-bold border-t-2 border-slate-700">
+              <td className="pt-1">G. Laba/Rugi Sebelum Pajak</td>
               <td className="text-right tabular-nums pt-1">{fmtPrint(data.labaSebelumPajak)}</td>
             </tr>
 
-            {/* H. PAJAK */}
-            <tr><td colSpan={2} className="font-bold pt-2 pb-0.5">H. Beban Pajak</td></tr>
+            {/* H. BEBAN PAJAK */}
+            <tr data-row-type="section"><td colSpan={2} className="font-bold bg-slate-100 py-1 text-xs uppercase tracking-wide">H. Beban Pajak</td></tr>
+            {data.pajak.detail.filter(a => a.saldo !== 0).length === 0 && (
+              <tr data-row-type="empty"><td colSpan={2} className="text-slate-400 italic pl-5">Tidak ada beban pajak</td></tr>
+            )}
             {data.pajak.detail.filter(a => a.saldo !== 0).map(a => (
-              <tr key={a.kode} className="print-row">
-                <td className="text-slate-700 pl-6"><span className="text-slate-400">{a.kode}</span> {a.nama}</td>
+              <tr key={a.kode} data-row-type="detail">
+                <td className="text-slate-700 pl-5"><span className="text-slate-400">{a.kode}</span>&nbsp;&nbsp;&nbsp;{a.nama}</td>
                 <td className="text-right tabular-nums">{fmtPrint(a.saldo)}</td>
               </tr>
             ))}
-            <tr className="font-bold border-t border-slate-400">
-              <td className="pt-0.5">Subtotal Pajak</td>
+            <tr data-row-type="subtotal" className="font-bold border-t border-slate-400">
+              <td className="pt-0.5">Jumlah Beban Pajak</td>
               <td className="text-right tabular-nums pt-0.5">{fmtPrint(data.pajak.subtotal)}</td>
             </tr>
 
-            {/* LABA BERSIH */}
-            <tr className="font-extrabold text-[12px] bg-gray-100 print:bg-gray-100 border-b-4 border-double border-gray-900">
-              <td className="pt-2 pb-1">LABA BERSIH SETELAH PAJAK</td>
+            {/* LABA/RUGI BERSIH SETELAH PAJAK */}
+            <tr data-row-type="grandTotal" className="font-extrabold text-[12px] bg-gray-100 print:bg-gray-100 border-t-2 border-b-4 border-double border-gray-900">
+              <td className="pt-2 pb-1">LABA/RUGI BERSIH SETELAH PAJAK</td>
               <td className="text-right tabular-nums pt-2 pb-1">{fmtPrint(data.labaBersih)}</td>
             </tr>
           </tbody>

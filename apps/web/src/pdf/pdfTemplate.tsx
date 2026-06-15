@@ -213,7 +213,7 @@ export default function PdfTemplate({
               if (row.length > 0) headers.push(row);
             });
 
-            // ── Parse body rows with colSpan support ──
+            // ── Parse body rows with colSpan + data-row-type support ──
             const rows: any[] = [];
             const bodyRows = table.querySelectorAll('tbody tr');
             // Pre-process: build colSpan-aware data
@@ -221,6 +221,7 @@ export default function PdfTemplate({
               const tds = tr.querySelectorAll('td');
               const cells: any[] = [];
               let hasColSpan = false;
+              const rowType = tr.getAttribute('data-row-type') || '';
               tds.forEach((td) => {
                 const cs = td.getAttribute('colspan');
                 const text = td.textContent?.trim() || '';
@@ -234,8 +235,11 @@ export default function PdfTemplate({
               if (cells.length > 0) {
                 // Ensure uniform format: if any cell uses colSpan, wrap all cells as objects
                 if (hasColSpan) {
-                  rows.push(cells.map((c: any) => typeof c === 'string' ? { content: c } : c));
+                  const rowData = cells.map((c: any) => typeof c === 'string' ? { content: c } : c);
+                  (rowData as any)._rowType = rowType;
+                  rows.push(rowData);
                 } else {
+                  (cells as any)._rowType = rowType;
                   rows.push(cells);
                 }
               }
@@ -287,6 +291,36 @@ export default function PdfTemplate({
                   data.cell.styles.fillColor = [209, 250, 229];
                   data.cell.styles.textColor = [5, 46, 22];
                   data.cell.styles.fontStyle = 'bold';
+                }
+                // Detect section heading rows (colSpan with letter-number prefix like "A. ", "B. ", etc.)
+                const cellRaw = data.cell.raw as any;
+                if (cellRaw && typeof cellRaw === 'object' && cellRaw.colSpan) {
+                  const headingText = String(cellRaw.content || '');
+                  if (/^[A-Z]\.\s/.test(headingText)) {
+                    data.cell.styles.fillColor = [241, 245, 249];
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.textColor = [15, 23, 42];
+                    data.cell.styles.halign = 'left';
+                  }
+                }
+                // Apply row-type based styling (set via data-row-type on <tr>)
+                const rowType = (data.row as any)?.raw?._rowType as string | undefined;
+                if (rowType === 'section') {
+                  data.cell.styles.fillColor = [241, 245, 249];
+                  data.cell.styles.fontStyle = 'bold';
+                  data.cell.styles.textColor = [15, 23, 42];
+                } else if (rowType === 'subtotal') {
+                  data.cell.styles.fontStyle = 'bold';
+                } else if (rowType === 'total') {
+                  data.cell.styles.fontStyle = 'bold';
+                  if (data.column.index === data.table.columns.length - 1) {
+                    data.cell.styles.lineColor = [51, 65, 85];
+                    data.cell.styles.lineWidth = 0.4;
+                  }
+                } else if (rowType === 'grandTotal') {
+                  data.cell.styles.fontStyle = 'bold';
+                  data.cell.styles.fillColor = [241, 245, 249];
+                  data.cell.styles.textColor = [15, 23, 42];
                 }
                 if (
                   cellText.includes('Total') ||
